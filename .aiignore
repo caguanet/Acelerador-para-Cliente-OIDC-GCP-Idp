@@ -1,0 +1,10 @@
+# AI Ignore File
+# Directories to ignore (reduce context noise)
+node_modules/
+dist/
+.git/
+coverage/
+
+# Explicitly allow tmp/ for review
+!tmp/
+!llm/

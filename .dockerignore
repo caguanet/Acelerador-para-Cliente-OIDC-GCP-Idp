@@ -1,0 +1,15 @@
+node_modules
+.env
+.env.*
+dist
+!backend/dist
+coverage
+.git
+.github
+llm
+scripts
+task.md
+implementation_plan.md
+README.md
+CHANGELOG.md
+DEPLOY.md

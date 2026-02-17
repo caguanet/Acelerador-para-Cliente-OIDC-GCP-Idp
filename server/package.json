@@ -1,0 +1,14 @@
+{
+  "name": "etb-idp-server",
+  "version": "1.0.0",
+  "description": "Static file server for ETB IDP",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  }
+}

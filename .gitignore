@@ -1,0 +1,55 @@
+# --- 1. Dependencies & System ---
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- 2. Build Outputs ---
+dist/
+dist-ssr/
+dist-mock/
+*.local
+
+# --- 3. Secrets & Configuration (User Specific) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+google-service-account.json
+
+# --- 4. Testing & Reports ---
+coverage/
+playwright-report/
+test-results/
+blob-report/
+results.xml
+.coverage
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+
+# --- 5. Logs & Temporary Files ---
+logs/
+*.log
+tmp/
+temp/
+llm/
+
+# --- 6. Editor & OS Metadata ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# --- 7. Scratch / Debug Files (Cleanup) ---
+debug-*.png
+test-firebase.js
+repro.ts
+tsconfig.repro.json
+cleanup_oidc.ps1
