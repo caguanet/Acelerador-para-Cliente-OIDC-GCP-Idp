@@ -31,10 +31,15 @@
         </div>
     </div>
 
+    <script src="/config.js"></script>
     <script>
-        const IDP_URL = 'http://localhost:5173'; // The Identity Provider
+        // Dynamic Config with Local Fallback
+        const CONFIG = window.APP_CONFIG || {};
+        
+        const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
         const CLIENT_ID = 'mock-client-app';
-        const REDIRECT_URI = 'http://localhost:3000'; // This App
+        // If deployed, REDIRECT_URI should be the current page
+        const REDIRECT_URI = CONFIG.MOCK_CLIENT_URL || window.location.origin; 
 
         const loginBtn = document.getElementById('login-btn');
         const logoutBtn = document.getElementById('logout-btn');

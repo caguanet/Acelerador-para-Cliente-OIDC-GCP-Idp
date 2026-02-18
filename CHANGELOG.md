@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.5] - 2026-02-17
+### 🔧 Refactorización y Mejoras
+- **Despliegue Estandarizado:** Reescritura total de `DEPLOY.md` cumpliendo estándares de Módulo 05 (Zero-Touch Provisioning).
+- **Proceso One-Shot:** Creación de `scripts/one-shot-deploy.cmd` para automatizar completamente la infraestructura y despliegue del IdP.
+- **Limpieza Técnica:** Eliminación de scripts obsoletos (`deploy-gcp.ps1`, `nuke-files.js`) y archivado de herramientas legacy en `tmp/`.
+
+### 📚 Documentación
+- **Sync Workflow:** Implementada regla `.agent/workflows/sync-deployment.md` para garantizar consistencia entre documentación y scripts.
+- **Troubleshooting:** Nueva sección en `DEPLOY.md` con tabla de resolución de errores comunes (CORS, IAM, Saltos de Línea).
+
+### 🔧 Refactorización y Mejoras
+- **Server Port Enforcement:** Configurado `strictPort: true` y puerto `5173` en `vite.config.ts` para evitar colisiones con el Mock Client.
+- **Manual Testing Guide:** Actualizado `TESTING.md` con instrucciones explícitas para el escenario "Dual-Site" (IdP + Mock).
+
 ## [v1.1.3] - 2026-02-16
 ### 🔧 Fixes
 - **Robust Environment Cleanup**: Implemented `scripts/cleanup-ports.mjs` to surgically kill zombie processes on ports 3000/5173 before server start.

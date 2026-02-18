@@ -1,0 +1,36 @@
+# Stage 1: Build Mock Client
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install --legacy-peer-deps --ignore-scripts
+
+# Copy source
+COPY . .
+
+# Build Mock Client
+# Config uses "root: mock-client" and output "../dist-mock"
+RUN npx vite build -c vite.config.mock.js
+
+# Stage 2: Production Runtime
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Copy Static Server Dependencies
+COPY server/package*.json ./server/
+WORKDIR /app/server
+RUN npm install --production
+
+# Copy Static Server Source
+COPY server/server.js ./
+
+# Copy Mock Client Build from Stage 1 to server/dist
+# Start from /app/dist-mock (output of build) to ./dist (where server.js expects it)
+COPY --from=builder /app/dist-mock ./dist
+
+EXPOSE 8080
+
+CMD ["node", "server.js"]

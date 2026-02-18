@@ -55,15 +55,32 @@ git add tests/
 git commit -m "feat: Add Playwright E2E tests"
 ```
 
-## 3. Manual Verification (OIDC Flow)
-To test the flow manually without a real client app:
+## 3. Manual Verification
+
+### 3.1. Scenario A: Helper Client (Recommended)
+Use the included **Mock Client** to simulate a real OIDC Relying Party. This runs two servers: one for the IdP (5173) and one for the Client (3000).
+
+1.  **Start the Simulation**:
+    ```bash
+    npm run dev:simulation
+    ```
+2.  **Access the Client**:
+    Open [http://localhost:3000](http://localhost:3000).
+3.  **Execute Flow**:
+    *   Click **"Login with Identity Provider"**.
+    *   Observe redirect to IdP (port 5173).
+    *   Authenticate (or register).
+    *   PROFIT: Redirect back to Client (3000) with `id_token`.
+    *   **Verify**: The token is decoded/displayed in the "Authenticated" box.
+
+### 3.2. Scenario B: Raw URL (Sanity Check)
+To test the flow manually without the mock client:
 
 1.  Start the IDP: `npm run dev` (http://localhost:5173).
-2.  Construct a URL:
+2.  Construct a URL (ensure `https://example.com` is in `VITE_ALLOWED_ORIGINS`):
     ```
     http://localhost:5173/?redirect_uri=https://example.com&client_id=test-client&state=123
     ```
-    *(Note: Add `https://example.com` to `VITE_ALLOWED_ORIGINS` in `.env` first)*
 3.  Verify:
-    *   Login Modal appears (Background is blurred/unclickable).
+    *   Login Modal appears.
     *   After login, browser redirects to `https://example.com/#id_token=...`
