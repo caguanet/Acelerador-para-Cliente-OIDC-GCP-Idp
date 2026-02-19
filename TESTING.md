@@ -39,7 +39,10 @@ npx playwright test
 npx playwright test --ui
 ```
 
-## 4. Troubleshooting & Maintenance
+### 👻 Troubleshooting Errors
+
+*   **`auth/requests-from-referer-blocked`**: Inicia sesión en la consola de GCP y añade `http://localhost:5173/*` (o la URL de tu entorno) a los **HTTP Referrers** de tu API Key.
+*   **`Error de API Restrictions`**: Verifica que tu API Key permita el acceso a `Identity Toolkit API` y `Token Service API`.
 
 ### 👻 Automated Cleanup (Safe Mode)
 The project uses a **Clean-on-Start** strategy (`scripts/cleanup-ports.mjs`).

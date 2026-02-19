@@ -20,7 +20,25 @@ Este documento define la **Estrategia de Despliegue en Producción** para el Pro
 
 ## 2. Prerrequisitos
 
-*   **Google Cloud SDK** (Autenticado y configurado).
+### 2.1. Instalación de Google Cloud SDK (Windows)
+### 2.1. Instalación de Google Cloud SDK (Windows)
+**Paso 1:** Descargue el instalador manualmente desde [Google Cloud SDK Installer](https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe).
+
+Alternativamente, si tiene la herramienta `curl` disponible en su CMD, ejecute:
+```cmd
+curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe
+GoogleCloudSDKInstaller.exe
+```
+**Paso 2:** Complete el asistente de instalación. Asegúrese de seleccionar la opción "Bundled Python" si no tiene Python instalado y marque la opción de iniciar sesión.
+
+### 2.2. Autenticación Inicial
+Una vez instalado, reinicie su terminal y ejecute:
+```cmd
+gcloud auth login
+```
+Este comando abrirá un navegador para que inicie sesión con su cuenta de Google Cloud.
+
+### 2.3. Configuración del Entorno
 *   **Roles IAM:** `Run Admin`, `Artifact Registry Admin`, `Secret Manager Accessor`.
 *   **Docker:** Daemon local en ejecución (si se compila localmente).
 
@@ -38,6 +56,10 @@ set PROJECT_ID=<TU_PROJECT_ID>
 :: Nombre para el REPOSITORIO DE ARTEFACTOS (Donde se alojarán las imágenes Docker)
 :: Ejemplo: "infra-registry", "oidc-artifacts", "backend-repo"
 set ARTIFACT_REPO_NAME=<TU_NOMBRE_DE_REPOSITORIO>
+
+:: Región de Despliegue (Debe coincidir con la del script)
+:: Opciones recomendadas para LatAm Norte: us-east1 (Default), us-central1, southamerica-east1
+set REGION=us-east1
 
 :: --- 3. Secretos de la Aplicación (SENSIBLE) ---
 :: Defina aquí los valores REALES.
@@ -130,6 +152,7 @@ gcloud run deploy idp-service ^
   --allow-unauthenticated ^
   --set-env-vars APP_MODE=IDP ^
   --set-env-vars "VITE_ALLOWED_ORIGINS=https://tu-cliente.com|https://otro-cliente.com" ^
+  :: Nota: El script one-shot-deploy.cmd automatiza esto usando la URL del propio servicio.
   --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest ^
   --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest ^
   --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest
@@ -142,8 +165,22 @@ gcloud run deploy idp-service ^
 Tras el despliegue, el servicio será accesible vía HTTPS, pero requiere autorización en los proveedores externos.
 
 1.  **Identity Platform (GCP):** Agregar dominio de Cloud Run a "Authorized Domains".
-2.  **Firebase Console:** Agregar dominio a "HTTP Referrers" en la API Key.
+2.  **API Credentials (GCP):**
+    *   **HTTP Referrers:** Agregar el dominio del servicio (`https://idp-service-.....run.app/*`)
+    *   **IMPORTANTE:** Si desarrolla localmente, agregue también `http://localhost:XXXX/*`.
+    *   **API Restrictions:** Si restringe la Key, asegúrese de permitir:
+        *   `Identity Toolkit API`
+        *   `Token Service API`
 3.  **OAuth Credentials:** Agregar dominio a "Authorized JavaScript Origins".
+4.  **(Recomendado) Actualizar VITE_ALLOWED_ORIGINS:**
+    El script automatizado añade la URL del propio servicio. Para hacerlo manualmente:
+    ```cmd
+    :: Obtener URL
+    for /f "tokens=*" %i in ('gcloud run services describe idp-service --region %REGION% --format^="value(status.url)"') do set SERVICE_URL=%i
+    :: Actualizar Servicio (Self-Reference + Localhost)
+    :: NOTA: Use comillas dobles y escape el pipe con ^|
+    gcloud run services update idp-service --region %REGION% --update-env-vars "VITE_ALLOWED_ORIGINS=%SERVICE_URL%^|http://localhost:3000"
+    ```
 
 > [!TIP]
 > **Desarrollo Local:**
@@ -199,7 +236,42 @@ Errores comunes detectados en operación.
 
 ---
 
-## 9. Estrategia DevOps: Dominios Personalizados
+### 9. Políticas de Organización (Troubleshooting Enterprise)
+Si despliega en un proyecto dentro de una Organización (G Suite / Cloud Identity), es posible que falle con errores tipo:
+*   `FAILED_PRECONDITION: One or more users named in the policy do not belong to a permitted customer`
+*   `IAM Policy Binding Failed: ... domain restricted ...`
+
+Esto se debe a la política **"Domain Restricted Sharing"** (`constraints/iam.allowedPolicyMemberDomains`).
+
+#### Solución 1: Consola de Google Cloud (Recomendada)
+1.  Vaya a **IAM & Admin > Organization Policies**.
+2.  Busque la política **"Domain restricted sharing"**.
+3.  Haga clic en **Edit** (o Manage Policy).
+4.  Seleccione **"Customize"** (Personalizar) para el proyecto actual.
+5.  En "Policy enforcement", seleccione **"Replace"**.
+6.  En "Rules", agregue una regla **"Allow All"**.
+7.  Guarde y reintente el comando de hacer público el servicio.
+
+#### Solución 2: CLI (Override)
+Si tiene permisos de administrador de políticas, puede sobrescribir la restricción via CLI:
+
+1.  Cree un archivo `policy.yaml`:
+    ```yaml
+    name: projects/%PROJECT_ID%/policies/iam.allowedPolicyMemberDomains
+    spec:
+      rules:
+      - allowAll: true
+    ```
+2.  Aplique la política:
+    ```cmd
+    gcloud resource-manager org-policies set-policy policy.yaml --project=%PROJECT_ID%
+    ```
+3.  Haga público el servicio:
+    ```cmd
+    gcloud run services add-iam-policy-binding idp-service --member=allUsers --role=roles/run.invoker --region=%REGION% --project=%PROJECT_ID%
+    ```
+
+## 10. Estrategia DevOps: Dominios Personalizados
 
 Para entornos productivos, evite usar las URLs por defecto `*.run.app`.
 

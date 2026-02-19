@@ -7,7 +7,8 @@ Esta solución es un **Identity Provider (IdP)** basado en OIDC (OpenID Connect)
 
 ### Principios de Diseño
 *   **Identity Broker:** Centraliza la autenticación. Los clientes (Relying Parties) solo ven el IdP, nunca la base de datos de usuarios.
-*   **Frontend-Only Security:** La aplicación es una SPA (React) que maneja flujos OIDC implícitos o PKCE. No almacena secretos de servidor (Client Secrets) en el código.
+*   **Frontend-Only Security (Implicit Flow):** La solución implementa estrictamente **OIDC Implicit Flow** (ideal para SPAs Serverless). 
+    > **Nota:** No soporta PKCE (Proof Key for Code Exchange) actualmente, ya que requeriría persistencia de backend (Stateful). Esta decisión prioriza **Simplicidad y Costo Cero** sobre la seguridad de grado bancario (OAuth 2.1), siendo suficiente para integraciones estándar.
 *   **Runtime Configuration:** La configuración se inyecta en tiempo de ejecución (`window.APP_CONFIG`), permitiendo que el mismo artefacto (Docker Image) sirva a múltiples inquilinos o entornos solo cambiando el archivo `config.js` o variables de entorno.
 
 ## 2. 🧩 Diagramas de Clases (Componentes)
@@ -139,3 +140,4 @@ graph TD
 1.  **Whitelisting:** Nunca despliegues a producción sin configurar exhaustivamente `APP_CONFIG.allowedOrigins`. Cualquier origen no listado será bloqueado.
 2.  **Tokens:** El IdP emite tokens de corta duración (1 hora). La renovación debe manejarse en el cliente (silent refresh) o re-autenticando.
 3.  **Logs:** No loguear información personal (PII) ni tokens en la consola del navegador ni en los logs de Cloud Run.
+4.  **API Hardening:** Siga el principio de privilegio mínimo en GCP. Restrinja sus API Keys para que solo puedan llamar a los servicios necesarios (`Identity Toolkit`, `Token Service`) y solo desde dominios conocidos (Referrers).

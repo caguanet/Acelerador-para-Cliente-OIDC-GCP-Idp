@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.1] - 2026-02-19
+### 🐛 Correcciones
+- **Inyección de Variables de Entorno en Windows:** Se corrigió el script de despliegue (`one-shot-deploy.cmd` y `tmp/exc-one-shot-deploy.cmd`) para escapar correctamente el carácter pipe (`|`) en `VITE_ALLOWED_ORIGINS` usando `^|`. Esto solucionaba un error crítico donde la lista blanca de dominios se truncaba o malformaba, bloqueando el acceso CORS.
+- **Acceso Público Cloud Run:** Se documentó e implementó la solución para sobrescribir la política de organización `iam.allowedPolicyMemberDomains`, permitiendo la invocación pública (`allUsers`) necesaria para la demo externa.
+
+### 📚 Documentación
+- **Guía de Despliegue (`DEPLOY.md`):** Se agregó una sección detallada "Troubleshooting Enterprise" para resolver bloqueos por políticas de organización mediante la Consola de GCP y CLI (`set-policy`).
+- **Base de Conocimiento:** Se actualizó `tmp/knowledge-base-gcloud-windows.md` con el "gotcha" específico del escapado de pipes en CMD para comandos `gcloud`.
+
+## [v1.2.0] - 2026-02-18
+### ✨ Nuevas Características
+- **Infrastructure Decoupling:** Independencia total de la cuenta "Compute Default". Ahora `deploy` y `build` usan `idp-service-sa` con roles explícitos (`logging.logWriter`, `artifactregistry.writer`, etc).
+- **Project Reset Script:** Nuevo `tmp/delete-project.cmd` que permite reiniciar el entorno manteniendo el nombre del proyecto pero rotando el ID para evitar bloqueos de "soft-delete".
+
+### 🔧 Refactorización y Mejoras
+- **KISS Deployment:** Refactorizado `one-shot-deploy.cmd` para usar `CLOUDSDK_CORE_PROJECT` globalmente, eliminando redundancia y errores de contexto.
+- **Robustez en Build:** Generación dinámica de `cloudbuild.yaml` (`logging: CLOUD_LOGGING_ONLY`) para permitir builds con cuentas de servicio personalizadas sin buckets de logs externos.
+
+### 📚 Documentación
+- **Knowledge Base:** Nueva `tmp/knowledge-base-gcloud-windows.md` documentando gotchas de Windows Batch, manejo de IAM y ciclo de vida de proyectos GCP.
+
 ## [v1.1.5] - 2026-02-17
 ### 🔧 Refactorización y Mejoras
 - **Despliegue Estandarizado:** Reescritura total de `DEPLOY.md` cumpliendo estándares de Módulo 05 (Zero-Touch Provisioning).

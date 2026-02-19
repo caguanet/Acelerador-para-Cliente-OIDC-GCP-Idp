@@ -7,8 +7,21 @@ Esta guía documenta los procesos estándar para configurar el entorno local, ej
 *   **Node.js**: v18 o superior.
 *   **Gestor de Paquetes**: `npm` (incluido con Node.js).
 *   **Git Bash** (Recomendado en Windows) o PowerShell.
+*   **GCP Project**: Acceso a un proyecto con Identity Platform habilitado.
 
-## 2. Configuración del Entorno Local
+## 2. Configuración de Seguridad en GCP (Paso Crítico)
+
+Para que el entorno local funcione correctamente con las APIs de Firebase, debe configurar su API Key en la Consola de GCP (`APIs & Services > Credentials`):
+
+1.  **HTTP Referrers:** Agregue su origen local: `http://localhost:5173/*` (y cualquier otro puerto que use).
+2.  **API Restrictions:** Si tiene restricciones de API habilitadas, asegúrese de **PERMITIR** explícitamente estas dos:
+    *   **Identity Toolkit API** (Necesaria para login/registro).
+    *   **Token Service API** (Necesaria para el intercambio de tokens OIDC).
+
+> [!WARNING]
+> Sin la "Token Service API", el IdP no podrá emitir el `id_token` final, aunque el login de Firebase parezca exitoso.
+
+## 3. Configuración del Entorno Local
 
 1.  **Clonar el repositorio:**
     ```bash
