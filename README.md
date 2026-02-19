@@ -3,6 +3,13 @@
 Una solución de proveedor de identidad ligera, segura y personalizable, diseñada para desplegarse en Google Cloud Platform (Cloud Run).
 
 > **Para Desarrolladores:** Guía de configuración y pruebas local en [DEVELOPERS.md](DEVELOPERS.md).
+>
+> **📚 Índice de Documentación:**
+> *   [**DEPLOY.md**](DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
+> *   [**TECH_README.md**](TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
+> *   [**TESTING.md**](TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.
+> *   [**CHANGELOG.md**](CHANGELOG.md): Historial de versiones y cambios notables.
+> *   [**DISCLAIMER.md**](DISCLAIMER.md): Exención de responsabilidades y términos de uso.
 
 ## 🚀 Características Principales
 
@@ -68,9 +75,13 @@ Las variables sensibles se manejan como variables de entorno en el despliegue (C
 *   GCP Project con Billing habilitado.
 *   gcloud CLI instalado y autenticado.
 
-### Comand Deploy
-```powershell
-./scripts/deploy-gcp.ps1 -ProjectId "mi-proyecto-prod" -Region "us-central1"
+### Guía de Despliegue
+Para instrucciones detalladas paso a paso, consulte:
+👉 **[DEPLOY.md](DEPLOY.md)**
+
+Para un despliegue rápido automatizado en Windows:
+```cmd
+scripts/one-shot-deploy.cmd
 ```
 
 ## 🛡️ Seguridad

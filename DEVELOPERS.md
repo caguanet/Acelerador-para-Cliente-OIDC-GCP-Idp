@@ -82,9 +82,33 @@ npx playwright test --ui
 > **Nota:** Si es la primera vez que ejecutas Playwright, es posible que necesites instalar los navegadores:
 > `npx playwright install`
 
+
 ## 5. Simulación de Identidad Visual (White-Label)
 
-Para probar diferentes configuraciones de marca localmente sin desplegar, puedes inyectar la configuración en la consola del navegador o modificar temporalmente `index.html`:
+### 5.1 Personalización Permanente (Código)
+Para cambiar la identidad visual de la aplicación de forma permanente (requiere recompilar la imagen Docker), modifique los siguientes archivos:
+
+**1. Colores y Fuentes (`src/index.css`)**
+Edite las variables CSS en el bloque `:root`:
+```css
+:root {
+  --brand-primary: #FF0000;       /* Color Principal (Botones, Navbar) */
+  --brand-secondary: #CC0000;     /* Hover states */
+  --brand-accent: #00FF00;        /* Detalles y bordes */
+  --brand-action: #FF5A00;        /* Call to Action */
+  --brand-bg: #F8F9FB;            /* Fondo General */
+}
+```
+
+**2. Logo (`public/branding/default/logo.png`)**
+Reemplace el archivo `logo.png` en esta ruta.
+*   **Formato recomendado:** PNG o SVG con fondo transparente.
+*   **Tamaño recomendado:** Altura mínima de 60px.
+
+---
+
+### 5.2 Simulación Rápida (Consola del Navegador)
+Para probar diferentes configuraciones de marca localmente sin desplegar, puedes inyectar la configuración en la consola del navegador:
 
 ```javascript
 // Pegar en la consola del navegador
