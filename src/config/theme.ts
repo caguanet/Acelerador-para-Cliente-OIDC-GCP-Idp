@@ -18,7 +18,7 @@ export interface ThemeConfig {
 
 const defaultConfig: ThemeConfig = {
     brandName: import.meta.env.VITE_APP_BRAND_NAME || "Identity Provider",
-    logoUrl: import.meta.env.VITE_APP_LOGO_URL || "/branding/default/logo.png", // Generic fallback
+    logoUrl: import.meta.env.VITE_APP_LOGO_URL || "/branding/default/logo.svg",
     colors: {
         primary: "#204780", // Keep ETB as default fallback for now, or change to generic blue
         secondary: "#006DCC",

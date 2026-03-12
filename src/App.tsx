@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { initializeApp } from "firebase/app";
 import { User } from "firebase/auth";
 import './index.css'
-import { LoginModal } from './components/LoginModal';
+import { BrandLoginForm } from './components/BrandLoginForm';
+import { themeConfig } from './config/theme';
 
 
 // --- Firebase Configuration ---
-// Configuración dinámica (Runtime/Secrets) con fallback a entorno local (.env)
 const runtimeConfig = window.APP_CONFIG?.firebase;
 
 const firebaseConfig = {
@@ -15,190 +15,149 @@ const firebaseConfig = {
   projectId: runtimeConfig?.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID
 };
 
-// Initialize Firebase
 initializeApp(firebaseConfig);
 
 
 function App() {
-  const [user, setUser] = useState<User | null>(null)
-  
-  // State for Login Modal/View
-  const [showLogin, setShowLogin] = useState(false)
+  const [loggedIn, setLoggedIn] = useState(false);
 
-  // OIDC State
   const [oidcParams, setOidcParams] = useState<{
     redirect_uri: string | null,
     client_id: string | null,
-    state: string | null 
+    state: string | null
   }>({ redirect_uri: null, client_id: null, state: null });
   const [oidcError, setOidcError] = useState<string | null>(null);
 
-  // Helper for origin validation
   const isValidOrigin = (urlStr: string) => {
     try {
-        const targetUrl = new URL(urlStr);
-        const validationOrigins = [
-            ...(window.APP_CONFIG?.allowedOrigins || [])
-        ];
-        // In development, allow localhost if explicitly configured or empty (fallback)
-        if (import.meta.env.DEV && validationOrigins.length === 0) {
-             return targetUrl.hostname === 'localhost';
-        }
-        return validationOrigins.some(origin => targetUrl.origin === origin);
-    } catch (e) {
-        return false;
+      const targetUrl = new URL(urlStr);
+      const validationOrigins = [...(window.APP_CONFIG?.allowedOrigins || [])];
+      if (import.meta.env.DEV && validationOrigins.length === 0) {
+        return targetUrl.hostname === 'localhost';
+      }
+      return validationOrigins.some(origin => targetUrl.origin === origin);
+    } catch {
+      return false;
     }
   };
 
-  // On Mount: Check query params for OIDC flow OR Hash for Callback
   useEffect(() => {
-    // 1. Check for OIDC Login Request
     const params = new URLSearchParams(window.location.search);
     const redirect_uri = params.get('redirect_uri');
     const client_id = params.get('client_id');
     const state = params.get('state');
 
     if (redirect_uri && client_id) {
-        if (!isValidOrigin(redirect_uri)) {
-            setOidcError(`Error de Seguridad: El dominio de redirección no está autorizado.`);
-            return;
-        }
-        setOidcParams({ redirect_uri, client_id, state });
-        setShowLogin(true); // Force login view immediately
+      if (!isValidOrigin(redirect_uri)) {
+        setOidcError(`Error de Seguridad: El dominio de redirección no está autorizado.`);
         return;
+      }
+      setOidcParams({ redirect_uri, client_id, state });
     }
-
-
   }, []);
 
   const handleLoginSuccess = async (currentUser: User) => {
-      setUser(currentUser)
-      
-      try {
-        const idToken = await currentUser.getIdToken()
-        
-        // OIDC REDIRECT FLOW
-        if (oidcParams.redirect_uri) {
-            if (!isValidOrigin(oidcParams.redirect_uri)) {
-                console.error("Redirect URI not allowed", oidcParams.redirect_uri);
-                setOidcError(`Error de seguridad: El dominio no está autorizado para recibir credenciales.`);
-                return;
-            }
+    try {
+      const idToken = await currentUser.getIdToken();
 
-            const targetUrl = new URL(oidcParams.redirect_uri);
-            // If valid, append token
-            targetUrl.hash = `id_token=${idToken}&state=${oidcParams.state || ''}`;
-            
-            // Redirecting...
-            window.location.href = targetUrl.toString();
-            return;
+      if (oidcParams.redirect_uri) {
+        if (!isValidOrigin(oidcParams.redirect_uri)) {
+          setOidcError(`Error de seguridad: El dominio no está autorizado para recibir credenciales.`);
+          return;
         }
-
-        // STANDALONE FLOW (No dashboard, just stay logged in)
-        setShowLogin(false) // Close modal/form on success
-
-      } catch (err) {
-        console.error("Error fetching token", err)
+        const targetUrl = new URL(oidcParams.redirect_uri);
+        targetUrl.hash = `id_token=${idToken}&state=${oidcParams.state || ''}`;
+        window.location.href = targetUrl.toString();
+        return;
       }
-  }
 
+      // Standalone: mark as logged in
+      setLoggedIn(true);
+    } catch (err) {
+      console.error("Error fetching token", err);
+    }
+  };
 
-
-
-
-
-
-  // 1. IDP Provider View (OIDC Login Page or Error)
-  // This is what the user sees when redirected from the third party
-  if (oidcParams.redirect_uri || oidcError) {
-    return (
-        <div className="app-container" style={{
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            minHeight: '100vh', 
-            background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
-        }}>
-            <div style={{
-                background: 'white',
-                padding: '2rem',
-                borderRadius: '16px',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
-                width: '100%',
-                maxWidth: '450px'
-            }}>
-                {oidcError ? (
-                    <div style={{textAlign: 'center', padding: '1rem'}}>
-                        <div style={{fontSize: '3rem', marginBottom: '1rem'}}>🚫</div>
-                        <h2 style={{color: '#d63031', marginBottom: '1rem'}}>Acceso No Autorizado</h2>
-                        <p style={{color: '#636e72', fontSize: '0.9rem', lineHeight: '1.5'}}>
-                            {oidcError}
-                        </p>
-                        <div style={{marginTop: '2rem'}}>
-                            <button 
-                                onClick={() => window.location.href = '/'}
-                                style={{
-                                    background: '#0984e3',
-                                    color: 'white',
-                                    border: 'none',
-                                    padding: '10px 20px',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Volver al Inicio
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                        <LoginModal 
-                            isOpen={true} 
-                            onClose={() => {}} 
-                            onSignInSuccess={handleLoginSuccess}
-                            isLoading={false}
-                            allowClose={false}
-                        />
-                        <div style={{textAlign: 'center', marginTop: '1rem', color: '#666', fontSize: '0.8rem'}}>
-                            <p>Solicitud de acceso para:</p>
-                            <strong style={{fontSize: '1.1rem', color: '#333'}}>{oidcParams.client_id}</strong>
-                        </div>
-                    </>
-                )}
-            </div>
-        </div>
-    )
-  }
-
-  // 3. Service Status View (No Dashboard)
   return (
-    <div className="app-container" style={{
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh', 
-        background: '#f8f9fa',
-        flexDirection: 'column',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
-    }}>
-      <div style={{textAlign: 'center', padding: '2rem'}}>
-        <h1 style={{color: '#2d3436', marginBottom: '0.5rem'}}>Identity Provider Service</h1>
-        <p style={{color: '#636e72'}}>Secure Authentication Gateway</p>
-        <div style={{marginTop: '2rem', padding: '1rem', background: '#e17055', color: 'white', borderRadius: '4px', fontSize: '0.9rem'}}>
-            ⚠️ Direct access restricted. Please use a valid Client App.
-        </div>
-        <p style={{marginTop: '2rem', fontSize: '0.8rem', color: '#b2bec3'}}>v1.0.0 • OIDC Compliant</p>
+    <div className="login-desktop">
+
+      {/* Mobile only: ETB logo centered at top */}
+      <div className="login-mobile-header">
+        <img src={themeConfig.logoUrl} alt={themeConfig.brandName} className="login-mobile-logo" />
       </div>
 
-      <LoginModal 
-        isOpen={showLogin && !user}
-        onClose={() => setShowLogin(false)}
-        onSignInSuccess={handleLoginSuccess}
-        isLoading={false} 
-      />
+      {/* Desktop only: Left hero panel */}
+      <div className="login-hero">
+        <div className="login-hero-inner">
+          <h1 className="login-hero-title">Bienvenido<br/>a MiETB</h1>
+          <p className="login-hero-accent">Autogestiona todos tus productos</p>
+          <p className="login-hero-desc">fácilmente desde un solo lugar.</p>
+          <p className="login-hero-app-label">Descarga y conoce la app MiETB</p>
+          <div className="login-hero-badges">
+            <a href="#" className="app-badge" aria-label="Download on the App Store">
+              <svg width="20" height="20" viewBox="0 0 814 1000" fill="white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 790.7 0 663 0 541.8c0-194.3 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/>
+              </svg>
+              <span><small>Download on the</small><br/><b>App Store</b></span>
+            </a>
+            <a href="#" className="app-badge" aria-label="Get it on Google Play">
+              <svg width="20" height="20" viewBox="0 0 512 512" fill="white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1zM47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l232.6-232.6L47 0zm425.6 225.6l-58.9-34-67.7 67.7 67.7 67.7 59.1-34c16.8-9.7 16.8-34.7.8-67.4zm-160.5 133.4L99.5 512l280.8-161.2-67.2-91.8z"/>
+              </svg>
+              <span><small>GET IT ON</small><br/><b>Google Play</b></span>
+            </a>
+            <a href="#" className="app-badge app-badge--huawei" aria-label="Explore on AppGallery">
+              <svg width="20" height="20" viewBox="0 0 100 100" fill="white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 10 C50 10 65 25 65 40 C65 48 58 55 50 55 C42 55 35 48 35 40 C35 25 50 10 50 10Z"/>
+                <path d="M50 10 C50 10 35 25 35 40 C35 48 42 55 50 55 C58 55 65 48 65 40 C65 25 50 10 50 10Z" fillOpacity="0.6"/>
+                <path d="M20 50 C20 50 35 35 50 35 C58 35 65 42 65 50 C65 58 58 65 50 65 C35 65 20 50 20 50Z"/>
+                <path d="M80 50 C80 50 65 35 50 35 C42 35 35 42 35 50 C35 58 42 65 50 65 C65 65 80 50 80 50Z" fillOpacity="0.6"/>
+                <path d="M50 90 C50 90 35 75 35 60 C35 52 42 45 50 45 C58 45 65 52 65 60 C65 75 50 90 50 90Z"/>
+              </svg>
+              <span><small>EXPLÓRALO EN</small><br/><b>AppGallery</b></span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* Card panel — mobile: centered over bg | desktop: right side floating */}
+      <div className="login-card-panel">
+        <div className="login-page-card">
+          {oidcError ? (
+            <div className="login-error-state">
+              <div className="login-error-icon">✕</div>
+              <h2>Acceso No Autorizado</h2>
+              <p>{oidcError}</p>
+              <button className="login-btn-primary" onClick={() => window.location.href = '/'}>
+                Volver al Inicio
+              </button>
+            </div>
+          ) : loggedIn ? (
+            <div className="login-error-state">
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✓</div>
+              <h2 style={{ color: 'var(--brand-primary)' }}>Autenticado</h2>
+              <p style={{ color: 'var(--brand-text-secondary)' }}>Sesión iniciada correctamente.</p>
+            </div>
+          ) : (
+            <>
+              <BrandLoginForm onSignInSuccess={handleLoginSuccess} />
+              {oidcParams.client_id && (
+                <p className="login-client-id">
+                  Acceso solicitado por: <strong>{oidcParams.client_id}</strong>
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile only: brand tagline */}
+      <div className="login-tagline">
+        <p><strong>Serás</strong> lo que <strong>creas</strong></p>
+      </div>
+
     </div>
-  )
+  );
 }
 
 export default App
-

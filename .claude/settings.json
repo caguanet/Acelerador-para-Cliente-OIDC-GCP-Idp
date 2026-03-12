@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcloud config list:*)",
+      "Bash(claude mcp:*)",
+      "Bash(npx skills:*)",
+      "Bash(npm --version)",
+      "WebFetch(domain:skills.sh)",
+      "WebSearch",
+      "Bash(npm run:*)",
+      "Bash(npm.cmd run:*)",
+      "Bash(cmd.exe /c \"cd /d d:\\\\ETBRepo\\\\gcp\\\\Acelerador-para-Cliente-OIDC-GCP-Idp && npm run build 2>&1\")",
+      "Read(//usr/local/bin/**)",
+      "Read(//usr/bin/**)",
+      "Bash(\"/mnt/c/nvm4w/nodejs/npm.cmd\" run:*)",
+      "Read(//mnt/c/**)",
+      "Read(//mnt/c/Users/leangars/AppData/Roaming/**)",
+      "Read(//mnt/c/Program Files/**)",
+      "mcp__figma__get_design_context",
+      "mcp__figma__get_screenshot",
+      "Bash(where node:*)",
+      "Bash(powershell -Command \":*)",
+      "Bash(\"/mnt/c/Program Files/WindowsApps/Microsoft.PowerShell_7.5.2.0_x64__8wekyb3d8bbwe/pwsh.exe\" -Command \":*)",
+      "Bash(curl --version)",
+      "Bash(mkdir -p \"d:/ETBRepo/gcp/Acelerador-para-Cliente-OIDC-GCP-Idp/public/branding\")",
+      "Bash(curl -L \"https://www.figma.com/api/mcp/asset/b6684fea-0396-44e7-82c0-44329a5fa88f\" -o \"d:/ETBRepo/gcp/Acelerador-para-Cliente-OIDC-GCP-Idp/public/branding/login-hero.jpg\")",
+      "Bash(python3 -c \":*)",
+      "WebFetch(domain:www.figma.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\leangars\\.claude\\projects\\d--ETBRepo-gcp-Acelerador-para-Cliente-OIDC-GCP-Idp",
+      "d:\\ETBRepo\\gcp\\Acelerador-para-Cliente-OIDC-GCP-Idp\\public\\branding",
+      "C:\\Users\\leangars\\.claude\\projects\\d--ETBRepo-gcp-Acelerador-para-Cliente-OIDC-GCP-Idp\\09093e68-43c2-4960-aa59-405dad9f177b\\tool-results"
+    ]
+  }
+}
