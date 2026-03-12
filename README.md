@@ -5,6 +5,7 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 > **Para Desarrolladores:** Guía de configuración y pruebas local en [DEVELOPERS.md](DEVELOPERS.md).
 >
 > **📚 Índice de Documentación:**
+> *   [**CONFIGURACION-PASO-A-PASO.md**](CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
 > *   [**DEPLOY.md**](DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
 > *   [**TECH_README.md**](TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
 > *   [**TESTING.md**](TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.

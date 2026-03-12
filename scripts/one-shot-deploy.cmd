@@ -22,7 +22,7 @@ cd /d %~dp0\..
 :: --- 1. CONFIGURACIÓN GLOBAL (¡EDITAR ANTES DE EJECUTAR!) ---
 
 :: Identificadores
-set PROJECT_ID=CAMBIAR_POR_TU_PROJECT_ID
+set PROJECT_ID=etb-identity-omnicanal
 set ARTIFACT_REPO_NAME=idp-repo
 
 :: Región de Despliegue
@@ -40,9 +40,9 @@ set REGION=us-east1
 
 :: Secretos de Firebase (Valores Reales)
 :: Déjelos en blanco si ya existen en Secret Manager.
-set VAL_FIREBASE_API_KEY=
-set VAL_FIREBASE_AUTH_DOMAIN=
-set VAL_FIREBASE_PROJECT_ID=
+set VAL_FIREBASE_API_KEY=AIzaSyByRyUZPbLYH3-J3vj_gsKShz1M2qDTnoo
+set VAL_FIREBASE_AUTH_DOMAIN=etb-identity-omnicanal.firebaseapp.com
+set VAL_FIREBASE_PROJECT_ID=etb-identity-omnicanal
 
 :: ==============================================================================================
 :: NO MODIFICAR DEBAJO DE ESTA LÍNEA A MENOS QUE SEPA LO QUE HACE
@@ -57,7 +57,7 @@ echo               "Resolución de Problemas > Políticas de Organización" en D
 echo.
 
 :: Validar configuración mínima
-if "%PROJECT_ID%"=="CAMBIAR_POR_TU_PROJECT_ID" (
+if "%PROJECT_ID%"=="etb-identity-omnicanal"
     echo [ERROR] Por favor edite este script y configure la variable PROJECT_ID.
     pause
     exit /b 1
@@ -173,6 +173,12 @@ if not "%VAL_FIREBASE_PROJECT_ID%"=="" (
     )
 )
 
+:: 5. Permiso para que la SA de Cloud Run lea los secretos (requerido por --set-secrets)
+echo [INFO] Otorgando Secret Manager Secret Accessor a 'idp-service-sa'...
+call gcloud projects add-iam-policy-binding %PROJECT_ID% --member="serviceAccount:idp-service-sa@%PROJECT_ID%.iam.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" --project=%PROJECT_ID%
+if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo al otorgar acceso a secretos. & exit /b 1 )
+echo [INFO] Esperando 15 segundos para propagacion de IAM en Secret Manager...
+timeout /t 15 /nobreak >nul
 
 :: --- FASE 2: DESPLIEGUE DEL SERVICIO OIDC ---
 echo.

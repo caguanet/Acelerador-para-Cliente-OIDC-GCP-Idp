@@ -1,7 +1,7 @@
 :root {
   /* Brand Identity Tokens (White Label) */
   --brand-primary: #204780;       /* Default Fallback */
-  --brand-secondary: #006DCC;
+  --brand-secondary: #0092bc;
   --brand-accent: #00E4FF;
   --brand-action: #FF5A00;
   --brand-bg: #F8F9FB;
@@ -9,7 +9,7 @@
   --brand-text-secondary: #555555;
   --glass-border: rgba(32, 71, 128, 0.1);
 
-  font-family: 'DINPro', 'Inter', system-ui, Arial, sans-serif;
+  font-family: 'Lexend Deca', 'Lexend', 'DINPro', 'Inter', system-ui, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -415,25 +415,6 @@ ul.firebaseui-idp-list {
     object-fit: contain;
 }
 
-.auth-alert {
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 1.5rem;
-    font-size: 0.9rem;
-    text-align: left;
-}
-
-.auth-alert.error {
-    background-color: #ffebee;
-    color: #c62828;
-    border: 1px solid #ffcdd2;
-}
-
-.auth-alert.success {
-    background-color: #e8f5e9;
-    color: #2e7d32;
-    border: 1px solid #c8e6c9;
-}
 
 .forgot-pass-link {
     text-align: right;
@@ -519,4 +500,467 @@ ul.firebaseui-idp-list {
     text-align: center;
     margin-top: 2rem;
     opacity: 0.6;
+}
+
+/* ================================================
+   LOGIN — Mobile-first (ETB Figma Design)
+   Design tokens: #214780 deep-blue, #0092bc etb-blue,
+                  #515151 gray, #FAFAFA card-bg
+   ================================================ */
+
+/* ---- Error / Success alerts ---- */
+.auth-alert {
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 1.25rem;
+    font-size: 0.9rem;
+    text-align: left;
+}
+.auth-alert.error  { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+.auth-alert.success{ background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+
+/* ---- Error state inside card ---- */
+.login-error-state { text-align: center; padding: 0.5rem 0; }
+.login-error-icon {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: #ffebee; color: #c62828;
+    font-size: 1.4rem; line-height: 48px; margin: 0 auto 1rem;
+}
+.login-error-state h2 { color: #c62828; font-size: 1.2rem; margin-bottom: 0.75rem; }
+.login-error-state p  { color: #636e72; font-size: 0.875rem; line-height: 1.5; margin-bottom: 1.5rem; }
+
+/* ---- Client ID note ---- */
+.login-client-id {
+    text-align: center; font-size: 0.75rem;
+    color: #9BA8B8; margin-top: 1rem; margin-bottom: 0;
+}
+
+/* ================================================
+   LOGIN FORM
+   ================================================ */
+.login-form { width: 100%; }
+
+.login-form-title {
+    color: #214780;
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-family: 'Lexend', 'Lexend Deca', sans-serif;
+    text-align: left;
+    margin: 0 0 0.35rem;
+}
+
+.login-form-subtitle {
+    text-align: left;
+    color: #515151;
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.5;
+}
+
+.login-form-subtitle button {
+    background: none; border: none; padding: 0;
+    color: #214780; font-weight: 700;
+    cursor: pointer; font-size: inherit;
+}
+
+.login-field { margin-bottom: 0.85rem; }
+
+.login-field input {
+    width: 100%;
+    padding: 0 20px;
+    background: #fafafa;
+    border: 1.5px solid #515151;
+    border-radius: 20px;
+    color: #515151;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    height: 52px;
+    transition: border-color 0.2s, background 0.2s;
+    font-family: inherit;
+}
+
+.login-field input::placeholder { color: #888; }
+
+.login-field input:focus {
+    outline: none;
+    border-color: #0092bc;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.12);
+}
+
+.login-btn-primary {
+    width: 100%;
+    height: 52px;
+    background: #0092bc;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 0.75rem;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+}
+.login-btn-primary:hover:not(:disabled) { background: #214780; }
+.login-btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.login-btn-outline {
+    width: 100%;
+    height: 52px;
+    background: white;
+    color: #0092bc;
+    border: 1.5px solid #0092bc;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background 0.2s;
+    margin-bottom: 0.75rem;
+    font-family: inherit;
+}
+.login-btn-outline:hover:not(:disabled) { background: #f0f7ff; }
+.login-btn-outline:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* Social buttons row */
+.login-social-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.login-btn-social {
+    height: 52px;
+    background: white;
+    color: #0092bc;
+    border: 2px solid #0092bc;
+    border-radius: 24px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+    font-family: inherit;
+}
+.login-btn-social:hover:not(:disabled) { background: #f0f7ff; }
+.login-btn-social:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.login-forgot { text-align: center; margin-top: 0.25rem; }
+.login-forgot button {
+    background: none; border: none;
+    color: #515151; font-size: 0.875rem;
+    cursor: pointer; padding: 0;
+    font-family: inherit;
+    text-decoration: underline;
+    transition: color 0.2s;
+}
+.login-forgot button:hover { color: #0092bc; }
+
+/* ================================================
+   LOGIN LAYOUT — Mobile first
+   Figma tokens: #214780 deep-blue | #0092bc etb-blue
+                 #515151 gray | #FAFAFA card-bg
+   Mobile  → node 4146-231 (gradient bg, centered card, logo+tagline)
+   Desktop → node 5226-5013 (hero image, card floating right)
+   ================================================ */
+
+/* ══════════════════════════════════════════════
+   BASE — Mobile (default)
+   ══════════════════════════════════════════════ */
+
+.login-desktop {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    overflow-x: hidden;
+    /* Mobile: solid gradient — no photo */
+    background: linear-gradient(180deg, #004b90 0%, #0092bc 100%);
+}
+
+/* Decorative arc — top-left (mobile Figma) */
+.login-desktop::before {
+    content: '';
+    position: absolute;
+    top: -55px;
+    left: -55px;
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.50);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Decorative arc — bottom-right (mobile Figma) */
+.login-desktop::after {
+    content: '';
+    position: absolute;
+    bottom: -55px;
+    right: -55px;
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.50);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ---- Mobile logo header ---- */
+.login-mobile-header {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2.5rem 1.5rem 1rem;
+    flex: none;
+}
+
+.login-mobile-logo {
+    height: 68px;
+    width: 86px;
+    display: block;
+}
+
+/* ---- Hero panel — hidden on mobile, shown on desktop ---- */
+.login-hero {
+    display: none;
+}
+
+.login-hero::before,
+.login-hero::after { display: none; }
+
+.login-hero-inner { width: 100%; }
+
+.login-hero-title {
+    font-size: 2.4rem;
+    font-weight: 900;
+    font-family: 'Lexend', sans-serif;
+    color: white;
+    line-height: 1.05;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.5px;
+}
+
+.login-hero-accent {
+    color: #00E5FF;
+    font-weight: 700;
+    font-size: 1rem;
+    margin: 0 0 0.2rem;
+}
+
+.login-hero-desc {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.95rem;
+    margin: 0 0 1.5rem;
+}
+
+.login-hero-app-label {
+    color: white;
+    font-weight: 700;
+    font-size: 0.82rem;
+    margin-bottom: 0.55rem;
+}
+
+.login-hero-badges {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.app-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #0a0a0a;
+    color: white;
+    border-radius: 8px;
+    padding: 0.38rem 0.65rem;
+    text-decoration: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    font-size: 0.63rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+.app-badge:hover { background: #222; }
+.app-badge b { font-size: 0.76rem; display: block; }
+.app-badge--huawei { background: #cc0000; }
+.app-badge--huawei:hover { background: #aa0000; }
+
+/* ---- Card panel — mobile: centered over gradient ---- */
+.login-card-panel {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background: transparent;
+    padding: 0 1.25rem 1.5rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.login-page-card {
+    background: #fafafa;
+    border-radius: 10px;
+    padding: 3.125rem 1.3125rem 3.125rem;
+    width: 100%;
+    max-width: 356px;
+    box-sizing: border-box;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.10);
+}
+
+/* ---- Tagline — mobile only ---- */
+.login-tagline {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    padding: 1.25rem 1.5rem 2rem;
+    flex: none;
+}
+
+.login-tagline p {
+    color: white;
+    font-size: 1.25rem;
+    font-family: 'Lexend Deca', sans-serif;
+    font-weight: 500;
+    text-align: center;
+    margin: 0;
+    letter-spacing: 0.1px;
+}
+
+.login-tagline strong {
+    font-weight: 800;
+}
+
+/* ══════════════════════════════════════════════
+   FORM — Mobile overrides (centered, smaller)
+   ══════════════════════════════════════════════ */
+.login-form-title {
+    text-align: center;
+    font-size: 1.5rem;
+}
+
+.login-form-subtitle {
+    text-align: center;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+}
+
+.login-field input {
+    height: 45px;
+    border-radius: 16px;
+    font-size: 0.875rem;
+}
+
+.login-btn-primary {
+    height: 45px;
+    border-radius: 38px;
+    font-size: 0.875rem;
+}
+
+/* Social buttons — mobile: full width pill with icon + label */
+.login-social-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.login-btn-social {
+    height: 42px;
+    border-radius: 38px;
+    width: 100%;
+    justify-content: center;
+    gap: 6px;
+}
+
+.login-social-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0092bc;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.login-btn-outline {
+    border-radius: 38px;
+    font-size: 0.875rem;
+}
+
+/* ══════════════════════════════════════════════
+   DESKTOP — Full-width hero + floating card  ≥1024px
+   Figma node 5226-5013
+   ══════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+
+    /* Full layout: row, hero bg image full-width */
+    .login-desktop {
+        flex-direction: row;
+        align-items: stretch;
+        background: url('/branding/login-hero.png') center top / cover no-repeat, #004b90;
+    }
+
+    /* No overlay on desktop — image already has its own tones + arc */
+    .login-desktop::before { display: none; }
+    .login-desktop::after  { display: none; }
+
+    /* Hide mobile-only elements */
+    .login-mobile-header { display: none; }
+    .login-tagline        { display: none; }
+
+    /* ---- Left hero panel — invisible spacer on desktop ----
+       The background IMAGE already contains the text + badges + arc baked in.
+       This element just pushes the card to the right. Content is hidden. */
+    .login-hero {
+        display: flex;
+        flex: 1;
+        min-height: 100vh;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    /* ---- Right card panel — floats over hero image ---- */
+    .login-card-panel {
+        width: 580px;
+        min-width: 480px;
+        flex: none;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 3.25rem 2rem 1.5rem;
+    }
+
+    .login-page-card {
+        max-width: 549px;
+        border-radius: 18px;
+        padding: 3.125rem 3.75rem 2.875rem;
+    }
+
+    /* Form overrides for desktop */
+    .login-form-title    { text-align: left; font-size: 1.75rem; }
+    .login-form-subtitle { text-align: left; font-size: 0.95rem; }
+    .login-field input   { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+    .login-btn-primary   { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+
+    /* Social buttons — desktop: 2-column grid, icon only */
+    .login-social-row {
+        flex-direction: row;
+        gap: 1rem;
+    }
+
+    .login-btn-social {
+        height: 58px;
+        border-radius: 24px;
+        flex: 1;
+        gap: 0;
+    }
+
+    .login-social-label { display: none; }
+
+    .login-btn-outline { border-radius: 20px; font-size: 0.9rem; }
 }

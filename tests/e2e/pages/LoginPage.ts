@@ -15,7 +15,7 @@ export class LoginPage {
     // We assume standard Firebase/Identity Platform UI elements or our custom UI
     this.emailInput = page.locator('input[type="email"]');
     this.passwordInput = page.locator('input[type="password"]');
-    this.loginButton = page.getByRole('button', { name: /ingresar|sign in/i });
+    this.loginButton = page.getByRole('button', { name: /ingresa|sign in/i });
     this.nextButton = page.getByRole('button', { name: /siguiente|next/i });
     this.googleLoginButton = page.getByRole('button', { name: /google/i });
     this.errorMessage = page.locator('.error-message'); // Adjust selector based on actual implementation
@@ -47,7 +47,7 @@ export class LoginPage {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
     // Fill Name if present (it should be in Register mode)
-    const nameInput = this.page.locator('input[placeholder="Tu Nombre"]');
+    const nameInput = this.page.locator('input[placeholder="Nombre completo"]');
     if (await nameInput.isVisible()) {
         await nameInput.fill(name);
     }
