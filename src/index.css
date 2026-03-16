@@ -605,7 +605,7 @@ ul.firebaseui-idp-list {
     font-family: inherit;
 }
 
-.login-field input::placeholder { color: #888; }
+.login-field input::placeholder { color: var(--brand-text-secondary); }
 
 .login-field input:focus {
     outline: none;
@@ -1218,6 +1218,8 @@ ul.firebaseui-idp-list {
 .otp-recaptcha-area {
     display: flex;
     justify-content: center;
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
 }
 
 .otp-recaptcha-mock {
@@ -1523,6 +1525,406 @@ ul.firebaseui-idp-list {
     .otp-floating-input { height: 58px; font-size: 0.9375rem; }
     .otp-btn-secondary  { height: 58px; border-radius: 20px; font-size: 0.9rem; }
     .otp-box            { font-size: 1.5rem; }
+}
+
+/* ================================================
+   REGISTER FORM — Floating label inputs + flows
+   ================================================ */
+
+/* ── Customer type tabs (Hogares / MiPymes) ── */
+.reg-customer-tabs {
+    display: flex;
+    background: rgba(33, 71, 128, 0.06);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 1.25rem;
+    gap: 4px;
+}
+
+.reg-customer-tab {
+    flex: 1;
+    height: 38px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.reg-customer-tab--active {
+    background: #fff;
+    color: var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(33, 71, 128, 0.15);
+}
+
+.reg-customer-tab:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* ── Row layout: Tipo + Número ── */
+.reg-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 0.85rem;
+}
+
+.reg-field-tipo {
+    flex: 0 0 90px;
+    margin-bottom: 0 !important;
+}
+
+.reg-field-num {
+    flex: 1;
+    margin-bottom: 0 !important;
+}
+
+/* ── Floating label field wrapper ── */
+.reg-floating-field {
+    position: relative;
+    margin-bottom: 0.85rem;
+}
+
+/* ── Floating input ── */
+.reg-floating-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 45px;
+    padding: 0 20px;
+    border: 1.5px solid var(--brand-text-secondary);
+    border-radius: 16px;
+    background: var(--brand-card-bg);
+    font-size: 0.875rem;
+    font-family: inherit;
+    color: var(--brand-text-secondary);
+    outline: none;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.reg-floating-input::placeholder { color: var(--brand-text-secondary); }
+
+.reg-floating-input:focus {
+    border-color: var(--brand-secondary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.35);
+}
+
+.reg-floating-input--with-icon {
+    padding-right: 2.75rem;
+}
+
+.reg-floating-input--with-toggle {
+    padding-right: 2.75rem;
+}
+
+.reg-floating-input--disabled,
+.reg-floating-input:disabled {
+    background: #f0f4f8;
+    color: var(--brand-text-secondary);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* ── Floating select ── */
+.reg-floating-select {
+    width: 100%;
+    box-sizing: border-box;
+    height: 45px;
+    padding: 1rem 0.75rem 0.25rem;
+    border: 1.5px solid var(--brand-text-secondary);
+    border-radius: 16px;
+    background: var(--brand-card-bg);
+    font-size: 0.875rem;
+    font-family: inherit;
+    color: var(--brand-text-secondary);
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.reg-floating-select:focus {
+    border-color: var(--brand-secondary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.35);
+}
+
+.reg-floating-select--disabled,
+.reg-floating-select:disabled {
+    background: #f0f4f8;
+    color: var(--brand-text-secondary);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* ── Floating label ── */
+.reg-floating-label {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.875rem;
+    color: var(--brand-text-secondary);
+    pointer-events: none;
+    transition: top 0.18s ease, font-size 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 2.5rem);
+}
+
+/* Label fija arriba para selects (siempre visible) */
+.reg-floating-label--select {
+    top: 6px;
+    font-size: 0.65rem;
+    color: var(--brand-secondary);
+    transform: none;
+}
+
+/* Label sube cuando el input tiene foco o está lleno */
+.reg-floating-input:focus ~ .reg-floating-label,
+.reg-floating-input--filled ~ .reg-floating-label {
+    top: 6px;
+    font-size: 0.65rem;
+    color: var(--brand-secondary);
+    transform: none;
+}
+
+/* ── Field icon (calendario, etc.) ── */
+.reg-field-icon {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--brand-text-secondary);
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+/* Oculta el picker nativo del browser para date inputs — usamos el ícono propio */
+.reg-floating-input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    width: 2.5rem;
+    height: 100%;
+    cursor: pointer;
+}
+
+/* ── Password toggle ── */
+.reg-password-toggle {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--brand-text-secondary);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: color 0.2s;
+    min-height: unset;
+}
+
+.reg-password-toggle:hover { color: var(--brand-secondary); }
+.reg-password-toggle:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* ── Checkboxes legales ── */
+.reg-checkbox-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.5;
+    margin-bottom: 0.625rem;
+    cursor: pointer;
+}
+
+.reg-checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    margin-top: 1px;
+    cursor: pointer;
+    accent-color: var(--brand-secondary);
+    border-radius: 4px;
+    padding: 0;
+    background: unset;
+    border: unset;
+    box-shadow: none;
+}
+
+.reg-link {
+    background: none;
+    border: none;
+    color: var(--brand-secondary);
+    font-weight: 700;
+    font-size: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+}
+
+.reg-link:hover { color: var(--brand-primary); }
+
+/* ── Password requirements list ── */
+.reg-pwd-requirements {
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.reg-pwd-requirements li {
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    padding-left: 1.2rem;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.reg-pwd-requirements li::before {
+    content: '○';
+    position: absolute;
+    left: 0;
+    font-size: 0.7rem;
+    color: #bbb;
+    transition: color 0.2s, content 0.2s;
+}
+
+.reg-pwd-requirements li.reg-req--ok {
+    color: #2e7d32;
+}
+
+.reg-pwd-requirements li.reg-req--ok::before {
+    content: '✓';
+    color: #43a047;
+    font-weight: 700;
+}
+
+/* ── VERIFY step ── */
+.reg-verify-desc {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--brand-text-secondary);
+    line-height: 1.7;
+    margin: 0 0 0.5rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.reg-contact-highlight {
+    color: var(--brand-secondary);
+    font-weight: 700;
+}
+
+.reg-verify-success {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: rgba(67, 160, 71, 0.07);
+    border: 1px solid rgba(67, 160, 71, 0.3);
+    color: #2e7d32;
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.reg-verify-success strong {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.125rem;
+}
+
+.reg-verify-success p {
+    margin: 0;
+    font-weight: 400;
+}
+
+.reg-verify-success-icon {
+    font-size: 1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.reg-expiry-badge {
+    text-align: center;
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    padding: 0.4rem 0.75rem;
+    background: rgba(33, 71, 128, 0.05);
+    border-radius: 20px;
+    display: inline-block;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.reg-support-text {
+    text-align: center;
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ── Info box (PASSWORD step) ── */
+.reg-info-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: rgba(0, 146, 188, 0.06);
+    border: 1px solid rgba(0, 146, 188, 0.25);
+    margin-bottom: 0.85rem;
+}
+
+.reg-info-box p {
+    margin: 0;
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.5;
+}
+
+/* ── OTP box success state ── */
+.otp-box--success {
+    border-color: #43a047;
+    background: rgba(67, 160, 71, 0.06);
+    color: #2e7d32;
+}
+
+/* Desktop adjustments for register form */
+@media (min-width: 1024px) {
+    .reg-floating-input  { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+    .reg-floating-select { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+    .reg-customer-tab    { height: 42px; font-size: 0.875rem; }
+    .reg-floating-input:focus ~ .reg-floating-label,
+    .reg-floating-input--filled ~ .reg-floating-label { top: 8px; }
+    .reg-floating-label--select { top: 8px; }
 }
 
 /* ================================================
