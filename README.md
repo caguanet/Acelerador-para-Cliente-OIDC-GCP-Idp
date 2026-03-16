@@ -2,15 +2,17 @@
 
 Una solución de proveedor de identidad ligera, segura y personalizable, diseñada para desplegarse en Google Cloud Platform (Cloud Run).
 
-> **Para Desarrolladores:** Guía de configuración y pruebas local en [DEVELOPERS.md](DEVELOPERS.md).
+> **Para Desarrolladores:** Guía de configuración y pruebas local en [docs/guides/DEVELOPERS.md](docs/guides/DEVELOPERS.md).
 >
 > **📚 Índice de Documentación:**
-> *   [**CONFIGURACION-PASO-A-PASO.md**](CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
-> *   [**DEPLOY.md**](DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
-> *   [**TECH_README.md**](TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
-> *   [**TESTING.md**](TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.
+>
+> *   [**docs/README.md**](docs/README.md): Índice completo de toda la documentación.
+> *   [**CONFIGURACION-PASO-A-PASO.md**](docs/guides/CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
+> *   [**DEPLOY.md**](docs/guides/DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
+> *   [**TECH_README.md**](docs/architecture/TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
+> *   [**TESTING.md**](docs/testing/TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.
 > *   [**CHANGELOG.md**](CHANGELOG.md): Historial de versiones y cambios notables.
-> *   [**DISCLAIMER.md**](DISCLAIMER.md): Exención de responsabilidades y términos de uso.
+> *   [**DISCLAIMER.md**](docs/legal/DISCLAIMER.md): Exención de responsabilidades y términos de uso.
 
 ## 🚀 Características Principales
 
@@ -78,7 +80,7 @@ Las variables sensibles se manejan como variables de entorno en el despliegue (C
 
 ### Guía de Despliegue
 Para instrucciones detalladas paso a paso, consulte:
-👉 **[DEPLOY.md](DEPLOY.md)**
+👉 **[DEPLOY.md](docs/guides/DEPLOY.md)**
 
 Para un despliegue rápido automatizado en Windows:
 ```cmd
