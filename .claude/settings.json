@@ -43,7 +43,8 @@
       "Bash(PATH=\"/c/nvm4w/nodejs:$PATH\" npm test -- --run)",
       "Bash(PATH=\"/c/nvm4w/nodejs:$PATH\" npm run build)",
       "Bash(PATH=\"/c/nvm4w/nodejs:$PATH\" /c/nvm4w/nodejs/npm.cmd run build --prefix \"/d/ETBRepo/gcp/Acelerador-para-Cliente-OIDC-GCP-Idp\")",
-      "Bash(PATH=\"/c/nvm4w/nodejs:$PATH\" /c/nvm4w/nodejs/npm.cmd test -- --run)"
+      "Bash(PATH=\"/c/nvm4w/nodejs:$PATH\" /c/nvm4w/nodejs/npm.cmd test -- --run)",
+      "Bash(cmd.exe /c \"cd /d d:\\\\ETBRepo\\\\gcp\\\\Acelerador-para-Cliente-OIDC-GCP-Idp && npx tsc --noEmit 2>&1\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\leangars\\.claude\\projects\\d--ETBRepo-gcp-Acelerador-para-Cliente-OIDC-GCP-Idp",

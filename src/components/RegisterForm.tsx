@@ -353,36 +353,36 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                 <form onSubmit={handleIdentify} noValidate>
                     <div className="reg-row">
                         <div className="reg-floating-field reg-field-tipo">
+                            <label htmlFor="reg-doc-type" className="sr-only">Tipo de documento</label>
                             <select id="reg-doc-type" value={docType} onChange={e => setDocType(e.target.value as DocType)}
-                                className="reg-floating-select" aria-label="Tipo de documento">
+                                className="reg-floating-select">
                                 <option value="CC">CC</option><option value="CE">CE</option>
                                 <option value="NIT">NIT</option><option value="TI">TI</option><option value="PP">PP</option>
                             </select>
-                            <label htmlFor="reg-doc-type" className="reg-floating-label reg-floating-label--select">Tipo</label>
                         </div>
                         <div className="reg-floating-field reg-field-num">
+                            <label htmlFor="reg-doc-number" className="sr-only">N° de identificación</label>
                             <input id="reg-doc-number" type="text" inputMode="numeric"
                                 value={docNumber} onChange={e => setDocNumber(e.target.value)}
-                                className={`reg-floating-input${docNumber ? ' reg-floating-input--filled' : ''}`}
-                                placeholder=" " autoComplete="off" />
-                            <label htmlFor="reg-doc-number" className="reg-floating-label">N° de identificación</label>
+                                className="reg-floating-input"
+                                placeholder="N° de identificación" autoComplete="off" />
                         </div>
                     </div>
 
                     <div className="reg-floating-field">
+                        <label htmlFor="reg-last-name" className="sr-only">Apellido</label>
                         <input id="reg-last-name" type="text"
                             value={lastName} onChange={e => setLastName(e.target.value)}
-                            className={`reg-floating-input${lastName ? ' reg-floating-input--filled' : ''}`}
-                            placeholder=" " autoComplete="family-name" />
-                        <label htmlFor="reg-last-name" className="reg-floating-label">Apellido</label>
+                            className="reg-floating-input"
+                            placeholder="Apellido" autoComplete="family-name" />
                     </div>
 
                     <div className="reg-floating-field">
-                        <input id="reg-exp-date" type="text"
+                        <label htmlFor="reg-exp-date" className="sr-only">Fecha de expedición de tu documento</label>
+                        <input id="reg-exp-date" type="date"
                             value={docExpDate} onChange={e => setDocExpDate(e.target.value)}
-                            className={`reg-floating-input reg-floating-input--with-icon${docExpDate ? ' reg-floating-input--filled' : ''}`}
-                            placeholder=" " autoComplete="off" />
-                        <label htmlFor="reg-exp-date" className="reg-floating-label">Fecha de expedición de tu documento</label>
+                            className="reg-floating-input reg-floating-input--with-icon"
+                            autoComplete="off" />
                         <span className="reg-field-icon">{CALENDAR_ICON}</span>
                     </div>
 
@@ -433,11 +433,11 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                             <label htmlFor="reg-company-doc-type" className="reg-floating-label reg-floating-label--select">Tipo</label>
                         </div>
                         <div className="reg-floating-field reg-field-num">
+                            <label htmlFor="reg-company-doc-number" className="sr-only">N° de identificación de empresa</label>
                             <input id="reg-company-doc-number" type="text" inputMode="numeric"
                                 value={companyDocNumber} onChange={e => setCompanyDocNumber(e.target.value)}
-                                className={`reg-floating-input${companyDocNumber ? ' reg-floating-input--filled' : ''}`}
-                                placeholder=" " autoComplete="off" />
-                            <label htmlFor="reg-company-doc-number" className="reg-floating-label">N° de identificación de empresa</label>
+                                className="reg-floating-input"
+                                placeholder="N° de identificación de empresa" autoComplete="off" />
                         </div>
                     </div>
 
@@ -475,10 +475,10 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                             <label className="reg-floating-label reg-floating-label--select">Tipo</label>
                         </div>
                         <div className="reg-floating-field reg-field-num">
+                            <label className="sr-only">N° de identificación de empresa</label>
                             <input type="text" value={companyDocNumber} disabled
-                                className="reg-floating-input reg-floating-input--filled reg-floating-input--disabled"
-                                placeholder=" " />
-                            <label className="reg-floating-label reg-floating-label--select">N° de identificación de empresa</label>
+                                className="reg-floating-input reg-floating-input--disabled"
+                                placeholder="N° de identificación de empresa" />
                         </div>
                     </div>
 
@@ -494,50 +494,50 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                             <label htmlFor="reg-rep-doc-type" className="reg-floating-label reg-floating-label--select">Tipo</label>
                         </div>
                         <div className="reg-floating-field reg-field-num">
+                            <label htmlFor="reg-rep-doc-number" className="sr-only">N° de identificación de representante legal</label>
                             <input id="reg-rep-doc-number" type="text" inputMode="numeric"
                                 value={repDocNumber} onChange={e => setRepDocNumber(e.target.value)}
-                                className={`reg-floating-input${repDocNumber ? ' reg-floating-input--filled' : ''}`}
-                                placeholder=" " autoComplete="off" />
-                            <label htmlFor="reg-rep-doc-number" className="reg-floating-label">N° de identificación de representante legal</label>
+                                className="reg-floating-input"
+                                placeholder="N° de identificación" autoComplete="off" />
                         </div>
                     </div>
 
                     {/* Fecha de expedición */}
                     <div className="reg-floating-field">
-                        <input id="reg-rep-exp-date" type="text"
+                        <label htmlFor="reg-rep-exp-date" className="sr-only">Fecha de expedición de tu documento</label>
+                        <input id="reg-rep-exp-date" type="date"
                             value={repExpDate} onChange={e => setRepExpDate(e.target.value)}
-                            className={`reg-floating-input reg-floating-input--with-icon${repExpDate ? ' reg-floating-input--filled' : ''}`}
-                            placeholder=" " autoComplete="off" />
-                        <label htmlFor="reg-rep-exp-date" className="reg-floating-label">Fecha de expedición de tu documento</label>
+                            className="reg-floating-input reg-floating-input--with-icon"
+                            autoComplete="off" />
                         <span className="reg-field-icon">{CALENDAR_ICON}</span>
                     </div>
 
                     {/* Apellido representante */}
                     <div className="reg-floating-field">
+                        <label htmlFor="reg-rep-last-name" className="sr-only">Apellido del representante legal</label>
                         <input id="reg-rep-last-name" type="text"
                             value={repLastName} onChange={e => setRepLastName(e.target.value)}
-                            className={`reg-floating-input${repLastName ? ' reg-floating-input--filled' : ''}`}
-                            placeholder=" " autoComplete="family-name" />
-                        <label htmlFor="reg-rep-last-name" className="reg-floating-label">Apellido del representante legal</label>
+                            className="reg-floating-input"
+                            placeholder="Apellido del representante legal" autoComplete="family-name" />
                     </div>
 
                     {/* Correo */}
                     <div className="reg-floating-field">
+                        <label htmlFor="reg-rep-email" className="sr-only">Correo electrónico</label>
                         <input id="reg-rep-email" type="email"
                             value={email} onChange={e => setEmail(e.target.value)}
-                            className={`reg-floating-input${email ? ' reg-floating-input--filled' : ''}`}
-                            placeholder=" " autoComplete="email" />
-                        <label htmlFor="reg-rep-email" className="reg-floating-label">Correo electrónico</label>
+                            className="reg-floating-input"
+                            placeholder="Correo electrónico" autoComplete="email" />
                     </div>
 
                     {/* Contraseña */}
                     <div className="reg-floating-field">
+                        <label htmlFor="reg-rep-password" className="sr-only">Contraseña</label>
                         <input id="reg-rep-password" type={showPassword ? 'text' : 'password'}
                             autoComplete="new-password" spellCheck={false}
                             value={password} onChange={e => setPassword(e.target.value)}
-                            className={`reg-floating-input reg-floating-input--with-toggle${password ? ' reg-floating-input--filled' : ''}`}
-                            placeholder=" " />
-                        <label htmlFor="reg-rep-password" className="reg-floating-label">Contraseña</label>
+                            className="reg-floating-input reg-floating-input--with-toggle"
+                            placeholder="Contraseña" />
                         <button type="button" className="reg-password-toggle"
                             onClick={() => setShowPassword(v => !v)}
                             aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
@@ -658,21 +658,21 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                 </label>
 
                 <div className="reg-floating-field">
+                    <label htmlFor="reg-final-email" className="sr-only">Correo</label>
                     <input id="reg-final-email" type="email"
                         value={email} onChange={e => { if (!keepEmail) setEmail(e.target.value); }}
                         disabled={keepEmail}
-                        className={`reg-floating-input${email ? ' reg-floating-input--filled' : ''}${keepEmail ? ' reg-floating-input--disabled' : ''}`}
-                        placeholder=" " autoComplete="email" />
-                    <label htmlFor="reg-final-email" className="reg-floating-label">Correo</label>
+                        className={`reg-floating-input${keepEmail ? ' reg-floating-input--disabled' : ''}`}
+                        placeholder="Correo" autoComplete="email" />
                 </div>
 
                 <div className="reg-floating-field">
+                    <label htmlFor="reg-final-password" className="sr-only">Contraseña</label>
                     <input id="reg-final-password" type={showPassword ? 'text' : 'password'}
                         autoComplete="new-password" spellCheck={false}
                         value={password} onChange={e => setPassword(e.target.value)}
-                        className={`reg-floating-input reg-floating-input--with-toggle${password ? ' reg-floating-input--filled' : ''}`}
-                        placeholder=" " />
-                    <label htmlFor="reg-final-password" className="reg-floating-label">Contraseña</label>
+                        className="reg-floating-input reg-floating-input--with-toggle"
+                        placeholder="Contraseña" />
                     <button type="button" className="reg-password-toggle"
                         onClick={() => setShowPassword(v => !v)}
                         aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
