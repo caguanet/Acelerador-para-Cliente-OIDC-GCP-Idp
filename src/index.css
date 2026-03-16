@@ -1,13 +1,14 @@
 :root {
   /* Brand Identity Tokens (White Label) */
-  --brand-primary: #204780;       /* Default Fallback */
-  --brand-secondary: #0092bc;
-  --brand-accent: #00E4FF;
+  --brand-primary: #214780;       /* ETB Deep Blue (Figma) */
+  --brand-secondary: #0092bc;     /* ETB Blue (Figma) */
+  --brand-accent: #00E5FF;
   --brand-action: #FF5A00;
   --brand-bg: #F8F9FB;
   --brand-text: #080707;
-  --brand-text-secondary: #555555;
-  --glass-border: rgba(32, 71, 128, 0.1);
+  --brand-text-secondary: #515151; /* ETB Gray (Figma) */
+  --brand-card-bg: #fafafa;
+  --glass-border: rgba(33, 71, 128, 0.1);
 
   font-family: 'Lexend Deca', 'Lexend', 'DINPro', 'Inter', system-ui, Arial, sans-serif;
   line-height: 1.5;
@@ -76,11 +77,10 @@ body {
 .nav-links a {
     text-decoration: none;
     color: var(--brand-primary);
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
     transition: color 0.3s;
     text-transform: uppercase;
-    font-size: 0.85rem;
     letter-spacing: 0.5px;
 }
 
@@ -97,7 +97,7 @@ body {
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.3s, transform 0.3s, box-shadow 0.3s;
     box-shadow: 0 4px 10px rgba(32, 71, 128, 0.2);
 }
 
@@ -130,10 +130,9 @@ body {
     padding: 6rem 5%;
     max-width: 1400px;
     margin: 0 auto;
-    text-align: left;
     display: flex;
     flex-direction: column;
-    align-items: center; /* Center align for impact */
+    align-items: center;
     text-align: center;
 }
 
@@ -169,7 +168,7 @@ body {
     padding: 3rem 2rem;
     border-radius: 12px;
     text-align: left;
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s;
     box-shadow: 0 10px 40px rgba(32, 71, 128, 0.08); /* Premium soft shadow */
     border-top: 4px solid transparent;
 }
@@ -274,7 +273,7 @@ input {
     border-radius: 8px;
     color: var(--brand-text);
     font-size: 1rem;
-    transition: all 0.2s;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
 
 input:focus {
@@ -304,8 +303,8 @@ input:focus {
 
 .secure-data-panel {
     margin-top: 3rem;
-    background: #E8F5E9;
-    border: 1px solid #4CAF50;
+    background: rgba(0, 146, 188, 0.06);
+    border: 1px solid rgba(0, 146, 188, 0.35);
     border-radius: 12px;
     padding: 2rem;
     width: 100%;
@@ -313,7 +312,7 @@ input:focus {
 }
 
 .secure-data-panel pre {
-    color: #2E7D32;
+    color: var(--brand-primary);
     background: rgba(255,255,255,0.5);
     padding: 1rem;
     border-radius: 8px;
@@ -375,7 +374,7 @@ ul.firebaseui-idp-list {
     border: 1px solid #ddd;
     border-radius: 6px;
     font-size: 1rem;
-    transition: border 0.3s;
+    transition: border-color 0.2s, box-shadow 0.2s;
     background: #f9f9f9;
 }
 
@@ -383,6 +382,7 @@ ul.firebaseui-idp-list {
     border-color: var(--brand-secondary);
     background: white;
     outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.25);
 }
 
 .auth-switch {
@@ -477,9 +477,9 @@ ul.firebaseui-idp-list {
     border: 1px solid #ddd;
     border-radius: 8px;
     font-size: 1rem;
-    color: #333;
+    color: var(--brand-text);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .google-btn:hover {
@@ -508,31 +508,55 @@ ul.firebaseui-idp-list {
                   #515151 gray, #FAFAFA card-bg
    ================================================ */
 
-/* ---- Error / Success alerts ---- */
+/* ---- Error / Success alerts — on-brand ETB ---- */
 .auth-alert {
-    padding: 12px;
-    border-radius: 6px;
+    padding: 12px 16px;
+    border-radius: 8px;
     margin-bottom: 1.25rem;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     text-align: left;
+    line-height: 1.5;
 }
-.auth-alert.error  { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
-.auth-alert.success{ background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+/* Éxito: tinte azul ETB, texto azul profundo */
+.auth-alert.success {
+    background: rgba(0, 146, 188, 0.08);
+    color: var(--brand-primary);
+    border: 1px solid rgba(0, 146, 188, 0.40);
+}
+/* Error: rojo semántico suavizado, borde tenue */
+.auth-alert.error {
+    background: rgba(198, 40, 40, 0.06);
+    color: #b71c1c;
+    border: 1px solid rgba(198, 40, 40, 0.25);
+}
 
 /* ---- Error state inside card ---- */
 .login-error-state { text-align: center; padding: 0.5rem 0; }
 .login-error-icon {
     width: 48px; height: 48px; border-radius: 50%;
-    background: #ffebee; color: #c62828;
+    background: rgba(198, 40, 40, 0.08); color: #b71c1c;
     font-size: 1.4rem; line-height: 48px; margin: 0 auto 1rem;
 }
-.login-error-state h2 { color: #c62828; font-size: 1.2rem; margin-bottom: 0.75rem; }
+.login-error-state h2 { color: #b71c1c; font-size: 1.2rem; margin-bottom: 0.75rem; }
 .login-error-state p  { color: #636e72; font-size: 0.875rem; line-height: 1.5; margin-bottom: 1.5rem; }
 
 /* ---- Client ID note ---- */
 .login-client-id {
     text-align: center; font-size: 0.75rem;
-    color: #9BA8B8; margin-top: 1rem; margin-bottom: 0;
+    color: #6B7A8D; margin-top: 1rem; margin-bottom: 0; /* ratio ~4.6:1 AA */
+}
+
+/* ---- Visually hidden (screen-reader only) ---- */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 /* ================================================
@@ -541,7 +565,7 @@ ul.firebaseui-idp-list {
 .login-form { width: 100%; }
 
 .login-form-title {
-    color: #214780;
+    color: var(--brand-primary);
     font-size: 1.4rem;
     font-weight: 700;
     font-family: 'Lexend', 'Lexend Deca', sans-serif;
@@ -551,16 +575,18 @@ ul.firebaseui-idp-list {
 
 .login-form-subtitle {
     text-align: left;
-    color: #515151;
+    color: var(--brand-text-secondary);
     font-size: 0.9rem;
     margin-bottom: 1.25rem;
     line-height: 1.5;
 }
 
 .login-form-subtitle button {
-    background: none; border: none; padding: 0;
-    color: #214780; font-weight: 700;
+    background: none; border: none; padding: 0.25rem;
+    color: var(--brand-primary); font-weight: 700;
     cursor: pointer; font-size: inherit;
+    min-height: 44px;
+    display: inline-flex; align-items: center;
 }
 
 .login-field { margin-bottom: 0.85rem; }
@@ -568,10 +594,10 @@ ul.firebaseui-idp-list {
 .login-field input {
     width: 100%;
     padding: 0 20px;
-    background: #fafafa;
-    border: 1.5px solid #515151;
+    background: var(--brand-card-bg);
+    border: 1.5px solid var(--brand-text-secondary);
     border-radius: 20px;
-    color: #515151;
+    color: var(--brand-text-secondary);
     font-size: 0.95rem;
     box-sizing: border-box;
     height: 52px;
@@ -583,15 +609,15 @@ ul.firebaseui-idp-list {
 
 .login-field input:focus {
     outline: none;
-    border-color: #0092bc;
+    border-color: var(--brand-secondary);
     background: white;
-    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.12);
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.35);
 }
 
 .login-btn-primary {
     width: 100%;
     height: 52px;
-    background: #0092bc;
+    background: var(--brand-secondary);
     color: white;
     border: none;
     border-radius: 20px;
@@ -603,15 +629,15 @@ ul.firebaseui-idp-list {
     font-family: inherit;
     letter-spacing: 0.3px;
 }
-.login-btn-primary:hover:not(:disabled) { background: #214780; }
+.login-btn-primary:hover:not(:disabled) { background: var(--brand-primary); }
 .login-btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
 
 .login-btn-outline {
     width: 100%;
     height: 52px;
     background: white;
-    color: #0092bc;
-    border: 1.5px solid #0092bc;
+    color: var(--brand-secondary);
+    border: 1.5px solid var(--brand-secondary);
     border-radius: 20px;
     font-size: 0.9rem;
     font-weight: 600;
@@ -635,8 +661,8 @@ ul.firebaseui-idp-list {
 .login-btn-social {
     height: 52px;
     background: white;
-    color: #0092bc;
-    border: 2px solid #0092bc;
+    color: var(--brand-secondary);
+    border: 2px solid var(--brand-secondary);
     border-radius: 24px;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
@@ -649,13 +675,15 @@ ul.firebaseui-idp-list {
 .login-forgot { text-align: center; margin-top: 0.25rem; }
 .login-forgot button {
     background: none; border: none;
-    color: #515151; font-size: 0.875rem;
-    cursor: pointer; padding: 0;
+    color: var(--brand-text-secondary); font-size: 0.875rem;
+    cursor: pointer; padding: 0.5rem 0.25rem; /* touch target mínimo */
     font-family: inherit;
     text-decoration: underline;
     transition: color 0.2s;
+    min-height: 44px;
+    display: inline-flex; align-items: center;
 }
-.login-forgot button:hover { color: #0092bc; }
+.login-forgot button:hover { color: var(--brand-secondary); }
 
 /* ================================================
    LOGIN LAYOUT — Mobile first
@@ -805,7 +833,7 @@ ul.firebaseui-idp-list {
 }
 
 .login-page-card {
-    background: #fafafa;
+    background: var(--brand-card-bg);
     border-radius: 10px;
     padding: 3.125rem 1.3125rem 3.125rem;
     width: 100%;
@@ -873,7 +901,7 @@ ul.firebaseui-idp-list {
 }
 
 .login-btn-social {
-    height: 42px;
+    height: 44px; /* WCAG 2.5.5 mínimo */
     border-radius: 38px;
     width: 100%;
     justify-content: center;
@@ -883,7 +911,7 @@ ul.firebaseui-idp-list {
 .login-social-label {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #0092bc;
+    color: var(--brand-secondary);
     font-family: 'Lexend Deca', sans-serif;
 }
 
@@ -963,4 +991,549 @@ ul.firebaseui-idp-list {
     .login-social-label { display: none; }
 
     .login-btn-outline { border-radius: 20px; font-size: 0.9rem; }
+}
+
+/* ================================================
+   PASSWORD — Toggle + Strength indicator
+   ================================================ */
+
+/* Wrapper relativo para posicionar el botón ojo */
+.login-field-password {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.login-field-password input {
+    width: 100%;
+    padding-right: 48px; /* espacio para el botón ojo */
+}
+
+/* Botón ojo — posicionado dentro del input */
+.login-password-toggle {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--brand-text-secondary);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: color 0.2s;
+    min-height: unset; /* no necesita 44px porque el campo ya lo cubre */
+}
+.login-password-toggle:hover { color: var(--brand-secondary); }
+.login-password-toggle:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* Barra de fortaleza */
+.login-pwd-strength {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.login-pwd-bar {
+    flex: 1;
+    height: 4px;
+    background: #e0e0e0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.login-pwd-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s, background-color 0.3s;
+    width: 0%;
+}
+.login-pwd-fill--1 { width: 33%;  background: #e53935; } /* Débil  — rojo  */
+.login-pwd-fill--2 { width: 66%;  background: #fb8c00; } /* Media  — naranja */
+.login-pwd-fill--3 { width: 100%; background: #43a047; } /* Fuerte — verde  */
+
+.login-pwd-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: 'Lexend Deca', sans-serif;
+    min-width: 42px;
+    text-align: right;
+}
+.login-pwd-label--1 { color: #e53935; }
+.login-pwd-label--2 { color: #fb8c00; }
+.login-pwd-label--3 { color: #43a047; }
+
+/* ================================================
+   LOGIN MODE TABS (Contraseña / OTP)
+   ================================================ */
+.login-mode-tabs {
+    display: flex;
+    background: rgba(33, 71, 128, 0.06);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 1.25rem;
+    gap: 4px;
+}
+
+.login-mode-tab {
+    flex: 1;
+    height: 38px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.login-mode-tab--active {
+    background: #fff;
+    color: var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(33, 71, 128, 0.15);
+}
+
+.login-mode-tab:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* ================================================
+   OTP VERIFICATION FORM
+   ================================================ */
+
+/* ── Shared form wrapper (reuses login-form structure) ── */
+.otp-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* Inner <form> also needs column gap between its children */
+.otp-form form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* ── Floating label input ── */
+.otp-floating-field {
+    position: relative;
+}
+
+.otp-floating-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 58px;
+    padding: 1.25rem 1rem 0.375rem;
+    border: 1.5px solid var(--glass-border);
+    border-radius: 10px;
+    background: #fff;
+    font-size: 0.9375rem;
+    font-family: 'Lexend Deca', sans-serif;
+    color: var(--brand-text);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.otp-floating-input:focus {
+    border-color: var(--brand-secondary);
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.18);
+}
+
+.otp-floating-label {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9375rem;
+    color: var(--brand-text-secondary);
+    pointer-events: none;
+    transition: top 0.18s ease, font-size 0.18s ease, color 0.18s ease;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-floating-input:focus ~ .otp-floating-label,
+.otp-floating-input--filled ~ .otp-floating-label {
+    top: 0.45rem;
+    font-size: 0.72rem;
+    color: var(--brand-secondary);
+    transform: none;
+}
+
+/* ── Alert blocks ── */
+.otp-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-alert strong {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.125rem;
+    font-size: 0.8125rem;
+}
+
+.otp-alert p {
+    margin: 0;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.otp-alert--error {
+    background: rgba(229, 57, 53, 0.07);
+    border: 1px solid rgba(229, 57, 53, 0.25);
+    color: #c62828;
+}
+
+.otp-alert--info {
+    background: rgba(0, 146, 188, 0.07);
+    border: 1px solid rgba(0, 146, 188, 0.3);
+    color: var(--brand-primary);
+}
+
+.otp-alert-icon {
+    font-size: 0.875rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+/* ── reCAPTCHA placeholder ── */
+.otp-recaptcha-area {
+    display: flex;
+    justify-content: center;
+}
+
+.otp-recaptcha-mock {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #d3d3d3;
+    border-radius: 4px;
+    background: #f9f9f9;
+    padding: 0.75rem 1rem;
+    width: 100%;
+    max-width: 300px;
+    box-sizing: border-box;
+}
+
+.otp-recaptcha-check {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #333;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-recaptcha-check input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: var(--brand-secondary);
+    flex-shrink: 0;
+}
+
+.otp-recaptcha-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.otp-recaptcha-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.otp-recaptcha-brand span {
+    font-size: 0.65rem;
+    color: #666;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.otp-recaptcha-brand small {
+    font-size: 0.55rem;
+    color: #999;
+}
+
+/* ── Divider ── */
+.otp-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-divider::before,
+.otp-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--glass-border);
+}
+
+/* ── Social row (icon-only circles) ── */
+.otp-social-row {
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+}
+
+.otp-social-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 1.5px solid var(--glass-border);
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.otp-social-btn:hover {
+    border-color: var(--brand-secondary);
+    box-shadow: 0 2px 8px rgba(0, 146, 188, 0.15);
+}
+
+.otp-social-btn:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* ── Register link ── */
+.otp-register-link {
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--brand-text-secondary);
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-register-link button {
+    background: none;
+    border: none;
+    color: var(--brand-secondary);
+    font-weight: 700;
+    cursor: pointer;
+    font-size: inherit;
+    font-family: inherit;
+    padding: 0;
+    text-decoration: none;
+}
+
+.otp-register-link button:hover { text-decoration: underline; }
+
+/* ── OTP digit boxes ── */
+.otp-boxes {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin: 0.25rem 0;
+    width: 100%;
+}
+
+.otp-box {
+    flex: 1;
+    min-width: 0;
+    max-width: 52px;
+    aspect-ratio: 5 / 6;
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: 'Courier New', 'Lexend', monospace;
+    border: 1.5px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--brand-text);
+    outline: none;
+    transition: border-color 0.18s, box-shadow 0.18s;
+    caret-color: transparent;
+    padding: 0;
+}
+
+.otp-box:focus {
+    border-color: var(--brand-secondary);
+    box-shadow: 0 0 0 3px rgba(0, 146, 188, 0.18);
+}
+
+.otp-box--filled {
+    border-color: var(--brand-primary);
+    background: rgba(33, 71, 128, 0.04);
+}
+
+/* ── Code description ── */
+.otp-code-desc {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--brand-text-secondary);
+    line-height: 1.6;
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-masked-email {
+    color: var(--brand-secondary);
+    font-weight: 600;
+}
+
+/* ── Secondary outlined button ── */
+.otp-btn-secondary {
+    width: 100%;
+    height: 45px;
+    border: 1.5px solid var(--brand-secondary);
+    border-radius: 38px;
+    background: transparent;
+    color: var(--brand-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.otp-btn-secondary:hover:not(:disabled) {
+    background: rgba(0, 146, 188, 0.06);
+}
+
+.otp-btn-secondary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ── Back link ── */
+.otp-back-link {
+    background: none;
+    border: none;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    text-align: center;
+}
+
+.otp-back-link:hover { color: var(--brand-primary); }
+
+/* ── SUCCESS state ── */
+.otp-success {
+    align-items: center;
+    text-align: center;
+    padding: 1rem 0;
+    gap: 0.75rem;
+}
+
+.otp-success-circle {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 0.5rem;
+}
+
+.otp-success-svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Ring draws in */
+.otp-success-ring {
+    stroke-dasharray: 151;
+    stroke-dashoffset: 151;
+    animation: otp-ring-in 0.5s ease forwards;
+}
+
+@keyframes otp-ring-in {
+    to { stroke-dashoffset: 0; }
+}
+
+/* Checkmark draws in after ring */
+.otp-success-check {
+    stroke-dasharray: 36;
+    stroke-dashoffset: 36;
+    animation: otp-check-in 0.35s ease 0.45s forwards;
+}
+
+@keyframes otp-check-in {
+    to { stroke-dashoffset: 0; }
+}
+
+.otp-success-title {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    margin: 0;
+    font-family: 'Lexend', sans-serif;
+    animation: otp-fade-up 0.4s ease 0.7s both;
+}
+
+.otp-success-desc {
+    font-size: 0.875rem;
+    color: var(--brand-text-secondary);
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.5;
+    animation: otp-fade-up 0.4s ease 0.8s both;
+}
+
+.otp-success-email {
+    font-size: 0.875rem;
+    color: var(--brand-secondary);
+    font-weight: 600;
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+    animation: otp-fade-up 0.4s ease 0.85s both;
+}
+
+.otp-success-btn {
+    margin-top: 0.5rem;
+    width: 100%;
+    animation: otp-fade-up 0.4s ease 0.95s both;
+}
+
+@keyframes otp-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Desktop adjustments */
+@media (min-width: 1024px) {
+    .otp-floating-input { height: 58px; font-size: 0.9375rem; }
+    .otp-btn-secondary  { height: 58px; border-radius: 20px; font-size: 0.9rem; }
+    .otp-box            { font-size: 1.5rem; }
+}
+
+/* ================================================
+   MOTION — Respeta preferencia del sistema
+   ================================================ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

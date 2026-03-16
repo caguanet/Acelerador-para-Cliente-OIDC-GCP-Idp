@@ -11,7 +11,6 @@ interface Window {
     IDP_URL?: string;
     BACKEND_URL?: string;
     MOCK_CLIENT_URL?: string;
-    MOCK_CLIENT_URL?: string;
     allowedOrigins?: string[];
     enableLandingPage?: boolean;
     theme?: any; // Partial<ThemeConfig> loaded at runtime

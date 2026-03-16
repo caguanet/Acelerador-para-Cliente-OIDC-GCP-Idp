@@ -2,9 +2,15 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import App from './App';
 
-// Mock firebase/app to avoid real connections in tests
+// Mock firebase module to avoid real connections in tests
+vi.mock('./firebase', () => ({
+  auth: {},
+}));
 vi.mock('firebase/app', () => ({
-  initializeApp: vi.fn(),
+  initializeApp: vi.fn(() => ({})),
+}));
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({})),
 }));
 
 // Mock BrandLoginForm to isolate App logic

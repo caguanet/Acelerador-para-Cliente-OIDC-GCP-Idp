@@ -11,7 +11,7 @@ Este documento detalla **cada paso** de configuracion del proyecto, con comandos
 ### A.1 Requisitos previos (verificar antes de empezar)
 
 | Requisito | Como verificar |
-|-----------|----------------|
+| --------- | -------------- |
 | **Node.js v18+** | En PowerShell: `node -v` (debe mostrar v18.x o superior). |
 | **npm** | `npm -v` |
 | **Git** | `git --version` |
@@ -60,7 +60,7 @@ URL directa: `https://console.cloud.google.com/apis/credentials?project=etb-iden
    - Haz clic en **"Add"** (Agregar) y escribe cada referrer:
 
    | Referrer a agregar | Proposito |
-   | ------------------- | --------- |
+   | ------------------ | --------- |
    | `http://localhost:5173/*` | Servidor de desarrollo Vite (IdP) |
    | `http://localhost:3000/*` | Mock client para pruebas E2E |
    | `http://localhost:8080/*` | Servidor Express local (si aplica) |
@@ -174,7 +174,7 @@ npm install
 
 Hay que crear el archivo `.env.local` y rellenar las variables con valores **reales** de tu proyecto. A continuacion se indica **de donde sacar cada una**.
 
-> **Por que se menciona Firebase si ya configure todo en GCP (Identity Platform)?**  
+> **Por que se menciona Firebase si ya configure todo en GCP (Identity Platform)?**
 > Identity Platform y Firebase usan **el mismo proyecto** de Google Cloud. Cuando configuraste dominios en **Identity Platform > Configuracion > Seguridad** (Opcion B), eso fue en la consola de GCP. Las variables que necesitas ahora — API Key, `authDomain`, `projectId` — son **credenciales de ese mismo proyecto**. La consola de **Firebase** no es un segundo proyecto: es otra interfaz para el mismo, y ahi Google muestra esas credenciales juntas en un bloque `firebaseConfig`. Si prefieres no abrir Firebase, puedes obtener la API Key desde GCP (Credentials) y el ID del proyecto ya lo conoces; ver **Opcion B** mas abajo.
 
 ---
@@ -184,7 +184,7 @@ Hay que crear el archivo `.env.local` y rellenar las variables con valores **rea
 Es la forma mas rapida porque Firebase muestra `apiKey`, `authDomain` y `projectId` juntos. Es **el mismo proyecto** que ya usas en Identity Platform en GCP.
 
 1. **Abrir la consola de Firebase**
-   - URL: **https://console.firebase.google.com/**
+   - URL: <https://console.firebase.google.com/>
    - Inicia sesion con la misma cuenta de Google que usa GCP.
 
 2. **Seleccionar (o crear) el proyecto**
@@ -213,7 +213,7 @@ Es la forma mas rapida porque Firebase muestra `apiKey`, `authDomain` y `project
 **Resumen de correspondencia:**
 
 | Variable en `.env.local` | Donde obtenerla |
-|-------------------------|------------------|
+| ------------------------ | --------------- |
 | `VITE_FIREBASE_API_KEY` | Firebase Console > engranaje > Project settings > General > Your apps > `apiKey` (empieza por `AIzaSy...`). |
 | `VITE_FIREBASE_PROJECT_ID` | Mismo bloque: campo `projectId` (ej. `etb-identity-omnicanal`). Tambien visible en la parte superior de la pagina como "Project ID". |
 | `VITE_FIREBASE_AUTH_DOMAIN` | Mismo bloque: campo `authDomain`. Normalmente es `etb-identity-omnicanal.firebaseapp.com`. Si no aparece, construyelo asi: `{VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`. |
@@ -253,7 +253,7 @@ VITE_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 - **VITE_FIREBASE_PROJECT_ID:** el campo `projectId` del mismo bloque.
 - **VITE_ALLOWED_ORIGINS:** en desarrollo suele bastar `http://localhost:3000,http://localhost:5173` (IdP en 5173, cliente mock en 3000). Si usas otros puertos, anadelos separados por coma.
 
-3. **Opcional: branding y credenciales de test:** en el mismo `.env.local` puedes anadir (segun `.env.example`):
+1. **Opcional: branding y credenciales de test:** en el mismo `.env.local` puedes anadir (segun `.env.example`):
 
 ```env
 # VITE_APP_BRAND_NAME="Mi Empresa"
@@ -264,7 +264,7 @@ VITE_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 # TEST_USER_PASSWORD=#123456789
 ```
 
-4. **No subir secretos:** no hagas commit de `.env.local`; debe estar en `.gitignore` (ya lo esta en el proyecto).
+1. **No subir secretos:** no hagas commit de `.env.local`; debe estar en `.gitignore` (ya lo esta en el proyecto).
 
 ---
 
@@ -272,9 +272,18 @@ VITE_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
 El frontend puede leer configuracion desde **`public/config.js`**. Ese archivo define `window.APP_CONFIG`.
 
-- **allowedOrigins:** debe incluir las URLs desde las que se redirigira al IdP (ej. tu app cliente en `localhost:3000` y el IdP en `localhost:5173`).
-- **theme:** nombre de marca, logo, colores.
-- **enableLandingPage:** `true` en desarrollo, `false` en produccion si no quieres la landing.
+Referencia completa de campos disponibles:
+
+| Campo | Tipo | Descripcion |
+| ----- | ---- | ----------- |
+| `allowedOrigins` | `string[]` | URLs desde las que se permite redireccion OIDC. Requerido en produccion. |
+| `theme` | `object` | Nombre de marca, logo, colores, textos del hero. Ver seccion A.8 para detalles. |
+| `enableLandingPage` | `boolean` | `true` en desarrollo para ver la landing. `false` en produccion si solo se expone el login. |
+| `firebase` | `object` | Override de credenciales Firebase en runtime (`apiKey`, `authDomain`, `projectId`). Alternativa a `.env.local`. |
+| `MODE` | `'IDP' \| 'MOCK'` | Modo de operacion. `IDP` para el proveedor de identidad (default). `MOCK` para el cliente de prueba. |
+| `IDP_URL` | `string` | URL del IdP, usado por el mock client para construir la URL de redireccion OIDC. |
+| `MOCK_CLIENT_URL` | `string` | URL del mock client, usado en configuracion de simulacion local. |
+| `BACKEND_URL` | `string` | URL de backend opcional para integraciones que requieren llamadas servidor-a-servidor. |
 
 Ejemplo de `public/config.js` para desarrollo:
 
@@ -328,12 +337,15 @@ Asegurate de que `http://localhost:3000` este en:
 ### A.9 Pruebas automatizadas (local)
 
 - **Unitarias (Vitest):**
+
   ```powershell
   npm run test
   ```
+
   Modo watch: `npm run test -- --watch`
 
 - **E2E (Playwright):**
+
   ```powershell
   # Instalar navegadores (primera vez)
   npx playwright install
@@ -352,7 +364,7 @@ Asegurate de que `http://localhost:3000` este en:
 ### B.1 Prerrequisitos de despliegue
 
 | Requisito | Accion |
-|-----------|--------|
+| --------- | ------ |
 | **Google Cloud SDK** | Descargar e instalar desde: [GoogleCloudSDKInstaller.exe](https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe) (Windows). Verificar: `gcloud --version` |
 | **Autenticacion** | En CMD o PowerShell: `gcloud auth login` (abre el navegador para iniciar sesion). |
 | **Proyecto por defecto** | `gcloud config set project etb-identity-omnicanal` |
@@ -376,7 +388,7 @@ Busca tu cuenta de correo en la lista y verifica que tenga los roles mencionados
 Abre el script **`scripts/one-shot-deploy.cmd`** (o anota estas variables si sigues DEPLOY.md a mano):
 
 | Variable | Descripcion | Ejemplo |
-|----------|-------------|---------|
+| -------- | ----------- | ------- |
 | **PROJECT_ID** | ID del proyecto GCP | `etb-identity-omnicanal` |
 | **ARTIFACT_REPO_NAME** | Nombre del repositorio de imagenes Docker en Artifact Registry | `idp-repo` |
 | **REGION** | Region de Cloud Run y Artifact Registry | `us-east1` |
@@ -404,13 +416,17 @@ set VAL_FIREBASE_PROJECT_ID=etb-identity-omnicanal
 
 1. Editar **`scripts/one-shot-deploy.cmd`** como en B.2.
 2. Abrir CMD o PowerShell y situarse en la **raiz del proyecto**:
+
    ```cmd
    cd D:\ETBRepo\gcp\Acelerador-para-Cliente-OIDC-GCP-Idp
    ```
+
 3. Ejecutar:
+
    ```cmd
    scripts\one-shot-deploy.cmd
    ```
+
 4. El script:
    - Habilita APIs (Cloud Build, Artifact Registry, Cloud Run, Secret Manager, etc.).
    - Crea o reutiliza el repositorio de artefactos.
@@ -448,6 +464,7 @@ Firebase Console > Authentication > Settings > Authorized domains > Add domain
    ```text
    idp-service-xxxxx-uc.a.run.app
    ```
+
 7. Confirma.
 
 **Opcion B: Identity Platform (GCP Console):**
@@ -480,6 +497,7 @@ URL directa: `https://console.cloud.google.com/apis/credentials?project=etb-iden
    ```text
    https://idp-service-xxxxx-uc.a.run.app/*
    ```
+
    (Reemplaza `xxxxx-uc` por el sufijo real de tu servicio Cloud Run.)
 3. En **API restrictions**, verifica que **Identity Toolkit API** y **Token Service API** esten permitidas.
 4. Haz clic en **"Save"**.
@@ -507,6 +525,7 @@ URL directa: `https://console.cloud.google.com/apis/credentials?project=etb-iden
 Si tienes aplicaciones cliente en otros dominios (ej. `https://app.miempresa.com`):
 
 **Opcion A: Via CLI:**
+
 ```cmd
 :: Obtener URL del servicio
 for /f "tokens=*" %i in ('gcloud run services describe idp-service --region %REGION% --format^="value(status.url)"') do set SERVICE_URL=%i
@@ -536,6 +555,7 @@ gcloud run services update idp-service --region %REGION% --update-env-vars "VITE
 Si prefieres seguir DEPLOY.md a mano:
 
 1. **Definir variables de sesion** (en la misma ventana de CMD donde ejecutaras los comandos):
+
    ```cmd
    set PROJECT_ID=etb-identity-omnicanal
    set ARTIFACT_REPO_NAME=idp-repo
@@ -546,30 +566,37 @@ Si prefieres seguir DEPLOY.md a mano:
    ```
 
 2. **Habilitar APIs:**
+
    ```cmd
    gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com secretmanager.googleapis.com --project=%PROJECT_ID%
    ```
 
 3. **Crear Artifact Registry** (si no existe):
+
    ```cmd
    gcloud artifacts repositories create %ARTIFACT_REPO_NAME% --repository-format=docker --location=%REGION% --description="Registro de Imagenes OIDC" --project=%PROJECT_ID%
    ```
 
 4. **Crear/actualizar secretos** (ejemplo para FIREBASE_API_KEY):
+
    ```cmd
    echo %VAL_FIREBASE_API_KEY%| gcloud secrets create FIREBASE_API_KEY --data-file=- --project=%PROJECT_ID%
    ```
+
    (Si ya existe, usar `gcloud secrets versions add FIREBASE_API_KEY --data-file=-` leyendo desde stdin.) Repetir para `FIREBASE_AUTH_DOMAIN` y `FIREBASE_PROJECT_ID`.
 
 5. **Compilar y subir imagen:**
+
    ```cmd
    gcloud builds submit --tag %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/idp-service --project=%PROJECT_ID%
    ```
 
 6. **Desplegar en Cloud Run:**
+
    ```cmd
    gcloud run deploy idp-service --image %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/idp-service --platform managed --region %REGION% --allow-unauthenticated --set-env-vars APP_MODE=IDP --set-env-vars "VITE_ALLOWED_ORIGINS=TU_URL_AQUI" --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest --project=%PROJECT_ID%
    ```
+
    Sustituir `TU_URL_AQUI` por la URL del servicio (o la lista separada por `|` que uses).
 
 Despues de esto, realizar los mismos pasos manuales de B.4 (Authorized domains, HTTP referrers, API restrictions, OAuth origins/redirect URIs).
@@ -598,7 +625,7 @@ Esta tabla de referencia rapida mapea cada configuracion a su ubicacion exacta e
 ## Resumen de archivos clave del proyecto
 
 | Archivo | Uso |
-|---------|-----|
+| ------- | --- |
 | **`.env.local`** | Variables de entorno para desarrollo (Firebase, origenes). No commitear. |
 | **`.env.example`** | Plantilla de variables; copiar a `.env.local` y rellenar. |
 | **`public/config.js`** | Configuracion en runtime: `allowedOrigins`, tema, landing. |
