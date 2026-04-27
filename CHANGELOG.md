@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.2] - 2026-04-16
+### 🐛 Correcciones
+- **Compilación de Producción:** Se corrigieron errores de validación de tipos TypeScript (TS2367 y TS6133 en `BrandLoginForm.tsx`) eliminando código muerto inalcanzable, funciones de utilidad sobrantes y variables de estado no utilizadas, permitiendo el éxito del proceso de build local e integración continua.
+
 ## [v1.2.1] - 2026-02-19
 ### 🐛 Correcciones
 - **Inyección de Variables de Entorno en Windows:** Se corrigió el script de despliegue (`one-shot-deploy.cmd` y `tmp/exc-one-shot-deploy.cmd`) para escapar correctamente el carácter pipe (`|`) en `VITE_ALLOWED_ORIGINS` usando `^|`. Esto solucionaba un error crítico donde la lista blanca de dominios se truncaba o malformaba, bloqueando el acceso CORS.

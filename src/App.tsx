@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { User } from "firebase/auth";
+import { User, onAuthStateChanged } from "firebase/auth";
 import './index.css'
-import './firebase'; // initializes Firebase before any component imports getAuth()
+import { auth } from './firebase'; // initializes Firebase before any component imports getAuth()
 import { BrandLoginForm } from './components/BrandLoginForm';
 import { OtpVerificationForm } from './components/OtpVerificationForm';
 import { themeConfig } from './config/theme';
@@ -16,8 +16,9 @@ function App() {
   const [oidcParams, setOidcParams] = useState<{
     redirect_uri: string | null,
     client_id: string | null,
-    state: string | null
-  }>({ redirect_uri: null, client_id: null, state: null });
+    state: string | null,
+    prompt: string | null
+  }>({ redirect_uri: null, client_id: null, state: null, prompt: null });
   const [oidcError, setOidcError] = useState<string | null>(null);
 
   const isValidOrigin = (urlStr: string) => {
@@ -38,19 +39,47 @@ function App() {
     const redirect_uri = params.get('redirect_uri');
     const client_id = params.get('client_id');
     const state = params.get('state');
+    const prompt = params.get('prompt');
 
     if (redirect_uri && client_id) {
       if (!isValidOrigin(redirect_uri)) {
         setOidcError(`Error de Seguridad: El dominio de redirección no está autorizado.`);
         return;
       }
-      setOidcParams({ redirect_uri, client_id, state });
+      setOidcParams({ redirect_uri, client_id, state, prompt });
     }
   }, []);
 
+  // Silent refresh: prompt=none → if IdP has an active Firebase session, return a fresh id_token without showing login
+  useEffect(() => {
+    if (oidcParams.prompt !== 'none' || !oidcParams.redirect_uri || !isValidOrigin(oidcParams.redirect_uri)) return;
+
+    const redirectUri = oidcParams.redirect_uri;
+    const state = oidcParams.state || '';
+
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      unsub();
+      const targetUrl = new URL(redirectUri);
+      try {
+        if (user) {
+          const idToken = await user.getIdToken(true); // force refresh for new expiry
+          targetUrl.hash = `id_token=${idToken}&state=${state}`;
+        } else {
+          targetUrl.hash = `error=login_required&error_description=${encodeURIComponent('Sesión no activa en el IdP')}&state=${state}`;
+        }
+      } catch (err) {
+        console.error('Silent refresh error', err);
+        targetUrl.hash = `error=server_error&error_description=${encodeURIComponent('No se pudo renovar el token')}&state=${state}`;
+      }
+      window.location.href = targetUrl.toString();
+    });
+
+    return () => unsub();
+  }, [oidcParams.prompt, oidcParams.redirect_uri, oidcParams.state]);
+
   const handleLoginSuccess = async (currentUser: User) => {
     try {
-      const idToken = await currentUser.getIdToken();
+      const idToken = await currentUser.getIdToken(true); // fresh token with full TTL
 
       if (oidcParams.redirect_uri) {
         if (!isValidOrigin(oidcParams.redirect_uri)) {
@@ -115,7 +144,13 @@ function App() {
       {/* Card panel — mobile: centered over bg | desktop: right side floating */}
       <div className="login-card-panel">
         <div className="login-page-card">
-          {oidcError ? (
+          {oidcParams.prompt === 'none' && oidcParams.redirect_uri && !oidcError ? (
+            <div className="login-error-state" role="status" aria-live="polite">
+              <div className="login-error-icon" style={{ fontSize: '1.5rem' }}>⟳</div>
+              <h2>Comprobando sesión</h2>
+              <p style={{ color: 'var(--brand-text-secondary)' }}>Redirigiendo...</p>
+            </div>
+          ) : oidcError ? (
             <div className="login-error-state">
               <div className="login-error-icon">✕</div>
               <h2>Acceso No Autorizado</h2>

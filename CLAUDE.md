@@ -39,6 +39,16 @@ This is a **stateless, White-Label OIDC Identity Provider** that acts as an iden
 4. IdP calls `getIdToken()` and redirects back: `{redirect_uri}#id_token={token}`
 5. Client app receives the token in the hash fragment
 
+### Token refresh (silent refresh)
+
+The ID token has a limited lifetime (e.g. 1 hour). To extend the session without asking the user to log in again, the client can use **silent refresh**:
+
+- **IdP support:** When the client sends `prompt=none` in the auth URL, the IdP does **not** show the login form. It checks whether Firebase has an active session on the IdP origin. If yes, it calls `getIdToken(true)` and redirects back with a fresh `id_token`. If no session, it redirects back with `#error=login_required&error_description=...&state=...`.
+- **Client responsibility:** Decode the JWT to read `exp` (expiration time). Before expiry (e.g. 5–10 minutes), redirect the user to the IdP with the same `client_id`, `redirect_uri`, `state`, and `prompt=none`. The user stays on the client; if they had an IdP session (same browser), they get a new token in the hash and can replace the stored token. If `error=login_required` is returned, the client should prompt for full login again.
+
+Example IdP URL for silent refresh:  
+`{IDP_URL}/?client_id=...&redirect_uri=...&response_type=id_token&state=...&prompt=none`
+
 ### Key Files
 
 - [src/App.tsx](src/App.tsx) — Core OIDC logic: URL param parsing, origin validation, Firebase auth flow, token redirect
