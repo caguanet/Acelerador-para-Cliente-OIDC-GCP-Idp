@@ -59,23 +59,13 @@ const EYE_OFF_ICON = (
     </svg>
 );
 
-function getPasswordStrength(pwd: string): { level: 0 | 1 | 2 | 3; label: string } {
-    if (!pwd) return { level: 0, label: '' };
-    let score = 0;
-    if (pwd.length >= 8) score++;
-    if (/[A-Z]/.test(pwd)) score++;
-    if (/[0-9]/.test(pwd)) score++;
-    if (/[^A-Za-z0-9]/.test(pwd)) score++;
-    if (score <= 1) return { level: 1, label: 'Débil' };
-    if (score === 2) return { level: 2, label: 'Media' };
-    return { level: 3, label: 'Fuerte' };
-}
+
 
 export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
     const [mode, setMode] = useState<AuthMode>('LOGIN');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
+
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -162,7 +152,7 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
         }
     };
 
-    const pwdStrength = mode === 'REGISTER' ? getPasswordStrength(password) : null;
+
 
     const switchMode = (next: AuthMode) => {
         setMode(next);
@@ -210,34 +200,15 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
 
     return (
         <div className="login-form">
-            <h2 className="login-form-title">
-                {mode === 'LOGIN' ? 'Inicia sesión en tu cuenta' : 'Crear cuenta'}
-            </h2>
+            <h2 className="login-form-title">Inicia sesión en tu cuenta</h2>
             <p className="login-form-subtitle">
-                {mode === 'LOGIN' ? (
-                    <>¿No tienes cuenta en Mi ETB? <button type="button" onClick={() => switchMode('REGISTER')}>Registrate</button></>
-                ) : (
-                    <>¿Ya tienes cuenta? <button type="button" onClick={() => switchMode('LOGIN')}>Inicia Sesión</button></>
-                )}
+                <>¿No tienes cuenta en Mi ETB? <button type="button" onClick={() => switchMode('REGISTER')}>Registrate</button></>
             </p>
 
             {error && <div className="auth-alert error">{error}</div>}
             {successMsg && <div className="auth-alert success">{successMsg}</div>}
 
             <form onSubmit={handleSubmit} noValidate>
-                {mode === 'REGISTER' && (
-                    <div className="login-field">
-                        <label htmlFor="login-name" className="sr-only">Nombre completo</label>
-                        <input
-                            id="login-name"
-                            type="text"
-                            autoComplete="name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Nombre completo"
-                        />
-                    </div>
-                )}
                 <div className="login-field">
                     <label htmlFor="login-email" className="sr-only">Correo electrónico</label>
                     <input
@@ -255,7 +226,7 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
                         <input
                             id="login-password"
                             type={showPassword ? 'text' : 'password'}
-                            autoComplete={mode === 'REGISTER' ? 'new-password' : 'current-password'}
+                            autoComplete="current-password"
                             spellCheck={false}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -270,18 +241,10 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
                             {showPassword ? EYE_OFF_ICON : EYE_ICON}
                         </button>
                     </div>
-                    {pwdStrength && (
-                        <div className="login-pwd-strength" aria-live="polite">
-                            <div className="login-pwd-bar">
-                                <div className={`login-pwd-fill login-pwd-fill--${pwdStrength.level}`} />
-                            </div>
-                            <span className={`login-pwd-label login-pwd-label--${pwdStrength.level}`}>{pwdStrength.label}</span>
-                        </div>
-                    )}
                 </div>
 
                 <button type="submit" disabled={isLoading} className="login-btn-primary">
-                    {isLoading ? 'Procesando\u2026' : (mode === 'REGISTER' ? 'Registrarse' : 'Ingresa')}
+                    {isLoading ? 'Procesando\u2026' : 'Ingresa'}
                 </button>
             </form>
 

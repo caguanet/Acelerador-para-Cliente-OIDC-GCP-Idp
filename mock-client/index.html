@@ -47,15 +47,45 @@
         const loginSection = document.getElementById('login-section');
         const tokenDisplay = document.getElementById('token-display');
 
-        // Check for Token in Hash (OIDC Callback)
+        // Parse JWT payload (base64url) to get exp (expiration time in seconds)
+        function getTokenExpiration(token) {
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) return null;
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                return payload.exp ? payload.exp * 1000 : null; // ms
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Check for Token or Error in Hash (OIDC Callback)
         function checkHash() {
             const hash = window.location.hash;
             if (hash && hash.includes('id_token=')) {
                 const token = hash.split('id_token=')[1].split('&')[0];
                 showToken(token);
-                // Clean URL
+                scheduleSilentRefresh(token);
                 window.history.replaceState(null, '', window.location.pathname);
+            } else if (hash && hash.includes('error=login_required')) {
+                sessionStorage.removeItem('mock_token');
+                clearTimeout(window._refreshTimeout);
+                location.reload();
             }
+        }
+
+        let refreshTimeoutId = null;
+        function scheduleSilentRefresh(token) {
+            clearTimeout(refreshTimeoutId);
+            const expMs = getTokenExpiration(token);
+            if (!expMs) return;
+            const refreshBeforeMs = 10 * 60 * 1000; // refresh 10 min before expiry
+            const delay = Math.max(0, expMs - Date.now() - refreshBeforeMs);
+            refreshTimeoutId = setTimeout(() => {
+                const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=refresh&prompt=none`;
+                window.location.href = authUrl;
+            }, delay);
+            window._refreshTimeout = refreshTimeoutId;
         }
 
         function showToken(token) {
@@ -74,13 +104,14 @@
         const storedToken = sessionStorage.getItem('mock_token');
         if (storedToken) {
             showToken(storedToken);
+            scheduleSilentRefresh(storedToken);
         } else {
             checkHash();
         }
 
         loginBtn.addEventListener('click', () => {
             // Initiate OIDC Implicit Flow
-            const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&state=random_state_string`;
+            const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=random_state_string`;
             window.location.href = authUrl;
         });
 

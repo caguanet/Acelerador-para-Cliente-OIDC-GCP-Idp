@@ -11,6 +11,10 @@ vi.mock('firebase/app', () => ({
 }));
 vi.mock('firebase/auth', () => ({
   getAuth: vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn((_auth, cb) => {
+    if (typeof cb === 'function') cb(null);
+    return () => {};
+  }),
 }));
 
 // Mock BrandLoginForm to isolate App logic
