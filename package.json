@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:simulation": "node scripts/cleanup-ports.mjs && concurrently \"vite\" \"vite -c vite.config.mock.js\"",
+    "dev:simulation": "node scripts/cleanup-ports.mjs && concurrently \"vite --force\" \"vite -c vite.config.mock.js --force\"",
     "build": "tsc && vite build",
+    "prepare": "node scripts/install-hooks.mjs",
     "test": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

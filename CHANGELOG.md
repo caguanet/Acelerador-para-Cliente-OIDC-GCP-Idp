@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-04-28] - Hardening de Caché de Vite: Prevención de Pantalla en Blanco
+
+### 🔧 Refactorización y Mejoras
+
+- **Estrategia 1 — Flag `--force` en arranque (`package.json`):** Se añadió `--force` a ambas instancias de Vite en el script `dev:simulation`. Fuerza la regeneración de la caché de dependencias en cada inicio, eliminando el riesgo de stale cache que causaba pantalla en blanco.
+
+- **Estrategia 2 — Validación inteligente por hash SHA-256 (`scripts/cleanup-ports.mjs`):** Refactorizado con soporte total Windows + macOS + Linux usando `fileURLToPath`. Calcula el hash del `package-lock.json` y lo compara con un snapshot en `node_modules/.vite-lockfile-hash`. Si el lockfile cambió, limpia la caché automáticamente antes del arranque. Mejora del `killPort` en macOS/Linux usando `lsof -ti tcp:<port>` con manejo granular de PIDs.
+
+- **Estrategia 3 — Git hooks cross-platform (`scripts/install-hooks.mjs`):** Instalador de hooks propio sin dependencias externas (sin Husky — compatible con redes corporativas con proxy). Los hooks usan `#!/usr/bin/env node` para ejecutarse idénticamente en Windows (Git for Windows), macOS y Linux:
+  - `.git/hooks/post-checkout`: limpia caché de Vite en cada cambio de rama.
+  - `.git/hooks/post-merge`: limpia caché solo si `package-lock.json` cambió en el merge.
+  - El script `prepare` en `package.json` reinstala los hooks automáticamente tras cada `npm install`, garantizando que todo el equipo los tenga sin pasos manuales.
+
 ## [v1.2.2] - 2026-04-16
 ### 🐛 Correcciones
 - **Compilación de Producción:** Se corrigieron errores de validación de tipos TypeScript (TS2367 y TS6133 en `BrandLoginForm.tsx`) eliminando código muerto inalcanzable, funciones de utilidad sobrantes y variables de estado no utilizadas, permitiendo el éxito del proceso de build local e integración continua.
