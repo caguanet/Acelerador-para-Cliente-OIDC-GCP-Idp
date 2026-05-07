@@ -47,7 +47,13 @@ VITE_FIREBASE_API_KEY=AIzaSy...
 VITE_FIREBASE_AUTH_DOMAIN=mi-proyecto.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=mi-proyecto
 VITE_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Opcional — E2E (usuario que exista en Firebase Auth del mismo proyecto)
+TEST_USER_EMAIL=usuario-prueba@ejemplo.com
+TEST_USER_PASSWORD=contraseña-segura
 ```
+
+El archivo está en `.gitignore` (patrón `.env.*`); no lo subas al repositorio. **Vite** carga `.env.local` en `npm run dev` / build. **Playwright** también lo carga (después de `.env`, con prioridad para claves repetidas) para `npm run test:e2e`.
 
 → Ver cómo obtener cada valor en [CONFIGURACION-PASO-A-PASO.md § A.5](CONFIGURACION-PASO-A-PASO.md)
 
