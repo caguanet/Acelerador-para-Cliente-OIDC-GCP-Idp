@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { RegisterForm } from './RegisterForm';
+import { getFriendlyAuthErrorMessage } from '../utils/authErrors';
 const googleProvider = new GoogleAuthProvider();
 const appleProvider = new OAuthProvider('apple.com');
 const facebookProvider = new FacebookAuthProvider();
@@ -95,7 +96,7 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
             onSignInSuccess(result.user);
         } catch (err: any) {
             if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-                setError(err.message || 'Error al iniciar sesión con red social.');
+                setError(getFriendlyAuthErrorMessage(err, 'social'));
             }
         } finally {
             setIsSocialLoading(false);
@@ -123,9 +124,7 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
             await sendPasswordResetEmail(auth, email);
             setSuccessMsg(`Se envió un enlace de recuperación a ${email}`);
         } catch (err: any) {
-            setError(err.code === 'auth/user-not-found'
-                ? 'No existe una cuenta con este correo.'
-                : 'Error al enviar el correo. Intenta de nuevo.');
+            setError(getFriendlyAuthErrorMessage(err, 'recovery'));
         } finally {
             setIsLoading(false);
         }
@@ -143,9 +142,9 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
             onSignInSuccess(cred.user);
         } catch (err: any) {
             if (INVALID_CRED_CODES.has(err.code)) {
-                setError('Credenciales inválidas.');
+                setError(getFriendlyAuthErrorMessage({ code: 'auth/invalid-credential' }, 'login'));
             } else {
-                setError(err.message || 'Error de autenticación');
+                setError(getFriendlyAuthErrorMessage(err, 'login'));
             }
         } finally {
             setIsLoading(false);
@@ -202,7 +201,11 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
         <div className="login-form">
             <h2 className="login-form-title">Inicia sesión en tu cuenta</h2>
             <p className="login-form-subtitle">
-                <>¿No tienes cuenta en Mi ETB? <button type="button" onClick={() => switchMode('REGISTER')}>Registrate</button></>
+                <>¿No tienes cuenta en Mi ETB?{' '}
+                    <button type="button" data-testid="go-register" onClick={() => switchMode('REGISTER')}>
+                        Regístrate
+                    </button>
+                </>
             </p>
 
             {error && <div className="auth-alert error">{error}</div>}

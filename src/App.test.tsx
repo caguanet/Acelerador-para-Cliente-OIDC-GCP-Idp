@@ -21,7 +21,7 @@ vi.mock('firebase/auth', () => ({
 vi.mock('./components/BrandLoginForm', () => ({
   BrandLoginForm: ({ onSignInSuccess }: any) => (
     <div data-testid="brand-login-form">
-      <span>Bienvenido a mi ETB</span>
+      <span>Bienvenido a Mi ETB</span>
       <button onClick={() => onSignInSuccess({ getIdToken: () => Promise.resolve('fake-token-123') })}>
         Simulate Login
       </button>

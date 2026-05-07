@@ -1,12 +1,22 @@
 window.APP_CONFIG = {
-  // Theme Configuration (Optional Override)
+  // Tema (opcional). Por defecto el build usa `ETB_IDP_THEME_COLORS` en `src/config/theme.ts`;
+  // `applyThemeCssVars` en `main.tsx` vuelca a `--brand-*` y `--brand-*-rgb`.
   // theme: {
-  //   brandName: "My Company IDP",
-  //   logoUrl: "https://via.placeholder.com/150",
+  //   brandName: "ETB",
+  //   logoUrl: "/branding/default/logo.svg",
   //   colors: {
-  //     primary: "#007bff",
-  //     secondary: "#6c757d"
-  //   }
+  //     primary: "#214780",
+  //     secondary: "#0092bc",
+  //     accent: "#00E5FF",
+  //     background: "#F8F9FB",
+  //     text: "#080707",
+  //     textSecondary: "#515151",
+  //     action: "#d86055",
+  //     cardBackground: "#fafafa",
+  //     heroGradientStart: "#004b90",
+  //     heroGradientEnd: "#0092bc",
+  //   },
+  //   hero: { title: "…", subtitle: "…" },
   // },
 
   // Runtime Firebase Config (if different from build time)

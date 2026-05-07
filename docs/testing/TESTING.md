@@ -21,6 +21,7 @@ Simulates a real user logging in through the IDP using a **Deterministic Registr
     *   **Goal**: Verify login for a pre-existing user (configured in `.env`).
     *   **Strategy**: Use `TEST_USER_EMAIL` and `TEST_USER_PASSWORD` to log in directly.
     *   **Pre-requisite**: The user defined in `.env` MUST exist in the Firebase Auth project.
+    *   **Opt-in**: el spec solo ejecuta este caso si además defines `E2E_AUTH_LOGIN=1` (o `true`) al lanzar Playwright, para no fallar en entornos sin usuario real.
 
 3.  **Security Rejection**:
     *   **Goal**: Verify that the IdP blocks unauthorized clients/redirects.
@@ -91,3 +92,22 @@ To test the flow manually without the mock client:
 3.  Verify:
     *   Login Modal appears.
     *   After login, browser redirects to `https://example.com/#id_token=...`
+
+## 4. Viewports responsive (checklist + automatización)
+
+### Checklist manual (DevTools → dimensiones o dispositivo real)
+
+Con `npm run dev:simulation` (IdP `5173` + mock `3000`), revisar en **320**, **375**, **414** y **768** px de ancho:
+
+| Pantalla | Qué comprobar |
+|----------|----------------|
+| **IdP** (`5173` con `redirect_uri` del mock) | Título de login visible; tarjeta centrada sin barra horizontal; pestañas Contraseña / OTP legibles; **bloque “Descarga y conoce la app Mi ETB”** con tres enlaces a tiendas bajo la tarjeta; claim “Serás lo que creas” al pie. |
+| **Mock cliente** (`3000`) | Botón principal visible; hero y tarjeta sin solape; token (tras login) con scroll si es largo. |
+
+### Automatizado
+
+`tests/e2e/specs/viewport-layout.spec.ts` recorre esos anchos en IdP y mock y comprueba que la tarjeta IdP quepa en el viewport y que el bloque móvil de tiendas muestre tres badges; en **1280px** comprueba que ese bloque esté oculto (paridad con desktop PNG).
+
+```bash
+npx playwright test tests/e2e/specs/viewport-layout.spec.ts --project=chromium
+```
