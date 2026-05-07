@@ -10,6 +10,8 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 > *   [**CONFIGURACION-PASO-A-PASO.md**](docs/guides/CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
 > *   [**DEPLOY.md**](docs/guides/DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
 > *   [**TECH_README.md**](docs/architecture/TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
+> *   [**docs/PLAN_MITIGACION.md**](docs/PLAN_MITIGACION.md): Plan por fases de mitigaciones (operación, agentes, CI) sin alterar el flujo OIDC acordado.
+> *   [**DESIGN.md**](DESIGN.md): Guía corta de UI para agentes (el branding en runtime sigue en `APP_CONFIG`).
 > *   [**TESTING.md**](docs/testing/TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.
 > *   [**CHANGELOG.md**](CHANGELOG.md): Historial de versiones y cambios notables.
 > *   [**DISCLAIMER.md**](docs/legal/DISCLAIMER.md): Exención de responsabilidades y términos de uso.

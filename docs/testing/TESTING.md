@@ -50,6 +50,10 @@ The project uses a **Clean-on-Start** strategy (`scripts/cleanup-ports.mjs`).
 *   **Surgical**: Only kills processes on ports **3000** and **5173**. It does *not* kill your other Node work.
 *   **Retry-Safe**: If a test crashes, just re-run it. The new run will self-heal the environment.
 
+### CI en GitHub Actions
+*   **`ci.yml`** (automático en push/PR): `npm ci`, `node scripts/verify-skills-lock.mjs` (sin carpeta `.agents/skills` en el checkout sólo avisa; variable de repositorio `STRICT_SKILLS_LOCK=true` fuerza fallo si versiona skills), `npm run verify:regression` (build + Vitest), `npm audit --audit-level=critical` informativo.
+*   **`e2e-manual.yml`** (*workflow_dispatch*): Playwright sólo Chromium (`npm run test:e2e:ci`). Requiere secretos `VITE_FIREBASE_*` (y opcionalmente `TEST_USER_*`) porque sin proyecto Firebase la UI E2E no es determinística en CI.
+
 ### 📦 Git Tracking
 New tests (e.g., `tests/e2e/specs/*.spec.ts`) are **not automatically added** to the repository.
 **Solution:**

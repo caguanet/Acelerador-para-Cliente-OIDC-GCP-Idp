@@ -1,0 +1,35 @@
+# Build + Vitest determinísticos. E2E requiere Firebase real en .env (ver TESTING.md) — ejecutar local/manual.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Dependencias
+        run: npm ci
+
+      # Sin .agents/skills versionados el script sólo avisa y continúa; con STRICT_SKILLS_LOCK falla si se desea bloque duro en CI privado.
+      - name: Lock de agent skills (omitido si no hay carpeta; variable repo STRICT_SKILLS_LOCK puede forzar fallo fuerte si versiona `.agents/skills`)
+        env:
+          STRICT_SKILLS_LOCK: ${{ vars.STRICT_SKILLS_LOCK }}
+        run: node scripts/verify-skills-lock.mjs
+
+      - name: Build y Vitest (incluye verificación opcional skills)
+        run: npm run verify:regression
+
+      - name: npm audit — solo niveles critical (no bloquea ci)
+        run: npm audit --audit-level=critical || true
