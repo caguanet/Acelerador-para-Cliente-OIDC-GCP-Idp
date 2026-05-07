@@ -8,10 +8,9 @@ export class MockClientPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.loginButton = page.getByRole('button', { name: /Login with Identity Provider/i });
-    // Updated locators to match the actual MockThirdPartyApp component
-    this.tokenDisplay = page.locator('#token-display'); // Using ID as defined in HTML
-    this.userDisplay = page.getByText(/Authenticated/i);
+    this.loginButton = page.getByRole('button', { name: /Iniciar sesión con el proveedor de identidad/i });
+    this.tokenDisplay = page.locator('#token-display');
+    this.userDisplay = page.getByText(/Sesión simulada activa/i);
   }
 
   async goto() {
