@@ -10,8 +10,13 @@
     "prepare": "node scripts/install-hooks.mjs",
     "test": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:ci": "playwright test --project=chromium",
     "test:e2e:ui": "playwright test --ui",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:skills": "node scripts/verify-skills-lock.mjs",
+    "skills:refresh-lock": "node scripts/update-skills-lock-hashes.mjs",
+    "verify:regression": "node scripts/verify-regression.mjs",
+    "verify:ci": "npm run verify:regression"
   },
   "dependencies": {
     "firebase": "^10.0.0",

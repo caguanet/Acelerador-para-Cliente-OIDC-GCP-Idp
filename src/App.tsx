@@ -8,47 +8,56 @@ import { themeConfig } from './config/theme';
 
 type LoginMode = 'password' | 'otp';
 
+type OidcParams = {
+  redirect_uri: string | null;
+  client_id: string | null;
+  state: string | null;
+  prompt: string | null;
+};
+
+const emptyOidc: OidcParams = { redirect_uri: null, client_id: null, state: null, prompt: null };
+
+function isValidOrigin(urlStr: string) {
+  try {
+    const targetUrl = new URL(urlStr);
+    const validationOrigins = [...(window.APP_CONFIG?.allowedOrigins || [])];
+    if (import.meta.env.DEV && validationOrigins.length === 0) {
+      return targetUrl.hostname === 'localhost';
+    }
+    return validationOrigins.some((origin) => targetUrl.origin === origin);
+  } catch {
+    return false;
+  }
+}
+
+/** Lectura síncrona de query OIDC en el primer render (evita un frame con UI incorrecta antes del useEffect). */
+function loadOidcFromUrl(): { oidcParams: OidcParams; oidcError: string | null } {
+  const params = new URLSearchParams(window.location.search);
+  const redirect_uri = params.get('redirect_uri');
+  const client_id = params.get('client_id');
+  const state = params.get('state');
+  const prompt = params.get('prompt');
+
+  if (redirect_uri && client_id) {
+    if (!isValidOrigin(redirect_uri)) {
+      return {
+        oidcParams: emptyOidc,
+        oidcError: `Error de Seguridad: El dominio de redirección no está autorizado.`,
+      };
+    }
+    return { oidcParams: { redirect_uri, client_id, state, prompt }, oidcError: null };
+  }
+  return { oidcParams: emptyOidc, oidcError: null };
+}
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginMode, setLoginMode] = useState<LoginMode>('password');
 
-  const [oidcParams, setOidcParams] = useState<{
-    redirect_uri: string | null,
-    client_id: string | null,
-    state: string | null,
-    prompt: string | null
-  }>({ redirect_uri: null, client_id: null, state: null, prompt: null });
-  const [oidcError, setOidcError] = useState<string | null>(null);
+  const [{ oidcParams, oidcError }, setOidc] = useState(() => loadOidcFromUrl());
 
-  const isValidOrigin = (urlStr: string) => {
-    try {
-      const targetUrl = new URL(urlStr);
-      const validationOrigins = [...(window.APP_CONFIG?.allowedOrigins || [])];
-      if (import.meta.env.DEV && validationOrigins.length === 0) {
-        return targetUrl.hostname === 'localhost';
-      }
-      return validationOrigins.some(origin => targetUrl.origin === origin);
-    } catch {
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const redirect_uri = params.get('redirect_uri');
-    const client_id = params.get('client_id');
-    const state = params.get('state');
-    const prompt = params.get('prompt');
-
-    if (redirect_uri && client_id) {
-      if (!isValidOrigin(redirect_uri)) {
-        setOidcError(`Error de Seguridad: El dominio de redirección no está autorizado.`);
-        return;
-      }
-      setOidcParams({ redirect_uri, client_id, state, prompt });
-    }
-  }, []);
+  const setOidcError = (msg: string | null) =>
+    setOidc((prev) => ({ ...prev, oidcError: msg }));
 
   // Silent refresh: prompt=none → if IdP has an active Firebase session, return a fresh id_token without showing login
   useEffect(() => {

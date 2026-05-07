@@ -10,6 +10,7 @@ Esta solución es un **Identity Provider (IdP)** basado en OIDC (OpenID Connect)
 
 * **Identity Broker:** Centraliza la autenticación. Los clientes (Relying Parties) solo ven el IdP, nunca la base de datos de usuarios.
 * **Frontend-Only Security (Implicit Flow):** La solución implementa estrictamente **OIDC Implicit Flow** (ideal para SPAs Serverless).
+* La detección de `redirect_uri`, `client_id` y `prompt` en la cadena de consulta ocurre **en el primer ciclo de render** para evitar un fotograma intermedio con estado incorrecto cuando el usuario llega desde un cliente OIDC.
   > **Nota:** No soporta PKCE (Proof Key for Code Exchange) actualmente, ya que requeriría persistencia de backend (Stateful). Esta decisión prioriza **Simplicidad y Costo Cero** sobre la seguridad de grado bancario (OAuth 2.1), siendo suficiente para integraciones estándar.
 * **Runtime Configuration:** La configuración se inyecta en tiempo de ejecución (`window.APP_CONFIG`), permitiendo que el mismo artefacto (Docker Image) sirva a múltiples inquilinos o entornos solo cambiando el archivo `config.js` o variables de entorno.
 
