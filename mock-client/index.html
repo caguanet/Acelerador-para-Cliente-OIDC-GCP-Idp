@@ -4,209 +4,321 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Simulación local de aplicación partner OIDC — no es el sitio institucional de ETB.">
-  <title>Mock Client · Simulación OIDC (estética corporativa ETB)</title>
+  <title>Mock Client · Simulación OIDC (identidad ETB)</title>
+  <!-- Lexend: alternativa corporativa recomendada en brandbook cuando Kobenhavn no está en bundle (extracto §7) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Tokens alineados al extracto ETB en repo (.agents/skills/etb-brand-brandbook) — solo simulación visual */
+    /*
+      Referencias: .agents/skills/etb-brand-brandbook/reference/brandbook-extract.md
+      - Paleta §9, claim §5 (sin punto final), ondas §6 (1–2 curvas, uso moderado en UI).
+      - Logos: docs/guides/BRAND_ASSETS.md
+    */
     :root {
       --etb-primary: #004c8f;
       --etb-deep: #214780;
       --etb-accent: #00c8e8;
-      --etb-bg: #f4f7fb;
+      --etb-neon: #00ffff;
+      --etb-bg: #eef3f9;
       --etb-surface: #ffffff;
       --etb-text: #0c2a36;
       --etb-muted: #4a5f72;
       --etb-cta: #006ed0;
       --etb-highlight: #d86055;
-      --radius-lg: 20px;
+      --radius-lg: 22px;
       --radius-md: 12px;
-      --shadow-soft: 0 4px 24px rgba(0, 76, 143, 0.08), 0 12px 40px rgba(12, 42, 54, 0.06);
-      /* Altura cabecera: logo oficial + reserva (manual: área libre ≥ altura de «e») */
-      --header-h: 72px;
+      --shadow-soft: 0 4px 28px rgba(0, 76, 143, 0.07), 0 16px 48px rgba(12, 42, 54, 0.06);
+      --header-h: 76px;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
 
+    html { scroll-behavior: smooth; }
+
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: "Lexend", system-ui, -apple-system, "Segoe UI", sans-serif;
       background: var(--etb-bg);
       color: var(--etb-text);
-      line-height: 1.5;
+      line-height: 1.55;
     }
 
-    /* Franja superior estilo portal corporativo */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
     .top-bar {
-      height: var(--header-h);
-      background: linear-gradient(90deg, var(--etb-deep) 0%, var(--etb-primary) 45%, #0a5ba8 100%);
+      min-height: var(--header-h);
+      background: linear-gradient(105deg, var(--etb-deep) 0%, var(--etb-primary) 42%, #0a5ea8 100%);
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 1.25rem;
+      padding: 0.5rem 1.35rem;
       gap: 1rem;
       flex-wrap: wrap;
+      border-bottom: 3px solid rgba(0, 200, 232, 0.55);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 1rem;
     }
 
+    /* Área libre alrededor del logotipo (manual §4) — sin caja que compita visualmente con el wordmark */
     .brand-logo-wrap {
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      justify-content: center;
-      padding: 0.4rem 0.65rem;
-      min-height: 44px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 0.35rem 0.85rem 0.35rem 0.15rem;
     }
 
     .brand-logo-img {
       display: block;
-      height: 36px;
+      height: 42px;
       width: auto;
-      max-width: 132px;
+      max-width: 148px;
       object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
     }
 
     .brand-text {
       display: flex;
       flex-direction: column;
-      line-height: 1.2;
+      line-height: 1.25;
+      border-left: 1px solid rgba(255,255,255,0.25);
+      padding-left: 1rem;
     }
 
     .brand-text strong {
-      font-size: 0.95rem;
-      font-weight: 700;
-      letter-spacing: 0.02em;
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
     }
 
     .brand-text span {
-      font-size: 0.7rem;
-      opacity: 0.88;
-      font-weight: 500;
+      font-size: 0.72rem;
+      opacity: 0.9;
+      font-weight: 400;
+      max-width: 22rem;
     }
 
     .pill-env {
-      font-size: 0.65rem;
+      font-size: 0.62rem;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.35);
-      padding: 0.35rem 0.65rem;
+      letter-spacing: 0.1em;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.4);
+      padding: 0.4rem 0.75rem;
       border-radius: 999px;
     }
 
-    /* Fondo con malla sutil (sin imagen externa) */
     .shell {
+      position: relative;
       min-height: calc(100vh - var(--header-h));
+      overflow: hidden;
       background:
-        radial-gradient(ellipse 120% 80% at 0% 0%, rgba(0, 200, 232, 0.12) 0%, transparent 50%),
-        radial-gradient(ellipse 80% 60% at 100% 20%, rgba(0, 76, 143, 0.08) 0%, transparent 45%),
-        var(--etb-bg);
+        radial-gradient(ellipse 100% 70% at 0% -10%, rgba(0, 200, 232, 0.14) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 100% 0%, rgba(0, 76, 143, 0.1) 0%, transparent 50%),
+        linear-gradient(180deg, #f7fafd 0%, var(--etb-bg) 38%, #e8eef6 100%);
+    }
+
+    /* Onda dinámica única (manual §6 — abstracción suave, no satura UI) */
+    .shell-waves {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: min(42vh, 320px);
+      pointer-events: none;
+      opacity: 0.45;
+      z-index: 0;
+    }
+
+    .shell-waves svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     .layout {
-      max-width: 1120px;
+      position: relative;
+      z-index: 1;
+      max-width: 1140px;
       margin: 0 auto;
-      padding: 2rem 1.25rem 3rem;
+      padding: 2.25rem 1.35rem 3.5rem;
       display: grid;
       grid-template-columns: 1fr;
-      gap: 2rem;
-      align-items: center;
+      gap: 2.25rem;
+      align-items: start;
     }
 
-    @media (min-width: 900px) {
+    @media (min-width: 920px) {
       .layout {
-        grid-template-columns: 1.1fr 0.9fr;
+        grid-template-columns: 1.08fr 0.92fr;
         gap: 3rem;
-        padding: 3rem 1.5rem 4rem;
+        padding: 3rem 1.5rem 4.5rem;
+        align-items: center;
       }
     }
 
     .hero h1 {
-      font-size: clamp(1.75rem, 4vw, 2.35rem);
+      font-size: clamp(1.85rem, 4.2vw, 2.5rem);
       font-weight: 700;
       color: var(--etb-deep);
-      margin: 0 0 1rem;
-      letter-spacing: -0.02em;
+      margin: 0 0 0.85rem;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+
+    .hero .kicker {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--etb-primary);
+      margin-bottom: 0.5rem;
     }
 
     .hero .lead {
-      font-size: 1.05rem;
+      font-size: 1.06rem;
+      font-weight: 400;
       color: var(--etb-muted);
-      margin: 0 0 1.5rem;
-      max-width: 36ch;
+      margin: 0 0 1.65rem;
+      max-width: 40ch;
     }
 
-    .hero-quote {
-      border-left: 4px solid var(--etb-accent);
-      padding-left: 1rem;
-      margin: 0;
-      font-size: 0.95rem;
-      color: var(--etb-muted);
-      font-style: italic;
+    .hero .lead code {
+      font-size: 0.88em;
+      font-family: ui-monospace, monospace;
+      background: rgba(0, 76, 143, 0.07);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+      color: var(--etb-deep);
     }
 
-    .hero-quote em {
-      color: var(--etb-primary);
-      font-style: normal;
+    /* Claim: negritas azules ↔ «creer»; bloque blanco sobre azul ↔ «crear» (adaptación a fondo claro, extracto §5) */
+    .claim-block {
+      margin: 0 0 1.75rem;
+      padding: 1.1rem 1.2rem;
+      background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(248,251,255,0.98));
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      box-shadow: 0 2px 12px rgba(0, 76, 143, 0.06);
+    }
+
+    .claim-label {
+      display: block;
+      font-size: 0.68rem;
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--etb-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .claim-line {
+      font-size: clamp(1.15rem, 2.8vw, 1.45rem);
+      font-weight: 500;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+    }
+
+    .claim-creer {
+      color: var(--etb-primary);
+      font-weight: 700;
+    }
+
+    .claim-crear {
+      display: inline-block;
+      margin-left: 0.15em;
+      padding: 0.08em 0.38em 0.12em;
+      background: var(--etb-deep);
+      color: #fff;
+      font-weight: 700;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(33, 71, 128, 0.25);
     }
 
     .hero-badges {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 1.75rem;
+      gap: 0.55rem;
     }
 
     .badge {
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: 600;
-      padding: 0.4rem 0.75rem;
-      border-radius: 8px;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
       background: #fff;
-      color: var(--etb-primary);
-      border: 1px solid rgba(0, 76, 143, 0.15);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      color: var(--etb-deep);
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     }
 
-    /* Tarjeta principal */
     .card {
+      position: relative;
+      z-index: 1;
       background: var(--etb-surface);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-soft);
-      border: 1px solid rgba(0, 76, 143, 0.08);
+      border: 1px solid rgba(0, 76, 143, 0.09);
       overflow: hidden;
     }
 
     .card-head {
-      background: linear-gradient(135deg, var(--etb-primary), var(--etb-deep));
+      position: relative;
+      background: linear-gradient(128deg, var(--etb-primary) 0%, var(--etb-deep) 72%, #1a3d6b 100%);
       color: #fff;
-      padding: 1.25rem 1.5rem;
+      padding: 1.35rem 1.6rem 1.45rem;
+    }
+
+    .card-head::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--etb-accent), transparent);
+      opacity: 0.85;
     }
 
     .card-head h2 {
       margin: 0;
-      font-size: 1.15rem;
+      font-size: 1.2rem;
       font-weight: 700;
+      letter-spacing: -0.02em;
     }
 
     .card-head p {
-      margin: 0.35rem 0 0;
-      font-size: 0.8rem;
-      opacity: 0.9;
+      margin: 0.45rem 0 0;
+      font-size: 0.82rem;
+      opacity: 0.92;
+      line-height: 1.45;
+      max-width: 42ch;
+    }
+
+    .card-head code {
+      font-size: 0.78em;
+      background: rgba(255,255,255,0.12);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
     }
 
     .card-body {
-      padding: 1.5rem 1.5rem 1.75rem;
+      padding: 1.65rem 1.6rem 1.85rem;
     }
 
     .btn {
@@ -214,78 +326,75 @@
       align-items: center;
       justify-content: center;
       width: 100%;
-      gap: 0.5rem;
-      padding: 0.9rem 1.25rem;
+      gap: 0.55rem;
+      padding: 0.95rem 1.3rem;
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 0.96rem;
       font-weight: 600;
       border: none;
       border-radius: var(--radius-md);
       cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
 
     .btn-primary {
-      background: linear-gradient(180deg, var(--etb-cta) 0%, #0058b8 100%);
+      background: linear-gradient(180deg, var(--etb-cta) 0%, #0056b3 100%);
       color: #fff;
-      box-shadow: 0 4px 14px rgba(0, 110, 208, 0.35);
+      box-shadow: 0 4px 16px rgba(0, 110, 208, 0.38);
     }
 
     .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(0, 110, 208, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 110, 208, 0.42);
     }
 
-    .btn-primary:active {
-      transform: translateY(0);
+    .btn-primary:focus-visible {
+      outline: 3px solid var(--etb-accent);
+      outline-offset: 2px;
     }
 
     .btn-logout {
       margin-top: 1rem;
       background: #fff;
       color: var(--etb-highlight);
-      border: 2px solid rgba(216, 96, 85, 0.45);
+      border: 2px solid rgba(216, 96, 85, 0.4);
     }
 
     .btn-logout:hover {
-      background: rgba(216, 96, 85, 0.06);
+      background: rgba(216, 96, 85, 0.07);
     }
 
     .hint {
-      margin-top: 1rem;
-      font-size: 0.75rem;
+      margin-top: 1.1rem;
+      font-size: 0.74rem;
       color: var(--etb-muted);
       text-align: center;
+      line-height: 1.4;
     }
 
-    #token-section {
-      display: none;
-    }
-
-    #token-section .card-body {
-      padding-top: 1rem;
-    }
+    #token-section { display: none; }
 
     .success-icon {
-      width: 48px;
-      height: 48px;
-      margin: 0 auto 0.75rem;
-      background: rgba(0, 200, 232, 0.15);
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 0.85rem;
+      background: linear-gradient(145deg, rgba(0,200,232,0.2), rgba(0,76,143,0.08));
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.5rem;
+      font-size: 1.45rem;
+      color: var(--etb-primary);
     }
 
     .token-box {
-      background: linear-gradient(180deg, #f8fafc 0%, #f0f4f8 100%);
-      border: 1px solid rgba(0, 76, 143, 0.12);
+      background: linear-gradient(180deg, #fafcfe 0%, #eef3f9 100%);
+      border: 1px solid rgba(0, 76, 143, 0.11);
       border-radius: var(--radius-md);
-      padding: 0.85rem 1rem;
+      padding: 0.9rem 1rem;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-      font-size: 0.7rem;
-      line-height: 1.45;
+      font-size: 0.68rem;
+      line-height: 1.5;
       overflow-wrap: anywhere;
       max-height: 220px;
       overflow-y: auto;
@@ -295,55 +404,81 @@
     }
 
     footer {
+      position: relative;
+      z-index: 1;
       text-align: center;
-      padding: 1rem 1.25rem 2rem;
-      font-size: 0.72rem;
+      padding: 1.25rem 1.35rem 2.25rem;
+      font-size: 0.74rem;
       color: var(--etb-muted);
-      max-width: 52ch;
+      max-width: 56ch;
       margin: 0 auto;
+      line-height: 1.45;
     }
 
-    footer strong {
-      color: var(--etb-deep);
+    footer strong { color: var(--etb-deep); }
+
+    footer code {
+      font-size: 0.9em;
+      background: rgba(0, 76, 143, 0.06);
+      padding: 0.1em 0.3em;
+      border-radius: 4px;
     }
   </style>
 </head>
 <body>
   <header class="top-bar" role="banner">
     <div class="brand">
-      <!-- Logotipo oficial ETB (blanco sobre azul): copia de public/branding/default/logo.svg — ver docs/guides/BRAND_ASSETS.md -->
       <div class="brand-logo-wrap">
         <img
           class="brand-logo-img"
           src="/branding/etb-logo-white.svg"
           alt="ETB — Empresa de Telecomunicaciones de Bogotá"
-          width="120"
-          height="36"
+          width="140"
+          height="42"
           decoding="async"
+          fetchpriority="high"
         />
       </div>
       <div class="brand-text">
-        <strong>Simulación · App partner</strong>
-        <span>Flujo OIDC con Identity Provider local</span>
+        <strong>Simulación · aplicación partner</strong>
+        <span>Delegación de acceso vía OpenID Connect al proveedor de identidad local (puerto 5173).</span>
       </div>
     </div>
     <span class="pill-env" title="No es producción">Entorno local</span>
   </header>
 
   <div class="shell">
+    <div class="shell-waves" aria-hidden="true">
+      <svg viewBox="0 0 1440 320" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#004c8f" stop-opacity="0.25"/>
+            <stop offset="50%" stop-color="#00c8e8" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#214780" stop-opacity="0.2"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#g1)" d="M0,224L60,213.3C120,203,240,181,360,181.3C480,181,600,203,720,197.3C840,192,960,160,1080,154.7C1200,149,1320,171,1380,181.3L1440,192L1440,320L1380,320C1320,320,1200,320,1080,320C960,320,840,320,720,320C600,320,480,320,360,320C240,320,120,320,60,320L0,320Z"/>
+        <path fill="#004c8f" fill-opacity="0.08" d="M0,288L48,277.3C96,267,192,245,288,234.7C384,224,480,224,576,213.3C672,203,768,181,864,181.3C960,181,1056,203,1152,208C1248,213,1344,203,1392,197.3L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"/>
+      </svg>
+    </div>
+
     <div class="layout">
       <section class="hero" aria-labelledby="hero-title">
+        <span class="kicker">Techco · confianza digital</span>
         <h1 id="hero-title">Acceso federado de prueba</h1>
         <p class="lead">
-          Esta pantalla imita una aplicación de socio que delega el inicio de sesión al proveedor de identidad (puerto 5173).
-          Úsala solo en desarrollo para validar redirecciones y tokens.
+          Esta vista simula una aplicación de socio que delega el inicio de sesión al IdP. Úsala en desarrollo para validar redirecciones, <code>id_token</code> y renovación silenciosa — sin ofrecer servicios comerciales reales.
         </p>
-        <blockquote class="hero-quote">
-          Inspiración visual institucional — tono cercano y claro, como en la comunicación ETB:
-          <em>Serás</em> lo que <em>creas</em>.
-        </blockquote>
+        <div class="claim-block">
+          <span class="claim-label">Claim de marca (manual de imagen · sin punto final)</span>
+          <p class="claim-line">
+            <span class="claim-creer">Serás</span>
+            <span class="claim-creer">lo que</span>
+            <span class="claim-crear">creas</span>
+          </p>
+        </div>
         <div class="hero-badges" aria-label="Características simuladas">
-          <span class="badge">OIDC · implicit</span>
+          <span class="badge">OIDC implicit</span>
           <span class="badge">Puerto 3000</span>
           <span class="badge">Mock seguro</span>
         </div>
@@ -352,7 +487,7 @@
       <div class="card" aria-labelledby="card-title">
         <div class="card-head">
           <h2 id="card-title">Ingreso al ecosistema</h2>
-          <p>Será redirigido al IdP para autenticarse y volverá con el <code style="opacity:.95">id_token</code> en el fragmento de URL.</p>
+          <p>Al continuar, el navegador abrirá el IdP. Tras autenticarse, regresará aquí con el <code>id_token</code> en el fragmento de la URL.</p>
         </div>
         <div class="card-body">
           <div id="login-section">
@@ -362,7 +497,7 @@
                 <path d="M5 12h14M13 6l6 6-6 6"/>
               </svg>
             </button>
-            <p class="hint">Solo simulación · No consume servicios reales de facturación ni soporte.</p>
+            <p class="hint">Solo laboratorio local. No sustituye términos legales ni disponibilidad de servicios ETB.</p>
           </div>
 
           <div id="token-section">
@@ -378,8 +513,9 @@
   </div>
 
   <footer>
-    <strong>Aviso:</strong> página de laboratorio con estética inspirada en la identidad ETB del brandbook en repositorio.
-    No es el portal público ni implica relación comercial. Puerto <code>3000</code> · IdP típico <code>5173</code>.
+    <strong>Aviso:</strong> simulación alineada al <strong>Manual de imagen (Brandbook).pdf</strong> en la raíz del proyecto y al extracto en
+    <code>.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md</code>. No es el portal público ETB.
+    Rutas de logos y sincronización con el PDF: archivo <code>docs/guides/BRAND_ASSETS.md</code> en el repositorio.
   </footer>
 
   <script src="/config.js"></script>

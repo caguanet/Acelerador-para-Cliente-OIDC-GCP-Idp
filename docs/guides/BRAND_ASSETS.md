@@ -11,6 +11,10 @@ La **fuente normativa** del logotipo y la identidad es el **Manual de imagen (Br
 | Mock cliente OIDC (puerto 3000) | `mock-client/public/branding/etb-logo-white.svg` | Copia de `public/branding/default/logo.svg` para Vite con `root: mock-client`. |
 | Mock cliente (fondos claros si se necesitan) | `mock-client/public/branding/etb-logo-color.svg` | Copia de `img/ETB_Bogotá_logo.svg`. |
 
+### Tipografía en el mock cliente (`mock-client/index.html`)
+
+Para acercarse al manual sin incrustar **Kobenhavn** (Adobe Fonts / licencia), la simulación en puerto **3000** usa **Lexend** vía Google Fonts, como primera alternativa corporativa recomendada en el extracto (§7) para piezas digitales operativas.
+
 ### Cuando actualicen el brandbook (export desde PDF o kit oficial)
 
 1. Sustituir o regenerar `public/branding/default/logo.svg` y `img/ETB_Bogotá_logo.svg` con los entregables oficiales.
