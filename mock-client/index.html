@@ -403,25 +403,133 @@
       margin-top: 0.75rem;
     }
 
-    footer {
+    /* Pie — aviso institucional (legible, no bloque de consola) */
+    .site-footer {
       position: relative;
       z-index: 1;
-      text-align: center;
-      padding: 1.25rem 1.35rem 2.25rem;
-      font-size: 0.74rem;
-      color: var(--etb-muted);
-      max-width: 56ch;
-      margin: 0 auto;
-      line-height: 1.45;
+      padding: 0.5rem 1.25rem 2.5rem;
     }
 
-    footer strong { color: var(--etb-deep); }
+    .site-footer::before {
+      content: "";
+      display: block;
+      height: 1px;
+      max-width: 720px;
+      margin: 0 auto 1.5rem;
+      background: linear-gradient(90deg, transparent, rgba(0, 76, 143, 0.2), var(--etb-accent), rgba(0, 76, 143, 0.2), transparent);
+    }
 
-    footer code {
-      font-size: 0.9em;
-      background: rgba(0, 76, 143, 0.06);
-      padding: 0.1em 0.3em;
-      border-radius: 4px;
+    .notice-banner {
+      max-width: 680px;
+      margin: 0 auto;
+      background: var(--etb-surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      box-shadow: 0 8px 32px rgba(33, 71, 128, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 5px 1fr;
+    }
+
+    .notice-banner__accent {
+      background: linear-gradient(180deg, var(--etb-accent), var(--etb-primary));
+    }
+
+    .notice-banner__inner {
+      padding: 1.15rem 1.25rem 1.35rem 1.1rem;
+    }
+
+    .notice-banner__header {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .notice-icon {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(0, 200, 232, 0.18), rgba(0, 76, 143, 0.1));
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--etb-primary);
+    }
+
+    .notice-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .notice-title {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--etb-deep);
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+    }
+
+    .notice-sub {
+      margin: 0.2rem 0 0;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--etb-muted);
+    }
+
+    .notice-lead {
+      margin: 0 0 1rem;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: var(--etb-text);
+    }
+
+    .notice-lead strong {
+      color: var(--etb-deep);
+      font-weight: 600;
+    }
+
+    .notice-docs {
+      margin: 0;
+      padding: 0.75rem 0.85rem;
+      background: linear-gradient(180deg, #f6f9fc, #eef3f9);
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(0, 76, 143, 0.08);
+    }
+
+    .notice-docs dt {
+      margin: 0 0 0.2rem;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--etb-primary);
+    }
+
+    .notice-docs dd {
+      margin: 0 0 0.75rem;
+      padding: 0;
+    }
+
+    .notice-docs dd:last-child {
+      margin-bottom: 0;
+    }
+
+    .path-code {
+      display: block;
+      font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      color: var(--etb-deep);
+      background: #fff;
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      border-radius: 8px;
+      padding: 0.45rem 0.55rem;
+      word-break: break-all;
+      box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.8);
     }
   </style>
 </head>
@@ -512,10 +620,37 @@
     </div>
   </div>
 
-  <footer>
-    <strong>Aviso:</strong> simulación alineada al <strong>Manual de imagen (Brandbook).pdf</strong> en la raíz del proyecto y al extracto en
-    <code>.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md</code>. No es el portal público ETB.
-    Rutas de logos y sincronización con el PDF: archivo <code>docs/guides/BRAND_ASSETS.md</code> en el repositorio.
+  <footer class="site-footer" role="contentinfo" aria-labelledby="footer-notice-title">
+    <div class="notice-banner">
+      <div class="notice-banner__accent" aria-hidden="true"></div>
+      <div class="notice-banner__inner">
+        <div class="notice-banner__header">
+          <div class="notice-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4M12 8h.01"/>
+            </svg>
+          </div>
+          <div>
+            <h2 id="footer-notice-title" class="notice-title">Aviso de entorno de laboratorio</h2>
+            <p class="notice-sub">Simulación técnica · No es el portal público ETB</p>
+          </div>
+        </div>
+        <p class="notice-lead">
+          Esta vista sigue los criterios del <strong>Manual de imagen (Brandbook).pdf</strong> en la raíz del repositorio y el extracto operativo para agentes y desarrollo.
+        </p>
+        <dl class="notice-docs">
+          <div>
+            <dt>Extracto de identidad (repo)</dt>
+            <dd><span class="path-code">.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md</span></dd>
+          </div>
+          <div>
+            <dt>Logos y sincronización con el PDF</dt>
+            <dd><span class="path-code">docs/guides/BRAND_ASSETS.md</span></dd>
+          </div>
+        </dl>
+      </div>
+    </div>
   </footer>
 
   <script src="/config.js"></script>
