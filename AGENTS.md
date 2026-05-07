@@ -14,6 +14,7 @@ Este documento **prioriza** la arquitectura y convenciones **de este producto** 
 | [docs/PLAN_MITIGACION.md](docs/PLAN_MITIGACION.md) | Plan de mitigaciones por fases sin alterar comportamiento acordado |
 | [PRODUCT.md](PRODUCT.md) | Contexto de producto para agentes/UI (no reemplaza `APP_CONFIG`) |
 | [DESIGN.md](DESIGN.md) | Principios de UI accesorio al white-label runtime |
+| [docs/guides/BRAND_ASSETS.md](docs/guides/BRAND_ASSETS.md) | Rutas de logotipos SVG, mock `public/branding/` y cómo resincronizar tras actualizar el **Manual de imagen (Brandbook).pdf** |
 | [`.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md`](.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md) | Identidad visual y verbal ETB cuando el Manual de imagen PDF no está en línea base; lo gobierna el skill `etb-brand-brandbook`. |
 
 **Dominio concreto:** Identity broker OIDC sobre **Firebase Auth / GCP Identity Platform**, SPA **stateless**, configuración por `window.APP_CONFIG`. En [docs/architecture/TECH_README.md](docs/architecture/TECH_README.md) se documenta explícitamente el **OIDC Implicit Flow** y las razones por las que PKCE/backend stateful **no forman parte del diseño actual**. No sustituir eso por ejemplos genéricos (p. ej. Authorization Code + PKCE con servidor Next.js) sin un cambio de arquitectura acordado y actualización de la documentación.

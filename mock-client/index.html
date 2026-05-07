@@ -20,7 +20,8 @@
       --radius-lg: 20px;
       --radius-md: 12px;
       --shadow-soft: 0 4px 24px rgba(0, 76, 143, 0.08), 0 12px 40px rgba(12, 42, 54, 0.06);
-      --header-h: 64px;
+      /* Altura cabecera: logo oficial + reserva (manual: área libre ≥ altura de «e») */
+      --header-h: 72px;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -53,10 +54,24 @@
       gap: 0.75rem;
     }
 
-    .brand-mark {
-      width: 40px;
-      height: 40px;
+    .brand-logo-wrap {
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.4rem 0.65rem;
+      min-height: 44px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .brand-logo-img {
+      display: block;
+      height: 36px;
+      width: auto;
+      max-width: 132px;
+      object-fit: contain;
     }
 
     .brand-text {
@@ -296,13 +311,17 @@
 <body>
   <header class="top-bar" role="banner">
     <div class="brand">
-      <!-- Marca abstracta genérica (no reproduce logotipo oficial) -->
-      <svg class="brand-mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect width="40" height="40" rx="10" fill="rgba(255,255,255,0.12)"/>
-        <path d="M8 26c4-8 10-14 20-16" stroke="#7fdfff" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M10 14c6 2 12 8 14 18" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M22 8c6 6 8 14 6 22" stroke="rgba(0,232,255,0.85)" stroke-width="2" stroke-linecap="round"/>
-      </svg>
+      <!-- Logotipo oficial ETB (blanco sobre azul): copia de public/branding/default/logo.svg — ver docs/guides/BRAND_ASSETS.md -->
+      <div class="brand-logo-wrap">
+        <img
+          class="brand-logo-img"
+          src="/branding/etb-logo-white.svg"
+          alt="ETB — Empresa de Telecomunicaciones de Bogotá"
+          width="120"
+          height="36"
+          decoding="async"
+        />
+      </div>
       <div class="brand-text">
         <strong>Simulación · App partner</strong>
         <span>Flujo OIDC con Identity Provider local</span>
