@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import etbLogo from '../../img/ETB.png';
 import { auth } from '../firebase';
+import { getFriendlyAuthErrorMessage } from '../utils/authErrors';
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -60,7 +61,7 @@ export function CustomLoginForm({ onSignInSuccess }: CustomLoginFormProps) {
             onSignInSuccess(result.user);
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'Error con Google Sign-In');
+            setError(getFriendlyAuthErrorMessage(err, 'social'));
         } finally {
             setIsLoading(false);
         }
@@ -74,7 +75,7 @@ export function CustomLoginForm({ onSignInSuccess }: CustomLoginFormProps) {
             onSignInSuccess(result.user);
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'Error con Facebook Sign-In');
+            setError(getFriendlyAuthErrorMessage(err, 'social'));
         } finally {
             setIsLoading(false);
         }
@@ -100,11 +101,7 @@ export function CustomLoginForm({ onSignInSuccess }: CustomLoginFormProps) {
             setSuccessMsg(`Se ha enviado un enlace de recuperación a ${email}`);
         } catch (err: any) {
             console.error(err);
-            if (err.code === 'auth/user-not-found') {
-                setError('No existe una cuenta con este correo.');
-            } else {
-                setError('Error al enviar el correo. Intenta de nuevo.');
-            }
+            setError(getFriendlyAuthErrorMessage(err, 'recovery'));
         } finally {
             setIsLoading(false);
         }
@@ -150,14 +147,14 @@ export function CustomLoginForm({ onSignInSuccess }: CustomLoginFormProps) {
         } catch (err: any) {
             console.error(err);
             if (INVALID_CRED_CODES.has(err.code)) {
-                setError('Credenciales inválidas.');
+                setError(getFriendlyAuthErrorMessage({ code: 'auth/invalid-credential' }, 'login'));
             } else if (err.code === 'auth/email-already-in-use') {
                 setError('Este correo ya está registrado. Inicia sesión.');
                 setMode('LOGIN');
             } else if (err.code === 'auth/weak-password') {
                 setError('La contraseña es muy débil (mín. 6 caracteres).');
             } else {
-                setError(err.message || 'Error de autenticación');
+                setError(getFriendlyAuthErrorMessage(err, 'login'));
             }
         } finally {
             setIsLoading(false);

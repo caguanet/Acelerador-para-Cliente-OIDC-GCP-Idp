@@ -11,11 +11,12 @@ Este documento **prioriza** la arquitectura y convenciones **de este producto** 
 | [docs/guides/DEVELOPERS.md](docs/guides/DEVELOPERS.md) | Setup local, APIs de GCP, comandos de prueba |
 | [docs/guides/DEPLOY.md](docs/guides/DEPLOY.md) | Producción Cloud Run |
 | [docs/testing/TESTING.md](docs/testing/TESTING.md) | Estrategia de calidad |
-| [docs/PLAN_MITIGACION.md](docs/PLAN_MITIGACION.md) | Plan de mitigaciones por fases sin alterar comportamiento acordado |
 | [PRODUCT.md](PRODUCT.md) | Contexto de producto para agentes/UI (no reemplaza `APP_CONFIG`) |
 | [DESIGN.md](DESIGN.md) | Principios de UI accesorio al white-label runtime |
+| [docs/guides/BRANDING_ETB.md](docs/guides/BRANDING_ETB.md) | Guía central de branding ETB en `docs/` (paleta, mapeo runtime, gobernanza y flujo de cambios). |
+| [docs/guides/UX_STANDARDS.md](docs/guides/UX_STANDARDS.md) | Estándar UX-first del proyecto: mensajes amigables, intuitividad, performance y seguridad en UI. |
 | [docs/guides/BRAND_ASSETS.md](docs/guides/BRAND_ASSETS.md) | Rutas de logotipos SVG, mock `public/branding/` y cómo resincronizar tras actualizar el **Manual de imagen (Brandbook).pdf** |
-| [`.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md`](.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md) | Identidad visual y verbal ETB cuando el Manual de imagen PDF no está en línea base; lo gobierna el skill `etb-brand-brandbook`. |
+| [`.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md`](.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md) | Resumen técnico para agentes; debe mantenerse alineado con `docs/guides/BRANDING_ETB.md`. |
 
 **Dominio concreto:** Identity broker OIDC sobre **Firebase Auth / GCP Identity Platform**, SPA **stateless**, configuración por `window.APP_CONFIG`. En [docs/architecture/TECH_README.md](docs/architecture/TECH_README.md) se documenta explícitamente el **OIDC Implicit Flow** y las razones por las que PKCE/backend stateful **no forman parte del diseño actual**. No sustituir eso por ejemplos genéricos (p. ej. Authorization Code + PKCE con servidor Next.js) sin un cambio de arquitectura acordado y actualización de la documentación.
 
@@ -58,6 +59,7 @@ Usar **un skill principal por tarea**; el resto como apoyo opcional para no mezc
 | Visión amplia (pirámide, flaky, release, herramientas extra) | `.agents/skills/web-testing/` | **No** como default en cada cambio pequeño; consultar cuando el alcance sea estrategia o release global. |
 | Refactor TS, olores | `.agents/skills/typescript-refactoring/` | |
 | Estilos, componentes UI, paleta/copy con marca ETB, temas institucionales | `.agents/skills/etb-brand-brandbook/` | Leer el extract en `reference/brandbook-extract.md`; coherentar con [DESIGN.md](DESIGN.md) y tema `APP_CONFIG` para white‑label. |
+| Mejoras UX/UI, manejo de errores para usuario final, microcopy y claridad de interacción | `.agents/skills/impeccable/` | Debe respetar [docs/guides/UX_STANDARDS.md](docs/guides/UX_STANDARDS.md) y no exponer mensajes técnicos crudos en UI. |
 
 **Solape:** `web-testing` agrupa contenido también cubierto por `playwright-testing` y `vitest-testing-patterns`. En caso de conflicto, mandan esta tabla y los scripts del `package.json`.
 

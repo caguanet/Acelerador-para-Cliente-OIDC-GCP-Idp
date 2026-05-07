@@ -8,10 +8,10 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 >
 > *   [**docs/README.md**](docs/README.md): Índice completo de toda la documentación.
 > *   [**docs/guides/BRAND_ASSETS.md**](docs/guides/BRAND_ASSETS.md): Logos ETB en repo, mock y sincronización con el Manual de imagen (PDF).
+> *   [**docs/guides/UX_STANDARDS.md**](docs/guides/UX_STANDARDS.md): Estándar UX-first (errores amigables, intuición, performance y seguridad en UI).
 > *   [**CONFIGURACION-PASO-A-PASO.md**](docs/guides/CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
 > *   [**DEPLOY.md**](docs/guides/DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
 > *   [**TECH_README.md**](docs/architecture/TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
-> *   [**docs/PLAN_MITIGACION.md**](docs/PLAN_MITIGACION.md): Plan por fases de mitigaciones (operación, agentes, CI) sin alterar el flujo OIDC acordado.
 > *   [**DESIGN.md**](DESIGN.md): Guía corta de UI para agentes (el branding en runtime sigue en `APP_CONFIG`).
 > *   [**TESTING.md**](docs/testing/TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.
 > *   [**CHANGELOG.md**](CHANGELOG.md): Historial de versiones y cambios notables.

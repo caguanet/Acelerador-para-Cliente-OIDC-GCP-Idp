@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent, ClipboardEvent } from 'react';
+import { getFriendlyAuthErrorMessage } from '../utils/authErrors';
 
 // ── Hoisted static icons ─────────────────────────────────────────────────────
 const GOOGLE_ICON = (
@@ -111,7 +112,7 @@ export function OtpVerificationForm({
             setStep('CODE');
             requestAnimationFrame(() => inputRefs.current[0]?.focus());
         } catch (err: any) {
-            setAlert({ type: 'error', msg: err.message || 'No fue posible enviar el código. Intenta de nuevo.' });
+            setAlert({ type: 'error', msg: getFriendlyAuthErrorMessage(err, 'otp') });
         } finally {
             setIsSending(false);
         }
@@ -156,7 +157,7 @@ export function OtpVerificationForm({
             await onVerifyCode(email, code);
             setStep('SUCCESS');
         } catch (err: any) {
-            setAlert({ type: 'error', msg: err.message || 'No fue posible autenticar tu usuario, por favor vuelve a intentarlo' });
+            setAlert({ type: 'error', msg: getFriendlyAuthErrorMessage(err, 'otp') });
         } finally {
             setIsVerifying(false);
         }
@@ -173,7 +174,7 @@ export function OtpVerificationForm({
             setAlert({ type: 'info', msg: 'Nuevo código enviado a tu correo' });
             requestAnimationFrame(() => inputRefs.current[0]?.focus());
         } catch (err: any) {
-            setAlert({ type: 'error', msg: err.message || 'Error al reenviar el código. Intenta de nuevo.' });
+            setAlert({ type: 'error', msg: getFriendlyAuthErrorMessage(err, 'otp') });
         } finally {
             setIsSending(false);
         }
@@ -190,7 +191,11 @@ export function OtpVerificationForm({
     const makeSocialHandler = (fn?: () => Promise<void>) => async () => {
         if (!fn) return;
         clearMessages();
-        try { await fn(); } catch (err: any) { setAlert({ type: 'error', msg: err.message || 'Error al iniciar sesión.' }); }
+        try {
+            await fn();
+        } catch (err: any) {
+            setAlert({ type: 'error', msg: getFriendlyAuthErrorMessage(err, 'social') });
+        }
     };
 
     // ── RENDER: EMAIL step ────────────────────────────────────────────────────

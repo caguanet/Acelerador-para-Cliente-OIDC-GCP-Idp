@@ -77,24 +77,25 @@ El archivo está en `.gitignore` (patrón `.env.*`); no lo subas al repositorio.
 
 ## Personalización de Marca (White-Label)
 
-**Sin recompilar** — editar `public/config.js`:
+**Sin recompilar** — editar `public/config.js` (se carga antes del bundle). En arranque, `src/main.tsx` llama a `applyThemeCssVars(themeConfig)` y vuelca `theme.colors` a `--brand-*` en `:root`.
+
+Defaults y preset ETB IdP: `src/config/theme.ts` (`ETB_IDP_THEME_COLORS`, `ETB_APP_THEME_PRESET`). La referencia central de mapeo y gobernanza de marca está en [BRANDING_ETB.md](BRANDING_ETB.md).
 
 ```javascript
 window.APP_CONFIG = {
     theme: {
         brandName: "Mi Empresa",
-        colors: { primary: "#FF0000" }
-    }
+        colors: { primary: "#214780", secondary: "#0092bc" },
+    },
 };
 ```
 
-**Prueba rápida en navegador** — pegar en consola y recargar:
+**Recarga completa** tras cambiar tema (`location.reload()`); no se re-aplica en caliente tras el primer `main.tsx`.
 
 ```javascript
-window.APP_CONFIG = { theme: { brandName: "Prueba", colors: { primary: "#ff0000" } } };
 location.reload();
 ```
 
-**Con recompilación** — editar variables CSS en `src/index.css` (`:root`) y reemplazar logo en `public/branding/default/logo.svg`.
+**Con recompilación** — defaults en `src/config/theme.ts` y/o `:root` en `src/index.css`; logo en `public/branding/default/logo.svg`.
 
 → Ver referencia completa de `APP_CONFIG` en [CONFIGURACION-PASO-A-PASO.md § A.6](CONFIGURACION-PASO-A-PASO.md)

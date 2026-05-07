@@ -1,5 +1,8 @@
 # Extracto operativo — Manual de imagen ETB (Brandbook)
 
+> Fuente documental central para humanos: `docs/guides/BRANDING_ETB.md`.
+> Este archivo existe como resumen operativo para el skill de agentes y debe mantenerse alineado con esa guía.
+
 Documento vivo derivado del **Manual de imagen (Brandbook).pdf** de ETB — *«Serás lo que creas»*.  
 Versión pensada para agentes IDEs y desarrollo cuando el PDF no forma parte del repositorio baseline.
 
@@ -7,19 +10,24 @@ _Notas de uso en producto SPA:_ para instancias **white‑label**, los tokens co
 
 ### Mapeo a esta SPA (`window.APP_CONFIG.theme` → CSS)
 
-Implementación canónica: `src/config/theme.ts` (`ETB_BRAND_HEX`, `ETB_THEME_COLORS`, `applyThemeCssVars`). Al arranque, `src/main.tsx` vuelca `theme.colors` a `:root`.
+Implementación: `src/config/theme.ts` (`ETB_BRAND_HEX`, `ETB_IDP_THEME_COLORS`, `applyThemeCssVars`). Al arranque, `src/main.tsx` vuelca `theme.colors` a `:root`.
 
-| `theme.colors.*` | Variable CSS | Hex default ETB | Nombre manual |
-|------------------|--------------|-----------------|---------------|
-| `primary` | `--brand-primary` | `#004c8f` | Azul ETB |
-| `secondary` | `--brand-secondary` | `#214780` | Azul Profundo ETB |
-| `accent` | `--brand-accent` | `#00ffff` | Azul Neón ETB |
-| `background` | `--brand-bg` | `#ffffff` | Blanco |
-| `text` | `--brand-text` | `#0c2a36` | Tono oscuro legible (derivado de paleta) |
-| `action` | `--brand-action` | `#d86055` | Salmón Pymes ETB (CTA / highlight; en piezas sólo B2B puede sustituirse por `#006ED0` Azul Medio Empresas) |
-| `textSecondary` | `--brand-text-secondary` | `#4a5f72` | Secundario UI (no es token nominal del manual; contraste con azules) |
+**Convención del login MiETB / Figma** (distinta de un folleto genérico donde “primary” sea siempre el Azul ETB `#004c8f`):
 
-Además se define `--brand-primary-rgb` a partir de `primary` para sombras y overlays en `src/index.css`.
+| `theme.colors.*` | Variable CSS | Hex default en repo | Relación con el manual |
+|--------------------|--------------|----------------------|-------------------------|
+| `primary` | `--brand-primary` | `#214780` | Azul Profundo ETB — títulos, hover de CTA |
+| `secondary` | `--brand-secondary` | `#0092bc` | Azul interacción (RGB 0,146,191 en paleta digital manual) — relleno botón principal, focos |
+| `accent` | `--brand-accent` | `#00E5FF` | Cercano a Azul Neón; acentos ligeros |
+| `background` | `--brand-bg` | `#F8F9FB` | Fondo app |
+| `text` | `--brand-text` | `#080707` | Texto principal |
+| `textSecondary` | `--brand-text-secondary` | `#515151` | Texto secundario UI |
+| `action` | `--brand-action` | `#d86055` | Salmón Pymes — enlaces/CTA de contraste; B2B: opcional `#006ED0` |
+| `cardBackground` | `--brand-card-bg` | `#fafafa` | Superficie tarjeta |
+
+También: `--brand-primary-rgb`, `--brand-secondary-rgb` (derivados para `rgba(...)` en sombras), `--brand-error` / `--brand-error-surface` (errores UI; no son claim de marca).
+
+**Gobernanza:** si el manual oficial cambia hex o nomenclatura, actualizar `ETB_BRAND_HEX` / `ETB_IDP_THEME_COLORS` y este párrafo en el mismo PR.
 
 ---
 

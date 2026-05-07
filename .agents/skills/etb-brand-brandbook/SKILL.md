@@ -17,7 +17,7 @@ user-invocable: true
 Antes de proponer o editar **estilos**, **tokens**, **temas**, **copys visibles**, **layouts con marca**, o **componentes** que puedan llevar marca ETB (o cuando el usuario indique despliegue/pantalla institucional ETB):
 
 1. Leer el extracto consolidado **[reference/brandbook-extract.md](reference/brandbook-extract.md)** (fuente única en repo del manual; no depender del PDF en línea base).
-2. Mantener compatibilidad con la arquitectura del producto: la SPA sigue siendo configurada por `window.APP_CONFIG` y [DESIGN.md](/DESIGN.md) / [README.md](/README.md). Los hex por defecto y el volcado a variables CSS están en [`src/config/theme.ts`](/src/config/theme.ts) (`ETB_BRAND_HEX`, `ETB_THEME_COLORS`, `applyThemeCssVars`). El brandbook orienta narrativa, uso de logo/claim y paleta; el mapeo técnico a `theme.colors` ↔ `--brand-*` está resumido al inicio de [reference/brandbook-extract.md](reference/brandbook-extract.md).
+2. Mantener compatibilidad con la arquitectura del producto: la SPA sigue siendo configurada por `window.APP_CONFIG` y [DESIGN.md](/DESIGN.md) / [README.md](/README.md). Los hex por defecto y el volcado a variables CSS están en [`src/config/theme.ts`](/src/config/theme.ts) (`ETB_BRAND_HEX`, `ETB_IDP_THEME_COLORS`, `applyThemeCssVars`). El brandbook orienta narrativa, uso de logo/claim y paleta; el mapeo técnico a `theme.colors` ↔ `--brand-*` está resumido al inicio de [reference/brandbook-extract.md](reference/brandbook-extract.md).
 3. No inventar hex/RGB/marketing sensible no listados en el extracto: si falta un token, usar el más cercano de la paleta corporativa definida ahí y documentar en el cambio por qué, o solicitar aclaración al usuario.
 
 ## Complementos (orden sugerido)
