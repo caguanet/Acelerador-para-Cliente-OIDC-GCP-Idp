@@ -7,6 +7,7 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 > **📚 Índice de Documentación:**
 >
 > *   [**docs/README.md**](docs/README.md): Índice completo de toda la documentación.
+> *   [**docs/guides/BRAND_ASSETS.md**](docs/guides/BRAND_ASSETS.md): Logos ETB en repo, mock y sincronización con el Manual de imagen (PDF).
 > *   [**CONFIGURACION-PASO-A-PASO.md**](docs/guides/CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
 > *   [**DEPLOY.md**](docs/guides/DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
 > *   [**TECH_README.md**](docs/architecture/TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
