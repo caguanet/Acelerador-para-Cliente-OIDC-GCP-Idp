@@ -10,7 +10,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+// Vite ya prioriza `.env.local`; Playwright debe leer lo mismo para E2E (TEST_USER_*, VITE_* en proceso Node).
+const root = path.resolve(__dirname);
+dotenv.config({ path: path.resolve(root, '.env') });
+dotenv.config({ path: path.resolve(root, '.env.local'), override: true });
 
 /**
  * See https://playwright.dev/docs/test-configuration
