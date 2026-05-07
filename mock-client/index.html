@@ -1,121 +1,446 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mock Client - OIDC Test</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f2f5; }
-        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        .btn { background-color: #4285F4; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 20px; }
-        .btn:hover { background-color: #357ae8; }
-        .token-box { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; border-radius: 4px; overflow-wrap: break-word; font-family: monospace; font-size: 12px; text-align: left; margin-top: 20px; max-height: 200px; overflow-y: auto; }
-        h1 { color: #333; }
-        p { color: #666; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Simulación local de aplicación partner OIDC — no es el sitio institucional de ETB.">
+  <title>Mock Client · Simulación OIDC (estética corporativa ETB)</title>
+  <style>
+    /* Tokens alineados al extracto ETB en repo (.agents/skills/etb-brand-brandbook) — solo simulación visual */
+    :root {
+      --etb-primary: #004c8f;
+      --etb-deep: #214780;
+      --etb-accent: #00c8e8;
+      --etb-bg: #f4f7fb;
+      --etb-surface: #ffffff;
+      --etb-text: #0c2a36;
+      --etb-muted: #4a5f72;
+      --etb-cta: #006ed0;
+      --etb-highlight: #d86055;
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --shadow-soft: 0 4px 24px rgba(0, 76, 143, 0.08), 0 12px 40px rgba(12, 42, 54, 0.06);
+      --header-h: 64px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--etb-bg);
+      color: var(--etb-text);
+      line-height: 1.5;
+    }
+
+    /* Franja superior estilo portal corporativo */
+    .top-bar {
+      height: var(--header-h);
+      background: linear-gradient(90deg, var(--etb-deep) 0%, var(--etb-primary) 45%, #0a5ba8 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.25rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+
+    .brand-text strong {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-text span {
+      font-size: 0.7rem;
+      opacity: 0.88;
+      font-weight: 500;
+    }
+
+    .pill-env {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.35);
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+    }
+
+    /* Fondo con malla sutil (sin imagen externa) */
+    .shell {
+      min-height: calc(100vh - var(--header-h));
+      background:
+        radial-gradient(ellipse 120% 80% at 0% 0%, rgba(0, 200, 232, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse 80% 60% at 100% 20%, rgba(0, 76, 143, 0.08) 0%, transparent 45%),
+        var(--etb-bg);
+    }
+
+    .layout {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    @media (min-width: 900px) {
+      .layout {
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 3rem;
+        padding: 3rem 1.5rem 4rem;
+      }
+    }
+
+    .hero h1 {
+      font-size: clamp(1.75rem, 4vw, 2.35rem);
+      font-weight: 700;
+      color: var(--etb-deep);
+      margin: 0 0 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .hero .lead {
+      font-size: 1.05rem;
+      color: var(--etb-muted);
+      margin: 0 0 1.5rem;
+      max-width: 36ch;
+    }
+
+    .hero-quote {
+      border-left: 4px solid var(--etb-accent);
+      padding-left: 1rem;
+      margin: 0;
+      font-size: 0.95rem;
+      color: var(--etb-muted);
+      font-style: italic;
+    }
+
+    .hero-quote em {
+      color: var(--etb-primary);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    .hero-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1.75rem;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--etb-primary);
+      border: 1px solid rgba(0, 76, 143, 0.15);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    /* Tarjeta principal */
+    .card {
+      background: var(--etb-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(0, 76, 143, 0.08);
+      overflow: hidden;
+    }
+
+    .card-head {
+      background: linear-gradient(135deg, var(--etb-primary), var(--etb-deep));
+      color: #fff;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .card-head p {
+      margin: 0.35rem 0 0;
+      font-size: 0.8rem;
+      opacity: 0.9;
+    }
+
+    .card-body {
+      padding: 1.5rem 1.5rem 1.75rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: 0.5rem;
+      padding: 0.9rem 1.25rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--etb-cta) 0%, #0058b8 100%);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(0, 110, 208, 0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 110, 208, 0.4);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-logout {
+      margin-top: 1rem;
+      background: #fff;
+      color: var(--etb-highlight);
+      border: 2px solid rgba(216, 96, 85, 0.45);
+    }
+
+    .btn-logout:hover {
+      background: rgba(216, 96, 85, 0.06);
+    }
+
+    .hint {
+      margin-top: 1rem;
+      font-size: 0.75rem;
+      color: var(--etb-muted);
+      text-align: center;
+    }
+
+    #token-section {
+      display: none;
+    }
+
+    #token-section .card-body {
+      padding-top: 1rem;
+    }
+
+    .success-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 0.75rem;
+      background: rgba(0, 200, 232, 0.15);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+
+    .token-box {
+      background: linear-gradient(180deg, #f8fafc 0%, #f0f4f8 100%);
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      border-radius: var(--radius-md);
+      padding: 0.85rem 1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      max-height: 220px;
+      overflow-y: auto;
+      text-align: left;
+      color: var(--etb-text);
+      margin-top: 0.75rem;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1rem 1.25rem 2rem;
+      font-size: 0.72rem;
+      color: var(--etb-muted);
+      max-width: 52ch;
+      margin: 0 auto;
+    }
+
+    footer strong {
+      color: var(--etb-deep);
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Mock Client App</h1>
-        <p>Simulation of a Partner App (Port 3000)</p>
-        
-        <div id="login-section">
-            <button id="login-btn" class="btn">Login with Identity Provider</button>
-        </div>
-
-        <div id="token-section" style="display: none;">
-            <h3>✅ Authenticated</h3>
-            <p>ID Token received via OIDC:</p>
-            <div id="token-display" class="token-box"></div>
-            <button id="logout-btn" class="btn" style="background-color: #dc3545;">Logout (Local)</button>
-        </div>
+  <header class="top-bar" role="banner">
+    <div class="brand">
+      <!-- Marca abstracta genérica (no reproduce logotipo oficial) -->
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="40" height="40" rx="10" fill="rgba(255,255,255,0.12)"/>
+        <path d="M8 26c4-8 10-14 20-16" stroke="#7fdfff" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M10 14c6 2 12 8 14 18" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M22 8c6 6 8 14 6 22" stroke="rgba(0,232,255,0.85)" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-text">
+        <strong>Simulación · App partner</strong>
+        <span>Flujo OIDC con Identity Provider local</span>
+      </div>
     </div>
+    <span class="pill-env" title="No es producción">Entorno local</span>
+  </header>
 
-    <script src="/config.js"></script>
-    <script>
-        // Dynamic Config with Local Fallback
-        const CONFIG = window.APP_CONFIG || {};
-        
-        const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
-        const CLIENT_ID = 'mock-client-app';
-        // If deployed, REDIRECT_URI should be the current page
-        const REDIRECT_URI = CONFIG.MOCK_CLIENT_URL || window.location.origin; 
+  <div class="shell">
+    <div class="layout">
+      <section class="hero" aria-labelledby="hero-title">
+        <h1 id="hero-title">Acceso federado de prueba</h1>
+        <p class="lead">
+          Esta pantalla imita una aplicación de socio que delega el inicio de sesión al proveedor de identidad (puerto 5173).
+          Úsala solo en desarrollo para validar redirecciones y tokens.
+        </p>
+        <blockquote class="hero-quote">
+          Inspiración visual institucional — tono cercano y claro, como en la comunicación ETB:
+          <em>Serás</em> lo que <em>creas</em>.
+        </blockquote>
+        <div class="hero-badges" aria-label="Características simuladas">
+          <span class="badge">OIDC · implicit</span>
+          <span class="badge">Puerto 3000</span>
+          <span class="badge">Mock seguro</span>
+        </div>
+      </section>
 
-        const loginBtn = document.getElementById('login-btn');
-        const logoutBtn = document.getElementById('logout-btn');
-        const tokenSection = document.getElementById('token-section');
-        const loginSection = document.getElementById('login-section');
-        const tokenDisplay = document.getElementById('token-display');
+      <div class="card" aria-labelledby="card-title">
+        <div class="card-head">
+          <h2 id="card-title">Ingreso al ecosistema</h2>
+          <p>Será redirigido al IdP para autenticarse y volverá con el <code style="opacity:.95">id_token</code> en el fragmento de URL.</p>
+        </div>
+        <div class="card-body">
+          <div id="login-section">
+            <button type="button" id="login-btn" class="btn btn-primary">
+              <span>Iniciar sesión con el proveedor de identidad</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6"/>
+              </svg>
+            </button>
+            <p class="hint">Solo simulación · No consume servicios reales de facturación ni soporte.</p>
+          </div>
 
-        // Parse JWT payload (base64url) to get exp (expiration time in seconds)
-        function getTokenExpiration(token) {
-            try {
-                const parts = token.split('.');
-                if (parts.length !== 3) return null;
-                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-                return payload.exp ? payload.exp * 1000 : null; // ms
-            } catch (e) {
-                return null;
-            }
-        }
+          <div id="token-section">
+            <div class="success-icon" aria-hidden="true">✓</div>
+            <p style="margin:0; text-align:center; font-weight:600; color:var(--etb-deep);">Sesión simulada activa</p>
+            <p style="margin:0.35rem 0 0; text-align:center; font-size:0.85rem; color:var(--etb-muted);">Token recibido (JWT):</p>
+            <div id="token-display" class="token-box" role="region" aria-label="Contenido del token"></div>
+            <button type="button" id="logout-btn" class="btn btn-logout">Cerrar sesión (solo este mock)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // Check for Token or Error in Hash (OIDC Callback)
-        function checkHash() {
-            const hash = window.location.hash;
-            if (hash && hash.includes('id_token=')) {
-                const token = hash.split('id_token=')[1].split('&')[0];
-                showToken(token);
-                scheduleSilentRefresh(token);
-                window.history.replaceState(null, '', window.location.pathname);
-            } else if (hash && hash.includes('error=login_required')) {
-                sessionStorage.removeItem('mock_token');
-                clearTimeout(window._refreshTimeout);
-                location.reload();
-            }
-        }
+  <footer>
+    <strong>Aviso:</strong> página de laboratorio con estética inspirada en la identidad ETB del brandbook en repositorio.
+    No es el portal público ni implica relación comercial. Puerto <code>3000</code> · IdP típico <code>5173</code>.
+  </footer>
 
-        let refreshTimeoutId = null;
-        function scheduleSilentRefresh(token) {
-            clearTimeout(refreshTimeoutId);
-            const expMs = getTokenExpiration(token);
-            if (!expMs) return;
-            const refreshBeforeMs = 10 * 60 * 1000; // refresh 10 min before expiry
-            const delay = Math.max(0, expMs - Date.now() - refreshBeforeMs);
-            refreshTimeoutId = setTimeout(() => {
-                const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=refresh&prompt=none`;
-                window.location.href = authUrl;
-            }, delay);
-            window._refreshTimeout = refreshTimeoutId;
-        }
+  <script src="/config.js"></script>
+  <script>
+    const CONFIG = window.APP_CONFIG || {};
+    const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
+    const CLIENT_ID = 'mock-client-app';
+    const REDIRECT_URI = CONFIG.MOCK_CLIENT_URL || window.location.origin;
 
-        function showToken(token) {
-            tokenDisplay.textContent = token;
-            loginSection.style.display = 'none';
-            tokenSection.style.display = 'block';
-            sessionStorage.setItem('mock_token', token);
-        }
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const tokenSection = document.getElementById('token-section');
+    const loginSection = document.getElementById('login-section');
+    const tokenDisplay = document.getElementById('token-display');
 
-        function logout() {
-            sessionStorage.removeItem('mock_token');
-            location.reload();
-        }
+    function getTokenExpiration(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload.exp ? payload.exp * 1000 : null;
+      } catch (e) {
+        return null;
+      }
+    }
 
-        // Check Session
-        const storedToken = sessionStorage.getItem('mock_token');
-        if (storedToken) {
-            showToken(storedToken);
-            scheduleSilentRefresh(storedToken);
-        } else {
-            checkHash();
-        }
+    function checkHash() {
+      const hash = window.location.hash;
+      if (hash && hash.includes('id_token=')) {
+        const token = hash.split('id_token=')[1].split('&')[0];
+        showToken(token);
+        scheduleSilentRefresh(token);
+        window.history.replaceState(null, '', window.location.pathname);
+      } else if (hash && hash.includes('error=login_required')) {
+        sessionStorage.removeItem('mock_token');
+        clearTimeout(window._refreshTimeout);
+        location.reload();
+      }
+    }
 
-        loginBtn.addEventListener('click', () => {
-            // Initiate OIDC Implicit Flow
-            const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=random_state_string`;
-            window.location.href = authUrl;
-        });
+    let refreshTimeoutId = null;
+    function scheduleSilentRefresh(token) {
+      clearTimeout(refreshTimeoutId);
+      const expMs = getTokenExpiration(token);
+      if (!expMs) return;
+      const refreshBeforeMs = 10 * 60 * 1000;
+      const delay = Math.max(0, expMs - Date.now() - refreshBeforeMs);
+      refreshTimeoutId = setTimeout(() => {
+        const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=refresh&prompt=none`;
+        window.location.href = authUrl;
+      }, delay);
+      window._refreshTimeout = refreshTimeoutId;
+    }
 
-        logoutBtn.addEventListener('click', logout);
-    </script>
+    function showToken(token) {
+      tokenDisplay.textContent = token;
+      loginSection.style.display = 'none';
+      tokenSection.style.display = 'block';
+      sessionStorage.setItem('mock_token', token);
+    }
+
+    function logout() {
+      sessionStorage.removeItem('mock_token');
+      location.reload();
+    }
+
+    const storedToken = sessionStorage.getItem('mock_token');
+    if (storedToken) {
+      showToken(storedToken);
+      scheduleSilentRefresh(storedToken);
+    } else {
+      checkHash();
+    }
+
+    loginBtn.addEventListener('click', () => {
+      const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=random_state_string`;
+      window.location.href = authUrl;
+    });
+
+    logoutBtn.addEventListener('click', logout);
+  </script>
 </body>
 </html>
