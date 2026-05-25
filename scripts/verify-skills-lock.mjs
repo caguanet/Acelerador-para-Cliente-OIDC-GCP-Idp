@@ -40,7 +40,7 @@ for (const id of Object.keys(lock.skills)) {
   const expected = lock.skills[id].computedHash;
   if (actual !== expected) {
     console.error(
-      `[verify-skills-lock] Hash distinto para "${id}"\n  esperado: ${expected}\n  actual:   ${actual}\n  Ejecute: npm run skills:refresh-lock`,
+      `[verify-skills-lock] Hash distinto para "${id}"\n  esperado: ${expected}\n  actual:   ${actual}\n  Ejecute: pnpm run skills:refresh-lock`,
     );
     ok = false;
   }

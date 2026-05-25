@@ -19,6 +19,11 @@ dist-mock/
 *.pem
 *.key
 google-service-account.json
+# Service accounts y llaves de Firebase/GCP — nunca subir al repo
+*service-account*.json
+*service_account*.json
+*firebase*key*.json
+tmp-firebase-key.json
 
 # --- 4. Testing & Reports ---
 coverage/

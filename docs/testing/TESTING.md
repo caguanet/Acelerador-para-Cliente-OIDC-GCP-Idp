@@ -2,13 +2,13 @@
 
 **Verification strategies for the Identity Provider.**
 
-## 1. Unit Tests (`npm run test`)
+## 1. Unit Tests (`pnpm run test`)
 Validates the core business logic in `src/App.tsx` and utility functions.
 *   **OIDC Parameter Parsing**: Ensures `redirect_uri` and `client_id` are correctly extracted.
 *   **Whitelist Validation**: Verifies that invalid `redirect_uri`s are rejected.
 *   **Mode Switching**: Confirms the app enters "IDP Mode" when OIDC params are present.
 
-## 2. End-to-End Tests (`npx playwright test`)
+## 2. End-to-End Tests (`pnpm exec playwright test`)
 Simulates a real user logging in through the IDP using a **Deterministic Registration Pattern**.
 
 ### Scenarios Covered
@@ -17,11 +17,10 @@ Simulates a real user logging in through the IDP using a **Deterministic Registr
     *   **Strategy**: Generate a unique email (`borrame{timestamp}@dummymail.com`), navigate to IdP, **register immediately**, and verify the auth token is received by the mock client.
     *   **Why Registration?**: Eliminates "User Not Found" errors and race conditions associated with checking for existence.
 
-2.  **Happy Path (Existing User - Login)**:
-    *   **Goal**: Verify login for a pre-existing user (configured in `.env`).
-    *   **Strategy**: Use `TEST_USER_EMAIL` and `TEST_USER_PASSWORD` to log in directly.
-    *   **Pre-requisite**: The user defined in `.env` MUST exist in the Firebase Auth project.
-    *   **Opt-in**: el spec solo ejecuta este caso si además defines `E2E_AUTH_LOGIN=1` (o `true`) al lanzar Playwright, para no fallar en entornos sin usuario real.
+2.  **Happy Path (Email Link Login)**:
+    *   **Goal**: Verify login with the Firebase Email Link/passwordless entry point.
+    *   **Strategy**: Use a registered test email and complete the Identity Platform email-link flow, then verify the mock client receives an auth token.
+    *   **Opt-in**: el spec solo ejecuta este caso si defines `E2E_AUTH_LOGIN=1` (o `true`) al lanzar Playwright, porque requiere proyecto Firebase y plantilla de correo configurados.
 
 3.  **Security Rejection**:
     *   **Goal**: Verify that the IdP blocks unauthorized clients/redirects.
@@ -31,29 +30,29 @@ Simulates a real user logging in through the IDP using a **Deterministic Registr
 ### Running Tests
 ```bash
 # 1. Install Browsers (First Time)
-npx playwright install
+pnpm exec playwright install
 
 # 2. Run All Tests (Headless)
-npx playwright test
+pnpm exec playwright test
 
 # 3. UI Mode (Debug)
-npx playwright test --ui
+pnpm exec playwright test --ui
 ```
 
 ### 👻 Troubleshooting Errors
 
-*   **`auth/requests-from-referer-blocked`**: Inicia sesión en la consola de GCP y añade `http://localhost:5173/*` (o la URL de tu entorno) a los **HTTP Referrers** de tu API Key.
+*   **`auth/requests-from-referer-blocked` / `API_KEY_HTTP_REFERRER_BLOCKED`**: Inicia sesión en la consola de GCP y añade `http://localhost:5173/*`, `http://localhost:3000/*` y `https://<PROJECT_ID>.firebaseapp.com/*` (o la URL de tu entorno) a los **HTTP Referrers** de tu API Key. Para email link/passwordless, el action handler corre primero desde `firebaseapp.com`, no desde `localhost`.
 *   **`Error de API Restrictions`**: Verifica que tu API Key permita el acceso a `Identity Toolkit API` y `Token Service API`.
 
 ### 👻 Automated Cleanup (Safe Mode)
 The project uses a **Clean-on-Start** strategy (`scripts/cleanup-ports.mjs`).
-*   **Automatic**: Runs automatically before `npm run dev:simulation` or `npx playwright test`.
+*   **Automatic**: Runs automatically before `pnpm run dev:simulation` or `pnpm exec playwright test`.
 *   **Surgical**: Only kills processes on ports **3000** and **5173**. It does *not* kill your other Node work.
 *   **Retry-Safe**: If a test crashes, just re-run it. The new run will self-heal the environment.
 
 ### CI en GitHub Actions
-*   **`ci.yml`** (automático en push/PR): `npm ci`, `node scripts/verify-skills-lock.mjs` (sin carpeta `.agents/skills` en el checkout sólo avisa; variable de repositorio `STRICT_SKILLS_LOCK=true` fuerza fallo si versiona skills), `npm run verify:regression` (build + Vitest), `npm audit --audit-level=critical` informativo.
-*   **`e2e-manual.yml`** (*workflow_dispatch*): Playwright sólo Chromium (`npm run test:e2e:ci`). Requiere secretos `VITE_FIREBASE_*` (y opcionalmente `TEST_USER_*`) porque sin proyecto Firebase la UI E2E no es determinística en CI.
+*   **`ci.yml`** (automático en push/PR): `pnpm install --frozen-lockfile`, `node scripts/verify-skills-lock.mjs` (sin carpeta `.agents/skills` en el checkout sólo avisa; variable de repositorio `STRICT_SKILLS_LOCK=true` fuerza fallo si versiona skills), `pnpm run verify:regression` (build + Vitest), `pnpm audit --audit-level=critical` informativo.
+*   **`e2e-manual.yml`** (*workflow_dispatch*): Playwright sólo Chromium (`pnpm run test:e2e:ci`). Requiere secretos `VITE_FIREBASE_*` (y opcionalmente `TEST_USER_*`) porque sin proyecto Firebase la UI E2E no es determinística en CI.
 
 ### 📦 Git Tracking
 New tests (e.g., `tests/e2e/specs/*.spec.ts`) are **not automatically added** to the repository.
@@ -70,7 +69,7 @@ Use the included **Mock Client** to simulate a real OIDC Relying Party. This run
 
 1.  **Start the Simulation**:
     ```bash
-    npm run dev:simulation
+    pnpm run dev:simulation
     ```
 2.  **Access the Client**:
     Open [http://localhost:3000](http://localhost:3000).
@@ -84,7 +83,7 @@ Use the included **Mock Client** to simulate a real OIDC Relying Party. This run
 ### 3.2. Scenario B: Raw URL (Sanity Check)
 To test the flow manually without the mock client:
 
-1.  Start the IDP: `npm run dev` (http://localhost:5173).
+1.  Start the IDP: `pnpm run dev` (http://localhost:5173).
 2.  Construct a URL (ensure `https://example.com` is in `VITE_ALLOWED_ORIGINS`):
     ```
     http://localhost:5173/?redirect_uri=https://example.com&client_id=test-client&state=123
@@ -97,11 +96,11 @@ To test the flow manually without the mock client:
 
 ### Checklist manual (DevTools → dimensiones o dispositivo real)
 
-Con `npm run dev:simulation` (IdP `5173` + mock `3000`), revisar en **320**, **375**, **414** y **768** px de ancho:
+Con `pnpm run dev:simulation` (IdP `5173` + mock `3000`), revisar en **320**, **375**, **414** y **768** px de ancho:
 
 | Pantalla | Qué comprobar |
 |----------|----------------|
-| **IdP** (`5173` con `redirect_uri` del mock) | Título de login visible; tarjeta centrada sin barra horizontal; pestañas Contraseña / OTP legibles; **bloque “Descarga y conoce la app Mi ETB”** con tres enlaces a tiendas bajo la tarjeta; claim “Serás lo que creas” al pie. |
+| **IdP** (`5173` con `redirect_uri` del mock) | Título de login visible; tarjeta centrada sin barra horizontal; campo de correo visible; CTA de enlace de acceso; accesos sociales visibles; recuperación de contraseña accesible; **bloque “Descarga y conoce la app Mi ETB”** con tres enlaces a tiendas bajo la tarjeta; claim “Serás lo que creas” al pie. |
 | **Mock cliente** (`3000`) | Botón principal visible; hero y tarjeta sin solape; token (tras login) con scroll si es largo. |
 
 ### Automatizado
@@ -109,5 +108,5 @@ Con `npm run dev:simulation` (IdP `5173` + mock `3000`), revisar en **320**, **3
 `tests/e2e/specs/viewport-layout.spec.ts` recorre esos anchos en IdP y mock y comprueba que la tarjeta IdP quepa en el viewport y que el bloque móvil de tiendas muestre tres badges; en **1280px** comprueba que ese bloque esté oculto (paridad con desktop PNG).
 
 ```bash
-npx playwright test tests/e2e/specs/viewport-layout.spec.ts --project=chromium
+pnpm exec playwright test tests/e2e/specs/viewport-layout.spec.ts --project=chromium
 ```

@@ -10,7 +10,7 @@ Para instrucciones detalladas con capturas de pantalla y navegación exacta en G
 | Herramienta | Verificar |
 | ----------- | --------- |
 | Node.js v18+ | `node -v` |
-| npm | `npm -v` |
+| pnpm | `pnpm -v` |
 | Git | `git --version` |
 | Proyecto GCP con Identity Platform habilitado | [Guía completa → A.2](CONFIGURACION-PASO-A-PASO.md) |
 
@@ -20,13 +20,16 @@ Para instrucciones detalladas con capturas de pantalla y navegación exacta en G
 
 Antes de ejecutar el proyecto localmente, configure la API Key en GCP (`APIs & Services > Credentials`):
 
-1. **HTTP Referrers:** Agregue `http://localhost:5173/*` y `http://localhost:3000/*`
+1. **HTTP Referrers:** Agregue `http://localhost:5173/*`, `http://localhost:3000/*` y el dominio de Auth `https://<PROJECT_ID>.firebaseapp.com/*`
 2. **API Restrictions:** Habilite explícitamente:
    - `Identity Toolkit API` (login/registro)
    - `Token Service API` (emisión del `id_token`)
 
 > [!WARNING]
 > Sin **Token Service API**, el IdP no puede emitir el `id_token` final aunque el login parezca exitoso.
+
+> [!IMPORTANT]
+> Los enlaces passwordless/email action de Firebase se abren primero en `https://<PROJECT_ID>.firebaseapp.com/__/auth/action`. Si la API Key solo permite `localhost`, Firebase mostrará `API_KEY_HTTP_REFERRER_BLOCKED` para el referrer `https://<PROJECT_ID>.firebaseapp.com/`.
 
 → Ver pasos detallados en [CONFIGURACION-PASO-A-PASO.md § A.3](CONFIGURACION-PASO-A-PASO.md)
 
@@ -37,7 +40,7 @@ Antes de ejecutar el proyecto localmente, configure la API Key en GCP (`APIs & S
 ```bash
 git clone <URL_DEL_REPOSITORIO>
 cd Acelerador-para-Cliente-OIDC-GCP-Idp
-npm install
+pnpm install
 ```
 
 Crear `.env.local` en la raíz:
@@ -53,7 +56,7 @@ TEST_USER_EMAIL=usuario-prueba@ejemplo.com
 TEST_USER_PASSWORD=contraseña-segura
 ```
 
-El archivo está en `.gitignore` (patrón `.env.*`); no lo subas al repositorio. **Vite** carga `.env.local` en `npm run dev` / build. **Playwright** también lo carga (después de `.env`, con prioridad para claves repetidas) para `npm run test:e2e`.
+El archivo está en `.gitignore` (patrón `.env.*`); no lo subas al repositorio. **Vite** carga `.env.local` en `pnpm run dev` / build. **Playwright** también lo carga (después de `.env`, con prioridad para claves repetidas) para `pnpm run test:e2e`.
 
 → Ver cómo obtener cada valor en [CONFIGURACION-PASO-A-PASO.md § A.5](CONFIGURACION-PASO-A-PASO.md)
 
@@ -63,15 +66,15 @@ El archivo está en `.gitignore` (patrón `.env.*`); no lo subas al repositorio.
 
 | Comando | Descripción |
 | ------- | ----------- |
-| `npm run dev` | IdP en `http://localhost:5173` |
-| `npm run dev:simulation` | IdP (5173) + Mock Client (3000) — requerido para E2E |
-| `npm run build` | Build de producción |
-| `npm test` | Pruebas unitarias (Vitest) |
-| `npm run test -- --watch` | Unitarias en modo watch |
-| `npm run test:e2e` | E2E con Playwright (requiere `dev:simulation`) |
-| `npm run test:e2e:ui` | E2E con interfaz visual para depuración |
+| `pnpm run dev` | IdP en `http://localhost:5173` |
+| `pnpm run dev:simulation` | IdP (5173) + Mock Client (3000) — requerido para E2E |
+| `pnpm run build` | Build de producción |
+| `pnpm test` | Pruebas unitarias (Vitest) |
+| `pnpm run test -- --watch` | Unitarias en modo watch |
+| `pnpm run test:e2e` | E2E con Playwright (requiere `dev:simulation`) |
+| `pnpm run test:e2e:ui` | E2E con interfaz visual para depuración |
 
-> Primera vez con Playwright: `npx playwright install`
+> Primera vez con Playwright: `pnpm exec playwright install`
 
 ---
 

@@ -6,25 +6,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Local development (IdP only, port 5173)
-npm run dev
+pnpm run dev
 
 # Full simulation (IdP + mock client on port 3000) — required for E2E tests
-npm run dev:simulation
+pnpm run dev:simulation
 
 # Build for production
-npm run build
+pnpm run build
 
 # Unit tests (Vitest)
-npm test
+pnpm test
 
 # E2E tests (Playwright, requires dev:simulation running or will auto-start it)
-npm run test:e2e
+pnpm run test:e2e
 
 # Interactive Playwright UI
-npm run test:e2e:ui
+pnpm run test:e2e:ui
 ```
 
 ## Architecture
@@ -63,7 +63,7 @@ There are two layers:
 
 **Runtime (no rebuild needed):** Modify `window.APP_CONFIG` in `public/config.js` — controls `theme`, `firebase` credentials, and `allowedOrigins`. In development, you can also paste overrides directly in the browser console.
 
-**Build-time (requires `npm run build`):** Edit CSS variables in `src/index.css`, replace `public/branding/default/logo.png`, or set `VITE_APP_BRAND_NAME` / `VITE_APP_LOGO_URL` environment variables.
+**Build-time (requires `pnpm run build`):** Edit CSS variables in `src/index.css`, replace `public/branding/default/logo.png`, or set `VITE_APP_BRAND_NAME` / `VITE_APP_LOGO_URL` environment variables.
 
 ### Environment Variables
 

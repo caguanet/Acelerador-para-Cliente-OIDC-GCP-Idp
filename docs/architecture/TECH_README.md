@@ -25,17 +25,15 @@ Muestra la relación entre los componentes principales de React y la configuraci
 classDiagram
     class App {
         +OIDCParams oidcParams
-        +LoginMode loginMode
+        +AuthView authView
         +handleLoginSuccess()
         +isValidOrigin()
     }
-    class BrandLoginForm {
-        +onSignInSuccess()
-    }
-    class OtpVerificationForm {
-        +onSendCode()
-        +onVerifyCode()
-        +onSuccess()
+    class PasswordlessLoginForm {
+        +sendSignInLinkToEmail()
+        +signInWithEmailLink()
+        +sendPasswordResetEmail()
+        +signInWithPopup()
         +onGoToRegister()
     }
     class ThemeConfig {
@@ -55,13 +53,46 @@ classDiagram
         +object theme
     }
 
-    App *-- BrandLoginForm : Renders (loginMode=password)
-    App *-- OtpVerificationForm : Renders (loginMode=otp)
+    App *-- PasswordlessLoginForm : Renders email link login
+    App *-- RegisterForm : Renders registration
     App ..> RuntimeConfig : Reads window.APP_CONFIG
-    BrandLoginForm ..> ThemeConfig : Styles
+    PasswordlessLoginForm ..> ThemeConfig : Styles
 ```
 
-> **Modos de login:** `App` alterna entre `BrandLoginForm` (usuario/contraseña) y `OtpVerificationForm` (código OTP de un solo uso) mediante el estado `loginMode`. El toggle se muestra al usuario como pestañas "Contraseña / Código OTP".
+> **Login principal:** `App` muestra `PasswordlessLoginForm` con acceso por correo mediante Firebase Email Link/passwordless (`sendSignInLinkToEmail` y `signInWithEmailLink`). El mismo micrositio permite recuperación de contraseña con `sendPasswordResetEmail` para servicios externos que usan la contraseña creada durante el registro ETB. El OTP corto queda reservado para registro/alta digital ETB o una fase futura con BFF, no para el login principal del IdP.
+
+### Mapa De Funcionalidades De Autenticación
+
+```mermaid
+flowchart TD
+    U["Usuario final"] --> IDP["Micrositio IdP"]
+
+    IDP --> EL["Login email link/passwordless"]
+    EL --> EL1["Ingresa correo"]
+    EL1 --> EL2["Firebase envía enlace seguro"]
+    EL2 --> EL3["signInWithEmailLink"]
+    EL3 --> OIDC["Emisión OIDC implicit<br/>redirect_uri#id_token"]
+
+    IDP --> REC["Recuperación de contraseña"]
+    REC --> REC1["Ingresa correo"]
+    REC1 --> REC2["sendPasswordResetEmail"]
+    REC2 --> REC3["Define nueva contraseña<br/>para servicios externos/API"]
+
+    IDP --> SOC["Google / Apple / Facebook"]
+    SOC --> SOC1{"Cuenta social<br/>validada o vinculada?"}
+    SOC1 -- "Sí" --> OIDC
+    SOC1 -- "No" --> REG["Registro ETB obligatorio"]
+
+    IDP --> REG
+    REG --> HOG["Hogares"]
+    REG --> MIP["MiPymes"]
+    HOG --> VAL["Validación ETB + OTP de registro"]
+    MIP --> VAL
+    VAL --> BFF["BFF / MuleSoft / MS-4"]
+    BFF --> GCP["Identity Platform<br/>usuario + contraseña + claims"]
+    GCP --> LINK["Vinculación social post-registro<br/>si aplica"]
+    LINK --> OIDC
+```
 
 ## 3. 🔄 Diagramas de Secuencia (Casos de Uso)
 
@@ -80,15 +111,64 @@ sequenceDiagram
     Client->>IdP: Redirección OIDC (client_id, redirect_uri)
     IdP->>IdP: Validar redirect_uri (Seguridad)
     IdP->>User: Mostrar Login Modal
-    User->>IdP: Ingresa Credenciales
-    IdP->>Firebase: signInWithEmailAndPassword()
+    User->>IdP: Ingresa correo
+    IdP->>Firebase: sendSignInLinkToEmail()
+    Firebase-->>User: Envia enlace seguro de acceso
+    User->>IdP: Abre enlace de acceso
+    IdP->>Firebase: signInWithEmailLink()
     Firebase-->>IdP: Retorna ID Token (JWT)
     IdP->>Client: Redirección con #id_token=...
     Client->>Client: Validar Token y Crear Sesión
     Client-->>User: Acceso Permitido
 ```
 
-### B. Intento de Phishing / Redirección No Autorizada (Seguridad)
+### B. Flujo Integral De Funcionalidades Del IdP
+
+```mermaid
+flowchart TD
+    START["Usuario llega al IdP"] --> PARAMS{"Trae client_id<br/>y redirect_uri?"}
+    PARAMS -- "No" --> STANDALONE["Vista standalone<br/>sin emisión OIDC"]
+    PARAMS -- "Sí" --> ORIGIN{"redirect_uri autorizado?"}
+    ORIGIN -- "No" --> BLOCK["Bloquear acceso<br/>sin renderizar login ni emitir token"]
+    ORIGIN -- "Sí" --> ENTRY["Mostrar micrositio IdP"]
+
+    ENTRY --> CHOICE{"Acción del usuario"}
+
+    CHOICE --> EMAIL["Login por correo"]
+    EMAIL --> SENDLINK["Enviar email link Firebase"]
+    SENDLINK --> OPENLINK["Usuario abre enlace"]
+    OPENLINK --> VALIDLINK{"Enlace válido<br/>y usuario habilitado?"}
+    VALIDLINK -- "Sí" --> TOKEN["Obtener id_token"]
+    VALIDLINK -- "No" --> EMAILERR["Mostrar error amigable<br/>o pedir nuevo enlace"]
+
+    CHOICE --> SOCIAL["Login con red social"]
+    SOCIAL --> SOCIALOK{"Proveedor vinculado<br/>o usuario ETB validado?"}
+    SOCIALOK -- "Sí" --> TOKEN
+    SOCIALOK -- "No" --> REGSTART["Iniciar registro ETB<br/>sin alta social libre"]
+
+    CHOICE --> REGISTER["Registro por formulario"]
+    REGISTER --> REGSTART
+    REGSTART --> CUSTOMER{"Tipo de cliente"}
+    CUSTOMER --> HOGARES["Hogares:<br/>documento + términos"]
+    CUSTOMER --> MIPYMES["MiPymes:<br/>NIT + representante"]
+    HOGARES --> OTP["OTP de registro ETB"]
+    MIPYMES --> OTP
+    OTP --> MS4["BFF valida OTP<br/>y ejecuta alta digital"]
+    MS4 --> CREATE["Crear/actualizar usuario<br/>con contraseña y claims"]
+    CREATE --> PENDING{"Registro inició<br/>desde red social?"}
+    PENDING -- "Sí" --> LINKSOC["Vincular proveedor social"]
+    PENDING -- "No" --> TOKEN
+    LINKSOC --> TOKEN
+
+    CHOICE --> RECOVERY["Recuperar contraseña"]
+    RECOVERY --> RESET["sendPasswordResetEmail"]
+    RESET --> RESETDONE["Usuario define nueva contraseña<br/>para servicios externos/API"]
+    RESETDONE --> ENTRY
+
+    TOKEN --> REDIRECT["Redirigir a redirect_uri#id_token=..."]
+```
+
+### C. Intento de Phishing / Redirección No Autorizada (Seguridad)
 
 Un atacante intenta engañar al usuario para que se loguee y enviar el token a un sitio malicioso.
 

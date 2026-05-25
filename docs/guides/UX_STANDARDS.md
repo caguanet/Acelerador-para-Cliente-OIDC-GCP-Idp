@@ -64,7 +64,7 @@ Todo cambio de UI debe cumplir:
 2. Sin exposición de detalles internos sensibles.
 3. Contraste y accesibilidad razonables.
 4. Sin regresión evidente de performance.
-5. Validación mínima ejecutada (`npm run test` como base).
+5. Validación mínima ejecutada (`pnpm run test` como base).
 
 ---
 

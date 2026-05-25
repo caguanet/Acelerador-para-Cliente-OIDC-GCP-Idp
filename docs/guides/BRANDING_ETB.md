@@ -77,7 +77,7 @@ Uso recomendado: sombras/overlays con `rgba(var(--brand-*-rgb), alpha)` en vez d
 Cuando se modifique branding ETB:
 
 1. Actualizar implementación (`theme.ts`, `index.css`, `config.js` si aplica).
-2. Ejecutar pruebas (`npm run test` mínimo).
+2. Ejecutar pruebas (`pnpm run test` mínimo).
 3. Actualizar documentación en `docs/` (esta guía + `BRAND_ASSETS.md`/`DEVELOPERS.md` si afecta operación).
 4. Sincronizar extracto para agentes:
    - `.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md`

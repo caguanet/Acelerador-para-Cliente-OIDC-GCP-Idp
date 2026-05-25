@@ -3,11 +3,11 @@
  *
  * Cross-platform Git hooks installer — Windows, macOS, Linux.
  * Run once manually:  node scripts/install-hooks.mjs
- * Auto-run on:        npm install  (via "prepare" lifecycle script)
+ * Auto-run on:        pnpm install  (via "prepare" lifecycle script)
  *
  * Installs Node.js-based hooks into .git/hooks/:
  *   - post-checkout  → clears Vite cache on branch switch
- *   - post-merge     → clears Vite cache when package-lock.json changes
+ *   - post-merge     → clears Vite cache when pnpm-lock.yaml changes
  *
  * Why Node.js hooks instead of shell scripts?
  *   Shell hooks (.sh) need bash — not guaranteed on Windows without Git Bash.
@@ -68,7 +68,7 @@ if (isBranchSwitch) {
 /**
  * post-merge
  * Fired by: git pull, git merge
- * Only wipes cache when package-lock.json was part of the merge — avoids
+ * Only wipes cache when pnpm-lock.yaml was part of the merge — avoids
  * unnecessary full rebuilds on unrelated merges.
  */
 const POST_MERGE = `#!/usr/bin/env node
@@ -84,7 +84,7 @@ try {
     'git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD',
     { encoding: 'utf-8' }
   );
-  lockfileChanged = changed.includes('package-lock.json');
+  lockfileChanged = changed.includes('pnpm-lock.yaml');
 } catch {
   // ORIG_HEAD may not exist on first-time clone merges — safe to skip.
 }
@@ -93,8 +93,8 @@ if (lockfileChanged) {
   const cache = resolve(process.cwd(), 'node_modules', '.vite');
   if (existsSync(cache)) {
     rmSync(cache, { recursive: true, force: true });
-    console.log('[git hook] package-lock.json changed in merge — Vite cache cleared. ✓');
-    console.log('[git hook] Tip: run npm install to sync any new/updated dependencies.');
+    console.log('[git hook] pnpm-lock.yaml changed in merge — Vite cache cleared. ✓');
+    console.log('[git hook] Tip: run pnpm install to sync any new/updated dependencies.');
   }
 }
 `;

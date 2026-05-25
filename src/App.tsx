@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { User, onAuthStateChanged } from "firebase/auth";
 import './index.css'
 import { auth } from './firebase'; // initializes Firebase before any component imports getAuth()
-import { BrandLoginForm } from './components/BrandLoginForm';
-import { OtpVerificationForm } from './components/OtpVerificationForm';
+import { PasswordlessLoginForm } from './components/PasswordlessLoginForm';
+import { RegisterForm } from './components/RegisterForm';
 import { StoreBadges } from './components/StoreBadges';
 import { themeConfig } from './config/theme';
 
-type LoginMode = 'password' | 'otp';
+type AuthView = 'login' | 'register';
 
 type OidcParams = {
   redirect_uri: string | null;
@@ -53,7 +53,7 @@ function loadOidcFromUrl(): { oidcParams: OidcParams; oidcError: string | null }
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [loginMode, setLoginMode] = useState<LoginMode>('password');
+  const [authView, setAuthView] = useState<AuthView>('login');
 
   const [{ oidcParams, oidcError }, setOidc] = useState(() => loadOidcFromUrl());
 
@@ -154,44 +154,15 @@ function App() {
             </div>
           ) : (
             <>
-              {/* Toggle: Contraseña / OTP */}
-              <div className="login-mode-tabs" role="tablist" aria-label="Método de acceso">
-                <button
-                  role="tab"
-                  aria-selected={loginMode === 'password'}
-                  className={`login-mode-tab${loginMode === 'password' ? ' login-mode-tab--active' : ''}`}
-                  onClick={() => setLoginMode('password')}
-                >
-                  Contraseña
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={loginMode === 'otp'}
-                  className={`login-mode-tab${loginMode === 'otp' ? ' login-mode-tab--active' : ''}`}
-                  onClick={() => setLoginMode('otp')}
-                >
-                  Código OTP
-                </button>
-              </div>
-
-              {loginMode === 'password' ? (
-                <BrandLoginForm onSignInSuccess={handleLoginSuccess} />
+              {authView === 'register' ? (
+                <RegisterForm
+                  onRegisterSuccess={handleLoginSuccess}
+                  onGoToLogin={() => setAuthView('login')}
+                />
               ) : (
-                <OtpVerificationForm
-                  onSendCode={async (email) => {
-                    await new Promise(r => setTimeout(r, 900));
-                    if (email !== 'pruebamietb@yopmail.com') {
-                      throw new Error('Correo no registrado en el sistema.');
-                    }
-                  }}
-                  onVerifyCode={async (email, code) => {
-                    await new Promise(r => setTimeout(r, 800));
-                    if (email !== 'pruebamietb@yopmail.com' || code !== '987654') {
-                      throw new Error('No fue posible autenticar tu usuario, por favor vuelve a intentarlo');
-                    }
-                  }}
-                  onSuccess={() => setLoggedIn(true)}
-                  onGoToRegister={() => setLoginMode('password')}
+                <PasswordlessLoginForm
+                  onSignInSuccess={handleLoginSuccess}
+                  onGoToRegister={() => setAuthView('register')}
                 />
               )}
 

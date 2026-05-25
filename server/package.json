@@ -4,11 +4,19 @@
   "description": "Static file server for ETB IDP",
   "main": "server.js",
   "type": "module",
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=11"
+  },
   "scripts": {
+    "preinstall": "node ../scripts/ensure-pnpm.mjs",
     "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.5.2",
+    "firebase-admin": "^13.10.0"
   }
 }

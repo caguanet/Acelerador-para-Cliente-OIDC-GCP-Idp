@@ -2,18 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-05-25] - Servidor Proxy BFF Seguro, Mitigación de Abuso, Integración React e Infraestructura GCP
+
+### ✨ Nuevas Características
+- **Infraestructura de GCP para el BFF:**
+  - **Habilitación de reCAPTCHA Enterprise API:** Activación exitosa del servicio en el proyecto de GCP.
+  - **Creación de Secretos seguros:** Provisión de secretos en Secret Manager (`MULESOFT_CLIENT_ID`, `MULESOFT_CLIENT_SECRET`, `MULESOFT_BASE_URL`, `FIREBASE_SERVICE_ACCOUNT`, `RECAPTCHA_SITE_KEY`) con placeholders seguros.
+  - **Mapeo y Enlace en Cloud Run:** Configuración de la última revisión del contenedor del servicio `idp-service` para mapear los secretos de GCP de forma nativa a las variables de entorno esperadas por el servidor de Express.
+- **BFF Secure Proxy Server:** Overhaul total de `server/server.js` implementando tres endpoints seguros que consumen las APIs de MuleSoft (MS-1 lookup, MS-2 send OTP, MS-3 validate OTP, MS-4 alta digital) protegiendo las credenciales del servidor.
+- **Estrategias Avanzadas de Mitigación de Abuso (Anti-Scraping):**
+  - **Enmascaramiento Estricto de PII:** La API de búsqueda de clientes `/api/customer/lookup` enmascara correos (`cl*****@correo.com`) y teléfonos (`320****767`), protegiendo la privacidad de los usuarios y mitigando ataques de scraping masivo de correo corporativo.
+  - **Sesión Ciega (Blind Sessions):** Generación de `sessionId` temporal (UUIDv4) con TTL de 15 minutos en el servidor para rastrear las transacciones de validación OTP sin filtrar correos reales al frontend hasta finalizar la autenticación.
+  - **Rate Limiting Multicapa:** Bloqueo de ráfagas basado en IP utilizando `express-rate-limit` y bloqueo inteligente en memoria por ID (Cédula o NIT) si supera un umbral de 5 consultas por hora, previniendo ataques distribuidos.
+  - **Do S Size Payload Limit:** Restricción de payloads JSON en Express a un máximo de `10KB`.
+- **Registro Unificado / BFF-Driven Signup:** Integración con *Firebase Admin SDK* en el BFF para crear automáticamente cuentas de usuario de manera segura tras la verificación exitosa de OTP, retornando un *Custom Token* seguro al frontend para el login automático (`signInWithCustomToken()`).
+- **Google reCAPTCHA Enterprise Verification:** Validación invisible de tokens reCAPTCHA en el backend con mecanismo automático de bypass de simulación inteligente para desarrollo local en ausencia de llaves en el proyecto.
+
+### 🔧 Refactorización y Mejoras
+- **Integración React Frontend:** Adaptación de `src/components/RegisterForm.tsx` para sustituir los simuladores del cliente por llamadas HTTP nativas al BFF, permitiendo el soporte híbrido tanto para inicio de sesión unificado con Custom Token como para el fallback tradicional del lado del cliente.
+- **Vite Proxy Config:** Configuración del proxy local en `vite.config.ts` para redirigir peticiones `/api/*` al puerto 8080 del BFF.
+- **Vitest Exclude:** Corrección del patrón de exclusión en `vite.config.ts` añadiendo `**/node_modules/**` para evitar escaneos recursivos erróneos y fallas de pruebas de terceros.
+
 ## [2026-04-28] - Hardening de Caché de Vite: Prevención de Pantalla en Blanco
 
 ### 🔧 Refactorización y Mejoras
 
 - **Estrategia 1 — Flag `--force` en arranque (`package.json`):** Se añadió `--force` a ambas instancias de Vite en el script `dev:simulation`. Fuerza la regeneración de la caché de dependencias en cada inicio, eliminando el riesgo de stale cache que causaba pantalla en blanco.
 
-- **Estrategia 2 — Validación inteligente por hash SHA-256 (`scripts/cleanup-ports.mjs`):** Refactorizado con soporte total Windows + macOS + Linux usando `fileURLToPath`. Calcula el hash del `package-lock.json` y lo compara con un snapshot en `node_modules/.vite-lockfile-hash`. Si el lockfile cambió, limpia la caché automáticamente antes del arranque. Mejora del `killPort` en macOS/Linux usando `lsof -ti tcp:<port>` con manejo granular de PIDs.
+- **Estrategia 2 — Validación inteligente por hash SHA-256 (`scripts/cleanup-ports.mjs`):** Refactorizado con soporte total Windows + macOS + Linux usando `fileURLToPath`. Calcula el hash del `pnpm-lock.yaml` y lo compara con un snapshot en `node_modules/.vite-lockfile-hash`. Si el lockfile cambió, limpia la caché automáticamente antes del arranque. Mejora del `killPort` en macOS/Linux usando `lsof -ti tcp:<port>` con manejo granular de PIDs.
 
 - **Estrategia 3 — Git hooks cross-platform (`scripts/install-hooks.mjs`):** Instalador de hooks propio sin dependencias externas (sin Husky — compatible con redes corporativas con proxy). Los hooks usan `#!/usr/bin/env node` para ejecutarse idénticamente en Windows (Git for Windows), macOS y Linux:
   - `.git/hooks/post-checkout`: limpia caché de Vite en cada cambio de rama.
-  - `.git/hooks/post-merge`: limpia caché solo si `package-lock.json` cambió en el merge.
-  - El script `prepare` en `package.json` reinstala los hooks automáticamente tras cada `npm install`, garantizando que todo el equipo los tenga sin pasos manuales.
+  - `.git/hooks/post-merge`: limpia caché solo si `pnpm-lock.yaml` cambió en el merge.
+  - El script `prepare` en `package.json` reinstala los hooks automáticamente tras cada `pnpm install`, garantizando que todo el equipo los tenga sin pasos manuales.
 
 ## [v1.2.2] - 2026-04-16
 ### 🐛 Correcciones
@@ -82,7 +103,7 @@ All notable changes to this project will be documented in this file.
 ### ✨ Nuevas Características
 - **Mock Client Decoupling:** Separación total del cliente de prueba en `mock-client/` (Puerto 3000).
 - **Runtime Configuration:** `public/config.js` permite White-Labeling sin recompilar.
-- **Dev Simulation:** Script `npm run dev:simulation` para probar el flujo OIDC completo localmente.
+- **Dev Simulation:** Script `pnpm run dev:simulation` para probar el flujo OIDC completo localmente.
 
 ### 🔧 Refactorización y Mejoras
 - **IdP Purification:** Eliminado el Dashboard y componentes de UI innecesarios de `App.tsx`.

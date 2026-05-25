@@ -26,9 +26,9 @@ echo
 
 for skill in "${SKILLS[@]}"; do
   echo "-> Instalando ${skill}"
-  npx -y skills add "${skill}" --agent "${AGENTS[@]}"
+  pnpm dlx skills add "${skill}" --agent "${AGENTS[@]}"
 done
 
 echo
 echo "Validación final (skills instaladas en este proyecto):"
-npx -y skills ls
+pnpm dlx skills ls

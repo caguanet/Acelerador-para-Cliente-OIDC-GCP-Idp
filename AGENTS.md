@@ -8,8 +8,12 @@ Este documento **prioriza** la arquitectura y convenciones **de este producto** 
 |-----------|-----|
 | [README.md](README.md) | Visión del producto, branding en runtime, variables sensibles |
 | [docs/architecture/TECH_README.md](docs/architecture/TECH_README.md) | Arquitectura IdP/OIDC, flujos implícitos, seguridad de `redirect_uri`, despliegue |
+| [docs/architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md](docs/architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md) | Arquitectura objetivo IdP + BFF + MuleSoft + OTP + MS-4, manteniendo OIDC Implicit hacia clientes |
+| [docs/architecture/decisions/0001-idp-spa-stateless-bff-stateful.md](docs/architecture/decisions/0001-idp-spa-stateless-bff-stateful.md) | ADR formal: IdP SPA stateless y BFF stateful acotado solo para MuleSoft/OTP/MS-4/auditoría/Admin SDK |
 | [docs/guides/DEVELOPERS.md](docs/guides/DEVELOPERS.md) | Setup local, APIs de GCP, comandos de prueba |
 | [docs/guides/DEPLOY.md](docs/guides/DEPLOY.md) | Producción Cloud Run |
+| [docs/guides/IDP_GCP_MULESOFT_MANUAL.md](docs/guides/IDP_GCP_MULESOFT_MANUAL.md) | Manual operativo GCP/Identity Platform/providers sociales/MuleSoft/Cloud Run BFF |
+| [docs/planning/IDP_GCP_MULESOFT_IMPLEMENTATION_PLAN.md](docs/planning/IDP_GCP_MULESOFT_IMPLEMENTATION_PLAN.md) | Plan de implementación por fases para BFF, MuleSoft, MS-4, React, social login y pruebas |
 | [docs/testing/TESTING.md](docs/testing/TESTING.md) | Estrategia de calidad |
 | [PRODUCT.md](PRODUCT.md) | Contexto de producto para agentes/UI (no reemplaza `APP_CONFIG`) |
 | [DESIGN.md](DESIGN.md) | Principios de UI accesorio al white-label runtime |
@@ -18,23 +22,23 @@ Este documento **prioriza** la arquitectura y convenciones **de este producto** 
 | [docs/guides/BRAND_ASSETS.md](docs/guides/BRAND_ASSETS.md) | Rutas de logotipos SVG, mock `public/branding/` y cómo resincronizar tras actualizar el **Manual de imagen (Brandbook).pdf** |
 | [`.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md`](.agents/skills/etb-brand-brandbook/reference/brandbook-extract.md) | Resumen técnico para agentes; debe mantenerse alineado con `docs/guides/BRANDING_ETB.md`. |
 
-**Dominio concreto:** Identity broker OIDC sobre **Firebase Auth / GCP Identity Platform**, SPA **stateless**, configuración por `window.APP_CONFIG`. En [docs/architecture/TECH_README.md](docs/architecture/TECH_README.md) se documenta explícitamente el **OIDC Implicit Flow** y las razones por las que PKCE/backend stateful **no forman parte del diseño actual**. No sustituir eso por ejemplos genéricos (p. ej. Authorization Code + PKCE con servidor Next.js) sin un cambio de arquitectura acordado y actualización de la documentación.
+**Dominio concreto:** Identity broker OIDC sobre **Firebase Auth / GCP Identity Platform**, SPA **stateless**, configuración por `window.APP_CONFIG`. En [docs/architecture/TECH_README.md](docs/architecture/TECH_README.md) se documenta explícitamente el **OIDC Implicit Flow** y en [ADR 0001](docs/architecture/decisions/0001-idp-spa-stateless-bff-stateful.md) se formaliza que el BFF es stateful solo para MuleSoft/OTP/MS-4/auditoría/Admin SDK. No sustituir eso por ejemplos genéricos (p. ej. Authorization Code + PKCE con servidor Next.js) sin un cambio de arquitectura acordado y actualización de la documentación.
 
 ## Stack y comandos oficiales
 
-- **Runtime:** Node 18+, **npm** (no usar Bun/pnpm como suposición por defecto en snippets).
+- **Runtime:** Node 18+, **pnpm** (no usar npm, Yarn o Bun como suposición por defecto en snippets).
 - **Frontend:** React **18**, Vite **4**, TypeScript **5**.
 - **Datos/auth cliente:** Firebase JS SDK (~10.x) según `package.json`.
 
 **Pruebas y build:**
 
 ```bash
-npm install
-npm run dev
-npm run build
-npm run test              # Vitest (unit/integration de componentes)
-npm run test:e2e          # Playwright E2E
-npm run test:e2e:ui       # Playwright con UI
+pnpm install
+pnpm run dev
+pnpm run build
+pnpm run test              # Vitest (unit/integration de componentes)
+pnpm run test:e2e          # Playwright E2E
+pnpm run test:e2e:ui       # Playwright con UI
 ```
 
 Para patrones Playwright locales, usar la configuración de [playwright.config.ts](playwright.config.ts) y rutas en `tests/`.
@@ -54,8 +58,8 @@ Usar **un skill principal por tarea**; el resto como apoyo opcional para no mezc
 | Despliegue, contenedores, Cloud Run | `.agents/skills/gcp-cloud-run/` | Aplicar solo cuando se toca infra Docker/Cloud Run; este árbol es sobre todo SPA — no asumir Express en `src/` sin comprobar. |
 | Checklist rápido de seguridad en código/secrets/input | `.agents/skills/security-review/` | |
 | Modelado de amenazas, STRIDE, auditorías formales | `.agents/skills/security-threat-model/` | Complementario a security-review para diseño/revisiones grandes. |
-| Tests unit/componentes con Vitest y RTL | `.agents/skills/vitest-testing-patterns/` | Comando canónico: `npm run test`. |
-| E2E, proyectos navegador, timeouts, trazas | `.agents/skills/playwright-testing/` | Comando canónico: `npm run test:e2e`. |
+| Tests unit/componentes con Vitest y RTL | `.agents/skills/vitest-testing-patterns/` | Comando canónico: `pnpm run test`. |
+| E2E, proyectos navegador, timeouts, trazas | `.agents/skills/playwright-testing/` | Comando canónico: `pnpm run test:e2e`. |
 | Visión amplia (pirámide, flaky, release, herramientas extra) | `.agents/skills/web-testing/` | **No** como default en cada cambio pequeño; consultar cuando el alcance sea estrategia o release global. |
 | Refactor TS, olores | `.agents/skills/typescript-refactoring/` | |
 | Estilos, componentes UI, paleta/copy con marca ETB, temas institucionales | `.agents/skills/etb-brand-brandbook/` | Leer el extract en `reference/brandbook-extract.md`; coherentar con [DESIGN.md](DESIGN.md) y tema `APP_CONFIG` para white‑label. |
@@ -71,7 +75,7 @@ Cuando la pieza sea **marcada institucionalmente como ETB** (o lo pida explícit
 
 ## Skills nativos vs `skills-lock.json`
 
-Las entradas de [skills-lock.json](skills-lock.json) pinnean skills **importadas** desde upstream (hash de `SKILL.md`). Skills mantenidas solo en este repositorio (p. ej. `etb-brand-brandbook`) pueden no aparecer en el lock si no forman parte de ese flujo de importación; el proceso `npm run verify:skills` no las lista.
+Las entradas de [skills-lock.json](skills-lock.json) pinnean skills **importadas** desde upstream (hash de `SKILL.md`). Skills mantenidas solo en este repositorio (p. ej. `etb-brand-brandbook`) pueden no aparecer en el lock si no forman parte de ese flujo de importación; el proceso `pnpm run verify:skills` no las lista.
 
 _(Esta aclaración evita esperar entrada de pin para contenido mantenido en el equipo.)_
 
