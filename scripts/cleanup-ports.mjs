@@ -1,12 +1,12 @@
 /**
  * cleanup-ports.mjs
  *
- * Pre-flight script for `npm run dev:simulation`.
+ * Pre-flight script for `pnpm run dev:simulation`.
  * Cross-platform: Windows, macOS, Linux.
  *
  * Responsibilities:
  *   1. Kill zombie processes holding dev ports (3000, 5173).
- *   2. Validate Vite dependency cache integrity against package-lock.json hash.
+ *   2. Validate Vite dependency cache integrity against pnpm-lock.yaml hash.
  *      If the lockfile changed since the last run, the cache is wiped so Vite
  *      re-optimises dependencies cleanly — preventing the blank-screen / 504 bug.
  */
@@ -25,7 +25,7 @@ const __dirname  = dirname(__filename);
 const ROOT       = resolve(__dirname, '..');          // scripts/ → project root
 
 const PORTS      = [3000, 5173];
-const LOCKFILE   = join(ROOT, 'package-lock.json');
+const LOCKFILE   = join(ROOT, 'pnpm-lock.yaml');
 const VITE_CACHE = join(ROOT, 'node_modules', '.vite');
 const HASH_STORE = join(ROOT, 'node_modules', '.vite-lockfile-hash');
 
@@ -91,7 +91,7 @@ function validateViteCache() {
   const currentHash = computeLockfileHash();
 
   if (!currentHash) {
-    console.log(`[${c.yellow('CACHE')}] package-lock.json not found — skipping cache check.`);
+    console.log(`[${c.yellow('CACHE')}] pnpm-lock.yaml not found — skipping cache check.`);
     return;
   }
 
@@ -108,7 +108,7 @@ function validateViteCache() {
     return;
   }
 
-  console.log(`[${c.yellow('CACHE')}] package-lock.json changed — wiping stale Vite cache…`);
+  console.log(`[${c.yellow('CACHE')}] pnpm-lock.yaml changed — wiping stale Vite cache…`);
   try {
     rmSync(VITE_CACHE, { recursive: true, force: true });
     writeFileSync(HASH_STORE, currentHash, 'utf-8');

@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, KeyboardEvent, ClipboardEvent, FormEvent } from 'react';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import {
+    FacebookAuthProvider,
+    GoogleAuthProvider,
+    OAuthProvider,
+    linkWithPopup,
+    signInWithCustomToken,
+} from 'firebase/auth';
 import { auth } from '../firebase';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -28,6 +34,7 @@ const INFO_ICON = (
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 30;
 const OTP_EXPIRY_SECONDS = 5 * 60;
+const PENDING_SOCIAL_PROVIDER_KEY = 'idp.pendingSocialProvider';
 const emptyDigits = (): string[] => Array<string>(OTP_LENGTH).fill('');
 
 type CustomerType = 'HOGARES' | 'MIPYMES';
@@ -35,7 +42,7 @@ type DocType = 'CC' | 'CE' | 'NIT' | 'TI' | 'PP';
 
 /**
  * Hogares flow:  IDENTIFY → VERIFY → PASSWORD
- * MiPymes flow:  COMPANY  → LEGAL_REP → VERIFY  (email+pwd collected in LEGAL_REP)
+ * MiPymes flow:  COMPANY  → LEGAL_REP → VERIFY → PASSWORD
  */
 type RegisterStep = 'IDENTIFY' | 'COMPANY' | 'LEGAL_REP' | 'VERIFY' | 'PASSWORD';
 
@@ -52,6 +59,24 @@ function checkPassword(pwd: string) {
     };
 }
 
+function isValidPhoneNumber(value: string) {
+    const digits = value.replace(/\D/g, '');
+    return digits.length >= 7 && digits.length <= 15;
+}
+
+function getPendingSocialProvider(providerId: string | null) {
+    switch (providerId) {
+        case 'google.com':
+            return new GoogleAuthProvider();
+        case 'facebook.com':
+            return new FacebookAuthProvider();
+        case 'apple.com':
+            return new OAuthProvider('apple.com');
+        default:
+            return null;
+    }
+}
+
 export interface RegisterFormProps {
     onRegisterSuccess: (user: any) => void;
     onGoToLogin: () => void;
@@ -64,8 +89,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
     // ── Hogares: IDENTIFY ──────────────────────────────────────────────────────
     const [docType, setDocType] = useState<DocType>('CC');
     const [docNumber, setDocNumber] = useState('');
-    const [lastName, setLastName] = useState('');
-    const [docExpDate, setDocExpDate] = useState('');
     const [acceptTerms, setAcceptTerms] = useState(false);
     const [acceptDataPolicy, setAcceptDataPolicy] = useState(false);
     const [recaptchaOk, setRecaptchaOk] = useState(false);
@@ -86,16 +109,15 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
     const [legalRepError, setLegalRepError] = useState('');
     const [isSubmittingRep, setIsSubmittingRep] = useState(false);
 
-    // ── Shared: email + password (Hogares collects in PASSWORD step; MiPymes in LEGAL_REP) ──
-    const [email, setEmail] = useState('');
+    // ── Shared: password collected only after OTP validation ──────────────────
     const [password, setPassword] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [keepEmail, setKeepEmail] = useState(true);
 
     // ── Resolved contact data (from API mock) ─────────────────────────────────
     const [maskedEmail, setMaskedEmail] = useState('');
-    const [maskedPhone, setMaskedPhone] = useState('');
-    const [resolvedEmail, setResolvedEmail] = useState('');
+    const [sessionId, setSessionId] = useState('');
+    const [verificationToken, setVerificationToken] = useState('');
 
     // ── VERIFY ────────────────────────────────────────────────────────────────
     const [digits, setDigits] = useState<string[]>(emptyDigits());
@@ -135,15 +157,10 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
     // Auto-advance after OTP success
     useEffect(() => {
         if (!verifySuccess) return;
+        if (auth.currentUser) return; // If already logged in via Custom Token, skip standard signup
         const t = setTimeout(() => {
-            if (customerType === 'HOGARES') {
-                setEmail(resolvedEmail);
-                setStep('PASSWORD');
-            } else {
-                // MiPymes: credentials already collected → create user
-                handleCreateUserAfterOtp();
-            }
-        }, 1200);
+            setStep('PASSWORD');
+        }, 450);
         return () => clearTimeout(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [verifySuccess]);
@@ -170,17 +187,49 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         e.preventDefault();
         setIdentifyError('');
         if (!docNumber.trim()) { setIdentifyError('Ingresa tu número de identificación.'); return; }
-        if (!lastName.trim()) { setIdentifyError('Ingresa tu apellido.'); return; }
-        if (!docExpDate) { setIdentifyError('Ingresa la fecha de expedición.'); return; }
         if (!acceptTerms) { setIdentifyError('Debes aceptar los términos y condiciones.'); return; }
         if (!acceptDataPolicy) { setIdentifyError('Debes aceptar las políticas de tratamiento de datos.'); return; }
         if (!recaptchaOk) { setIdentifyError('Completa la verificación de seguridad.'); return; }
         setIsIdentifying(true);
         try {
-            await new Promise(r => setTimeout(r, 800));
-            setMaskedEmail('pa******@yahoo.com');
-            setMaskedPhone('320****767');
-            setResolvedEmail('usuario@yahoo.com');
+            const response = await fetch('/api/customer/lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    docType,
+                    docNumber,
+                    recaptchaToken: 'SIM_TOKEN',
+                    customerType: 'HOGARES',
+                    acceptTerms,
+                    acceptDataPolicy
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'No fue posible verificar tu identidad.');
+            }
+
+            const data = await response.json();
+            setSessionId(data.sessionId);
+            setMaskedEmail(data.maskedEmail);
+            setVerificationToken('');
+
+            // Send initial OTP automatically
+            const sendResponse = await fetch('/api/customer/otp/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: data.sessionId,
+                    recaptchaToken: 'SIM_TOKEN'
+                })
+            });
+
+            if (!sendResponse.ok) {
+                const sendErr = await sendResponse.json();
+                throw new Error(sendErr.error || 'No fue posible enviar el código OTP de seguridad.');
+            }
+
             enterVerifyStep();
         } catch (err: any) {
             setIdentifyError(err.message || 'No fue posible verificar tu identidad. Intenta de nuevo.');
@@ -189,11 +238,25 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         }
     };
 
+    const resetVerifiedSession = () => {
+        setSessionId('');
+        setVerificationToken('');
+        setMaskedEmail('');
+        setPhoneNumber('');
+        setPassword('');
+        setVerifySuccess(false);
+        setVerifyError('');
+        setDigits(emptyDigits());
+        setExpiryCountdown(0);
+        setResendCountdown(0);
+    };
+
     // ── MIPYMES: COMPANY ──────────────────────────────────────────────────────
     const handleCompanyLookup = async (e: FormEvent) => {
         e.preventDefault();
         setCompanyError('');
         if (!companyDocNumber.trim()) { setCompanyError('Ingresa el número de identificación de la empresa.'); return; }
+        resetVerifiedSession();
         setIsLookingUp(true);
         try {
             await new Promise(r => setTimeout(r, 800));
@@ -213,18 +276,51 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         if (!repDocNumber.trim()) { setLegalRepError('Ingresa el número de identificación del representante legal.'); return; }
         if (!repExpDate) { setLegalRepError('Ingresa la fecha de expedición del documento.'); return; }
         if (!repLastName.trim()) { setLegalRepError('Ingresa el apellido del representante legal.'); return; }
-        if (!email.trim()) { setLegalRepError('Ingresa el correo electrónico.'); return; }
-        const checks = checkPassword(password);
-        if (!Object.values(checks).every(Boolean)) { setLegalRepError('La contraseña no cumple todos los requisitos.'); return; }
         if (!acceptTerms) { setLegalRepError('Debes aceptar los términos y condiciones.'); return; }
         if (!acceptDataPolicy) { setLegalRepError('Debes aceptar las políticas de tratamiento de datos.'); return; }
         if (!recaptchaOk) { setLegalRepError('Completa la verificación de seguridad.'); return; }
         setIsSubmittingRep(true);
         try {
-            await new Promise(r => setTimeout(r, 800));
-            setMaskedEmail('pa******@yahoo.com');
-            setMaskedPhone('320****767');
-            setResolvedEmail(email);
+            const response = await fetch('/api/customer/lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyDocType,
+                    companyDocNumber,
+                    repDocType,
+                    repDocNumber,
+                    lastName: repLastName,
+                    recaptchaToken: 'SIM_TOKEN',
+                    customerType: 'MIPYMES',
+                    acceptTerms,
+                    acceptDataPolicy
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'No fue posible verificar la identidad del representante legal.');
+            }
+
+            const data = await response.json();
+            setSessionId(data.sessionId);
+            setMaskedEmail(data.maskedEmail);
+
+            // Send initial OTP automatically
+            const sendResponse = await fetch('/api/customer/otp/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: data.sessionId,
+                    recaptchaToken: 'SIM_TOKEN'
+                })
+            });
+
+            if (!sendResponse.ok) {
+                const sendErr = await sendResponse.json();
+                throw new Error(sendErr.error || 'No fue posible enviar el código OTP de seguridad.');
+            }
+
             enterVerifyStep();
         } catch (err: any) {
             setLegalRepError(err.message || 'No fue posible procesar la solicitud. Intenta de nuevo.');
@@ -263,7 +359,22 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         setVerifyError('');
         setIsVerifying(true);
         try {
-            await new Promise(r => setTimeout(r, 700));
+            const response = await fetch('/api/customer/otp/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId,
+                    code: digits.join('')
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Código OTP incorrecto o expirado.');
+            }
+
+            const data = await response.json();
+            setVerificationToken(data.verificationToken || '');
             setVerifySuccess(true);
         } catch (err: any) {
             setVerifyError(err.message || 'No fue posible verificar el código. Intenta de nuevo.');
@@ -276,48 +387,85 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         if (resendCountdown > 0 || isSending) return;
         setIsSending(true);
         try {
-            await new Promise(r => setTimeout(r, 600));
+            const response = await fetch('/api/customer/otp/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId,
+                    recaptchaToken: 'SIM_TOKEN'
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'No fue posible reenviar el código OTP.');
+            }
+
             setDigits(emptyDigits());
             setResendCountdown(RESEND_COOLDOWN);
             setExpiryCountdown(OTP_EXPIRY_SECONDS);
             setVerifyError('');
             requestAnimationFrame(() => inputRefs.current[0]?.focus());
+        } catch (err: any) {
+            setVerifyError(err.message || 'Error al reenviar el código OTP.');
         } finally {
             setIsSending(false);
         }
     };
 
-    // ── MIPYMES: create Firebase user after OTP ───────────────────────────────
-    const handleCreateUserAfterOtp = async () => {
-        try {
-            const cred = await createUserWithEmailAndPassword(auth, email, password);
-            if (repLastName) await updateProfile(cred.user, { displayName: repLastName });
-            onRegisterSuccess(cred.user);
-        } catch (err: any) {
-            setVerifyError(err.code === 'auth/email-already-in-use'
-                ? 'Este correo ya está registrado. Inicia sesión.'
-                : err.message || 'Error al crear la cuenta.');
+    const completeRegistrationWithBff = async (nextPassword: string) => {
+        const response = await fetch('/api/customers/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId,
+                verificationToken,
+                password: nextPassword,
+                phoneNumber,
+                acceptTerms,
+                acceptDataPolicy
+            })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'No fue posible completar el registro.');
         }
+
+        const data = await response.json();
+        if (!data.customToken) {
+            throw new Error('No fue posible iniciar sesión con el registro validado.');
+        }
+
+        const cred = await signInWithCustomToken(auth, data.customToken);
+        const pendingProviderId = window.sessionStorage.getItem(PENDING_SOCIAL_PROVIDER_KEY);
+        const pendingProvider = getPendingSocialProvider(pendingProviderId);
+        if (pendingProvider) {
+            try {
+                await linkWithPopup(cred.user, pendingProvider);
+                window.sessionStorage.removeItem(PENDING_SOCIAL_PROVIDER_KEY);
+            } catch (err) {
+                console.warn('No fue posible vincular el proveedor social pendiente.', err);
+            }
+        }
+        onRegisterSuccess(cred.user);
     };
 
-    // ── HOGARES: PASSWORD ─────────────────────────────────────────────────────
+    // ── PASSWORD: final registration for both customer types ──────────────────
     const handleCompleteRegistration = async (e: FormEvent) => {
         e.preventDefault();
         setPasswordError('');
-        if (!email.trim()) { setPasswordError('El correo electrónico es requerido.'); return; }
+        if (!verificationToken) { setPasswordError('La validación OTP no está vigente. Solicita un nuevo código.'); return; }
+        if (!isValidPhoneNumber(phoneNumber)) { setPasswordError('Ingresa un número de teléfono válido.'); return; }
         if (!Object.values(checkPassword(password)).every(Boolean)) {
             setPasswordError('La contraseña no cumple todos los requisitos de seguridad.');
             return;
         }
         setIsRegistering(true);
         try {
-            const cred = await createUserWithEmailAndPassword(auth, email, password);
-            if (lastName) await updateProfile(cred.user, { displayName: lastName });
-            onRegisterSuccess(cred.user);
+            await completeRegistrationWithBff(password);
         } catch (err: any) {
-            setPasswordError(err.code === 'auth/email-already-in-use'
-                ? 'Este correo ya está registrado. Inicia sesión.'
-                : err.message || 'Error al crear la cuenta.');
+            setPasswordError(err.message || 'Error al crear la cuenta.');
         } finally {
             setIsRegistering(false);
         }
@@ -339,6 +487,7 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
 
     const pwdChecks = checkPassword(password);
     const allPwdOk = Object.values(pwdChecks).every(Boolean);
+    const phoneOk = isValidPhoneNumber(phoneNumber);
 
     // ══════════════════════════════════════════════
     // RENDER: HOGARES — IDENTIFY
@@ -367,23 +516,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                                 className="reg-floating-input"
                                 placeholder="N° de identificación" autoComplete="off" />
                         </div>
-                    </div>
-
-                    <div className="reg-floating-field">
-                        <label htmlFor="reg-last-name" className="sr-only">Apellido</label>
-                        <input id="reg-last-name" type="text"
-                            value={lastName} onChange={e => setLastName(e.target.value)}
-                            className="reg-floating-input"
-                            placeholder="Apellido" autoComplete="family-name" />
-                    </div>
-
-                    <div className="reg-floating-field">
-                        <label htmlFor="reg-exp-date" className="sr-only">Fecha de expedición de tu documento</label>
-                        <input id="reg-exp-date" type="date"
-                            value={docExpDate} onChange={e => setDocExpDate(e.target.value)}
-                            className="reg-floating-input reg-floating-input--with-icon"
-                            autoComplete="off" />
-                        <span className="reg-field-icon">{CALENDAR_ICON}</span>
                     </div>
 
                     <label className="reg-checkbox-row">
@@ -521,38 +653,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                             placeholder="Apellido del representante legal" autoComplete="family-name" />
                     </div>
 
-                    {/* Correo */}
-                    <div className="reg-floating-field">
-                        <label htmlFor="reg-rep-email" className="sr-only">Correo electrónico</label>
-                        <input id="reg-rep-email" type="email"
-                            value={email} onChange={e => setEmail(e.target.value)}
-                            className="reg-floating-input"
-                            placeholder="Correo electrónico" autoComplete="email" />
-                    </div>
-
-                    {/* Contraseña */}
-                    <div className="reg-floating-field">
-                        <label htmlFor="reg-rep-password" className="sr-only">Contraseña</label>
-                        <input id="reg-rep-password" type={showPassword ? 'text' : 'password'}
-                            autoComplete="new-password" spellCheck={false}
-                            value={password} onChange={e => setPassword(e.target.value)}
-                            className="reg-floating-input reg-floating-input--with-toggle"
-                            placeholder="Contraseña" />
-                        <button type="button" className="reg-password-toggle"
-                            onClick={() => setShowPassword(v => !v)}
-                            aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
-                            {showPassword ? EYE_OFF_ICON : EYE_ICON}
-                        </button>
-                    </div>
-
-                    {/* Password requirements */}
-                    <ul className="reg-pwd-requirements" aria-label="Requisitos de contraseña">
-                        <li className={pwdChecks.length ? 'reg-req--ok' : ''}>Al menos 8 caracteres</li>
-                        <li className={pwdChecks.uppercase ? 'reg-req--ok' : ''}>Al menos 1 mayúscula</li>
-                        <li className={pwdChecks.number ? 'reg-req--ok' : ''}>Al menos 1 número</li>
-                        <li className={pwdChecks.special ? 'reg-req--ok' : ''}>Al menos 1 caracter especial</li>
-                    </ul>
-
                     {/* Terms */}
                     <label className="reg-checkbox-row">
                         <input type="checkbox" checked={acceptTerms} onChange={e => setAcceptTerms(e.target.checked)} />
@@ -589,7 +689,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                 <p className="reg-verify-desc">
                     Te hemos enviado un código de verificación para completar tu registro<br />
                     Correo: <strong className="reg-contact-highlight">{maskedEmail}</strong><br />
-                    Teléfono: <strong className="reg-contact-highlight">{maskedPhone}</strong><br />
                     Por favor, ingresa el código de {OTP_LENGTH} dígitos.
                 </p>
 
@@ -632,7 +731,10 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                 )}
 
                 <button type="button"
-                    onClick={() => setStep(customerType === 'HOGARES' ? 'IDENTIFY' : 'LEGAL_REP')}
+                    onClick={() => {
+                        resetVerifiedSession();
+                        setStep(customerType === 'HOGARES' ? 'IDENTIFY' : 'LEGAL_REP');
+                    }}
                     className="otp-back-link">
                     ← Volver al registro
                 </button>
@@ -646,24 +748,73 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
     }
 
     // ══════════════════════════════════════════════
-    // RENDER: HOGARES — PASSWORD (final step)
+    // RENDER: PASSWORD (final step for both flows)
     // ══════════════════════════════════════════════
     return (
         <div className="login-form">
             <form onSubmit={handleCompleteRegistration} noValidate>
-                <label className="reg-checkbox-row" style={{ marginBottom: '1rem' }}>
-                    <input type="checkbox" checked={keepEmail}
-                        onChange={e => { setKeepEmail(e.target.checked); if (e.target.checked) setEmail(resolvedEmail); }} />
-                    <span>Conservar correo registrado</span>
-                </label>
+                <h2 className="login-form-title" style={{ textAlign: 'center' }}>Completa tu registro</h2>
+
+                {customerType === 'MIPYMES' && (
+                    <div className="reg-row">
+                        <div className="reg-floating-field reg-field-tipo">
+                            <label htmlFor="reg-final-company-doc-type" className="sr-only">Tipo de documento de empresa validado</label>
+                            <input id="reg-final-company-doc-type" type="text"
+                                value={companyDocType}
+                                readOnly
+                                className="reg-floating-input reg-floating-input--disabled"
+                                aria-readonly="true" />
+                        </div>
+                        <div className="reg-floating-field reg-field-num">
+                            <label htmlFor="reg-final-company-doc-number" className="sr-only">Número de identificación de empresa validado</label>
+                            <input id="reg-final-company-doc-number" type="text"
+                                value={companyDocNumber}
+                                readOnly
+                                className="reg-floating-input reg-floating-input--disabled"
+                                aria-readonly="true" />
+                        </div>
+                    </div>
+                )}
+
+                <div className="reg-row">
+                    <div className="reg-floating-field reg-field-tipo">
+                        <label htmlFor="reg-final-doc-type" className="sr-only">
+                            {customerType === 'MIPYMES' ? 'Tipo de documento de representante validado' : 'Tipo de documento validado'}
+                        </label>
+                        <input id="reg-final-doc-type" type="text"
+                            value={customerType === 'MIPYMES' ? repDocType : docType}
+                            readOnly
+                            className="reg-floating-input reg-floating-input--disabled"
+                            aria-readonly="true" />
+                    </div>
+                    <div className="reg-floating-field reg-field-num">
+                        <label htmlFor="reg-final-doc-number" className="sr-only">
+                            {customerType === 'MIPYMES' ? 'Número de identificación de representante validado' : 'Número de identificación validado'}
+                        </label>
+                        <input id="reg-final-doc-number" type="text"
+                            value={customerType === 'MIPYMES' ? repDocNumber : docNumber}
+                            readOnly
+                            className="reg-floating-input reg-floating-input--disabled"
+                            aria-readonly="true" />
+                    </div>
+                </div>
 
                 <div className="reg-floating-field">
-                    <label htmlFor="reg-final-email" className="sr-only">Correo</label>
+                    <label htmlFor="reg-final-email" className="sr-only">Correo registrado</label>
                     <input id="reg-final-email" type="email"
-                        value={email} onChange={e => { if (!keepEmail) setEmail(e.target.value); }}
-                        disabled={keepEmail}
-                        className={`reg-floating-input${keepEmail ? ' reg-floating-input--disabled' : ''}`}
-                        placeholder="Correo" autoComplete="email" />
+                        value={maskedEmail}
+                        readOnly
+                        className="reg-floating-input reg-floating-input--disabled"
+                        placeholder="Correo registrado" autoComplete="email"
+                        aria-readonly="true" />
+                </div>
+
+                <div className="reg-floating-field">
+                    <label htmlFor="reg-final-phone" className="sr-only">Número de teléfono</label>
+                    <input id="reg-final-phone" type="tel" inputMode="tel"
+                        value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)}
+                        className="reg-floating-input"
+                        placeholder="Número de teléfono" autoComplete="tel" />
                 </div>
 
                 <div className="reg-floating-field">
@@ -694,7 +845,7 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
 
                 {passwordError && <div className="auth-alert error" role="alert">{passwordError}</div>}
 
-                <button type="submit" disabled={isRegistering || !allPwdOk || !email.trim()} className="login-btn-primary">
+                <button type="submit" disabled={isRegistering || !allPwdOk || !phoneOk || !verificationToken} className="login-btn-primary">
                     {isRegistering ? 'Registrando\u2026' : 'Completar registro'}
                 </button>
             </form>

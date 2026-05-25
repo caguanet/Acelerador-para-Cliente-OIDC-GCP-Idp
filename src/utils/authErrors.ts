@@ -15,7 +15,7 @@ export function getFriendlyAuthErrorMessage(
 ): string {
   const code = extractCode(error);
 
-  if (!code) return genericMessage(context);
+  if (!code) return extractDisplayMessage(error) || genericMessage(context);
 
   const byCode: Record<string, string> = {
     // Credenciales / sesión
@@ -38,6 +38,10 @@ export function getFriendlyAuthErrorMessage(
       "Este correo ya está registrado con otro método de acceso. Inicia sesión con ese método.",
     "auth/unauthorized-domain":
       "Este dominio no está autorizado para autenticación. Intenta desde el portal oficial.",
+    "auth/expired-action-code":
+      "El enlace venció. Solicita uno nuevo para continuar.",
+    "auth/invalid-action-code":
+      "El enlace no es válido o ya fue usado. Solicita uno nuevo para continuar.",
 
     // Recuperación
     "auth/missing-email": "Ingresa tu correo para enviarte el enlace de recuperación.",
@@ -70,6 +74,22 @@ function genericMessage(context: AuthContext): string {
   }
 }
 
+function extractDisplayMessage(error: FirebaseLikeError | unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const message = (error as FirebaseLikeError).message?.trim();
+  if (!message) return undefined;
+
+  const looksTechnical =
+    /auth\/[a-z-]+/i.test(message) ||
+    /firebase:/i.test(message) ||
+    /mulesoft/i.test(message) ||
+    /returned status/i.test(message) ||
+    /stack trace/i.test(message);
+
+  if (looksTechnical || message.length > 180) return undefined;
+  return message;
+}
+
 function extractCode(error: FirebaseLikeError | unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const maybe = error as FirebaseLikeError;
@@ -81,4 +101,3 @@ function extractCode(error: FirebaseLikeError | unknown): string | undefined {
   }
   return undefined;
 }
-

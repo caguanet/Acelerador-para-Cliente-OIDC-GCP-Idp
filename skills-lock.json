@@ -19,6 +19,12 @@
       "skillPath": "skill/SKILL.md",
       "computedHash": "b590bd8b023a71b64550d04da896c63dd99d9658f4584e87244ff47a41784768"
     },
+    "modern-web-guidance": {
+      "source": "GoogleChrome/modern-web-guidance",
+      "sourceType": "github",
+      "skillPath": "skills/modern-web-guidance/SKILL.md",
+      "computedHash": "9f19aa0e3b554d33b2709c66bb16ad342403e323761f62d6665fbb424c23148d"
+    },
     "oauth2-oidc-implementer": {
       "source": "patricio0312rev/skills",
       "sourceType": "github",

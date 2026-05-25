@@ -13,7 +13,7 @@ Este documento detalla **cada paso** de configuracion del proyecto, con comandos
 | Requisito | Como verificar |
 | --------- | -------------- |
 | **Node.js v18+** | En PowerShell: `node -v` (debe mostrar v18.x o superior). |
-| **npm** | `npm -v` |
+| **pnpm** | `pnpm -v` |
 | **Git** | `git --version` |
 | **Proyecto GCP** | Tener un proyecto en Google Cloud con **Identity Platform** (Firebase Auth) habilitado. |
 
@@ -64,6 +64,9 @@ URL directa: `https://console.cloud.google.com/apis/credentials?project=etb-iden
    | `http://localhost:5173/*` | Servidor de desarrollo Vite (IdP) |
    | `http://localhost:3000/*` | Mock client para pruebas E2E |
    | `http://localhost:8080/*` | Servidor Express local (si aplica) |
+   | `https://<PROJECT_ID>.firebaseapp.com/*` | Dominio de Auth usado por enlaces passwordless/email action |
+   | `https://<PROJECT_ID>.web.app/*` | Hosting Firebase, si se usa como dominio público |
+   | `https://<IDP_QA_O_PROD_DOMAIN>/*` | Dominio real de QA/producción del IdP |
 
    - Haz clic en **"Done"** (Listo) despues de cada entrada.
 
@@ -82,6 +85,8 @@ URL directa: `https://console.cloud.google.com/apis/credentials?project=etb-iden
 4. Haz clic en **"Save"** (Guardar) al final de la pagina.
 
 > **Sin Token Service API** el login de Firebase puede parecer correcto pero el IdP no podra emitir el token final (`getIdToken()` falla silenciosamente).
+
+> **Error frecuente:** Si al abrir el correo de acceso aparece `API_KEY_HTTP_REFERRER_BLOCKED` con `httpReferrer: "https://<PROJECT_ID>.firebaseapp.com/"`, falta agregar `https://<PROJECT_ID>.firebaseapp.com/*` en los **HTTP referrers** de la misma API Key. El enlace de correo se procesa primero en el dominio de Auth de Firebase y luego vuelve al `continueUrl` configurado.
 
 ---
 
@@ -162,11 +167,11 @@ Ejecutar en la carpeta donde quieras dejar el proyecto (por ejemplo `D:\proyecto
 ```powershell
 git clone <URL_DEL_REPOSITORIO>
 cd Acelerador-para-Cliente-OIDC-GCP-Idp
-npm install
+pnpm install
 ```
 
 - Reemplazar `<URL_DEL_REPOSITORIO>` por la URL real del repo (HTTPS o SSH).
-- `npm install` crea la carpeta `node_modules` e instala dependencias.
+- `pnpm install` crea la carpeta `node_modules` e instala dependencias.
 
 ---
 
@@ -306,7 +311,7 @@ Si usas **solo** `.env.local` y no tocas `config.js`, la app usara los valores p
 Desde la raiz del proyecto:
 
 ```powershell
-npm run dev
+pnpm run dev
 ```
 
 - El servidor de desarrollo (Vite) arranca en: **`http://localhost:5173`**.
@@ -319,7 +324,7 @@ npm run dev
 Para simular una aplicacion que redirige al IdP (flujo OIDC completo):
 
 ```powershell
-npm run dev:simulation
+pnpm run dev:simulation
 ```
 
 Este comando levanta **dos servidores simultaneamente**:
@@ -339,22 +344,22 @@ Asegurate de que `http://localhost:3000` este en:
 - **Unitarias (Vitest):**
 
   ```powershell
-  npm run test
+  pnpm run test
   ```
 
-  Modo watch: `npm run test -- --watch`
+  Modo watch: `pnpm run test -- --watch`
 
 - **E2E (Playwright):**
 
   ```powershell
   # Instalar navegadores (primera vez)
-  npx playwright install
+  pnpm exec playwright install
 
   # Ejecutar E2E (requiere dev:simulation corriendo, o lo levanta automaticamente)
-  npm run test:e2e
+  pnpm run test:e2e
 
   # Con interfaz visual para depuracion
-  npm run test:e2e:ui
+  pnpm run test:e2e:ui
   ```
 
 ---

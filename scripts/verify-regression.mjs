@@ -3,9 +3,9 @@
  * Verificación mínima de no regresión tras cambios locales.
  *
  * Ejecución:
- *   npm run verify:regression
+ *   pnpm run verify:regression
  * Con E2E (Playwright, más lento):
- *   VERIFY_E2E=1 npm run verify:regression
+ *   VERIFY_E2E=1 pnpm run verify:regression
  *
  * No modifica estado del proyecto ni despliegue; solo ejecuta comandos estándar.
  */
@@ -31,14 +31,14 @@ console.log("[verify-regression] Lock de skills (sin carpeta → aviso y contin�
 if (!run("node", ["scripts/verify-skills-lock.mjs"])) process.exit(1);
 
 console.log("[verify-regression] Build + TypeScript...");
-if (!run("npm", ["run", "build"])) process.exit(1);
+if (!run("pnpm", ["run", "build"])) process.exit(1);
 
 console.log("[verify-regression] Vitest (run once)...");
-if (!run("npx", ["vitest", "run"])) process.exit(1);
+if (!run("pnpm", ["exec", "vitest", "run"])) process.exit(1);
 
 if (runE2E) {
   console.log("[verify-regression] Playwright E2E (VERIFY_E2E activo)...");
-  if (!run("npm", ["run", "test:e2e"])) process.exit(1);
+  if (!run("pnpm", ["run", "test:e2e"])) process.exit(1);
 } else {
   console.log("[verify-regression] E2E omitido. Active con VERIFY_E2E=1 si aplica esta fase.");
 }

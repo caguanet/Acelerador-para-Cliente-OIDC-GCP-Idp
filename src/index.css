@@ -1224,43 +1224,6 @@ ul.firebaseui-idp-list {
 .login-pwd-label--3 { color: #43a047; }
 
 /* ================================================
-   LOGIN MODE TABS (Contraseña / OTP)
-   ================================================ */
-.login-mode-tabs {
-    display: flex;
-    background: rgba(33, 71, 128, 0.06);
-    border-radius: 12px;
-    padding: 4px;
-    margin-bottom: 1.25rem;
-    gap: 4px;
-}
-
-.login-mode-tab {
-    flex: 1;
-    height: 38px;
-    border: none;
-    border-radius: 9px;
-    background: transparent;
-    color: var(--brand-text-secondary);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    font-family: 'Lexend Deca', sans-serif;
-    cursor: pointer;
-    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-}
-
-.login-mode-tab--active {
-    background: #fff;
-    color: var(--brand-primary);
-    box-shadow: 0 1px 4px rgba(33, 71, 128, 0.15);
-}
-
-.login-mode-tab:focus-visible {
-    outline: 2px solid var(--brand-secondary);
-    outline-offset: 2px;
-}
-
-/* ================================================
    OTP VERIFICATION FORM
    ================================================ */
 
@@ -1447,36 +1410,6 @@ ul.firebaseui-idp-list {
     flex: 1;
     height: 1px;
     background: var(--glass-border);
-}
-
-/* ── Social row (icon-only circles) ── */
-.otp-social-row {
-    display: flex;
-    justify-content: center;
-    gap: 1.25rem;
-}
-
-.otp-social-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    border: 1.5px solid var(--glass-border);
-    background: #fff;
-    cursor: pointer;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.otp-social-btn:hover {
-    border-color: var(--brand-secondary);
-    box-shadow: 0 2px 8px rgba(var(--brand-secondary-rgb), 0.15);
-}
-
-.otp-social-btn:focus-visible {
-    outline: 2px solid var(--brand-secondary);
-    outline-offset: 2px;
 }
 
 /* ── Register link ── */

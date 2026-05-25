@@ -21,9 +21,8 @@ test.describe('OIDC Functional Tests', () => {
     await expect(page.getByRole('heading', { name: 'Iniciar Sesión' })).toBeVisible();
 
     // 4. Fill Login Form (Mocked Auth)
-    await page.fill('input[type="email"]', 'test@example.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.click('button:has-text("Iniciar Sesión")');
+    await page.fill('input[type="tel"]', '3001234567');
+    await page.click('button:has-text("Enviar código OTP")');
 
     // 5. Verify Redirect back to Mock Client with Token
     await expect(page).toHaveURL(new RegExp(`^${MOCK_CLIENT_URL}`));

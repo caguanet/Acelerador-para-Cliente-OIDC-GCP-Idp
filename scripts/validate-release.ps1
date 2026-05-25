@@ -26,7 +26,7 @@ function Write-ErrorMsg {
 # 1. Unit Tests
 Write-Step "Running Unit Tests..."
 try {
-    npm run test -- --run
+    pnpm run test -- --run
     Write-Success "Unit Tests Passed"
 } catch {
     Write-ErrorMsg "Unit Tests Failed. Check output above."
@@ -35,7 +35,7 @@ try {
 # 2. Build
 Write-Step "Building for Production..."
 try {
-    npm run build
+    pnpm run build
     if (!(Test-Path "dist/index.html")) { throw "dist/index.html not found" }
     Write-Success "Build Successful. Artifacts generated in /dist"
 } catch {
@@ -46,8 +46,8 @@ try {
 Write-Step "Running E2E Tests (Playwright)..."
 try {
     # Ensure browsers are installed
-    # npx playwright install --with-deps # Uncomment if running in a fresh CI env
-    npx playwright test
+    # pnpm exec playwright install --with-deps # Uncomment if running in a fresh CI env
+    pnpm exec playwright test
     Write-Success "E2E Tests Passed"
 } catch {
     Write-ErrorMsg "E2E Tests Failed. Check report."

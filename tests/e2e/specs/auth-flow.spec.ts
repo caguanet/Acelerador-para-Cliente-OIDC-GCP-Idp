@@ -2,19 +2,12 @@ import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { MockClientPage } from '../pages/MockClientPage';
 
-const TEST_USER = {
-  email: process.env.TEST_USER_EMAIL || `test-automation-${Date.now()}@etb.com`,
-  password: process.env.TEST_USER_PASSWORD || 'securePassword123!',
-};
-
 /**
- * Login E2E: credenciales en .env.local + opt-in explícito (evita fallo rojo si el usuario no existe en Firebase).
- * Ej.: `E2E_AUTH_LOGIN=1 npx playwright test --project=chromium`
+ * Login E2E: envío de email link con proyecto Firebase real + opt-in explícito.
+ * Ej.: `E2E_AUTH_LOGIN=1 TEST_USER_EMAIL=cliente@dominio.com npx playwright test --project=chromium`
  */
 const canRunLoginE2E =
-  (process.env.E2E_AUTH_LOGIN === '1' || process.env.E2E_AUTH_LOGIN === 'true') &&
-  Boolean(process.env.TEST_USER_EMAIL?.trim()) &&
-  Boolean(process.env.TEST_USER_PASSWORD?.trim());
+  process.env.E2E_AUTH_LOGIN === '1' || process.env.E2E_AUTH_LOGIN === 'true';
 
 test.describe('Authentication Flow (Happy Path)', () => {
   test.describe.configure({ mode: 'serial' });
@@ -67,20 +60,15 @@ test.describe('Authentication Flow (Happy Path)', () => {
     await mockPage.verifyTokenReceived();
   });
 
-  test('Positive Flow: Login with Existing User and Receive Token', async ({ page }) => {
+  test('Positive Flow: Request Email Link Login', async ({ page }) => {
     test.skip(
-      !canRunLoginE2E,
-      'Activa E2E_AUTH_LOGIN=1 y define TEST_USER_EMAIL / TEST_USER_PASSWORD con un usuario existente en Firebase (.env.local).'
+      !canRunLoginE2E || !process.env.TEST_USER_EMAIL,
+      'Activa E2E_AUTH_LOGIN=1 y TEST_USER_EMAIL para ejecutar envío real de email link.'
     );
 
-    // 1. Initialize POMs
-    const mockPage = new MockClientPage(page);
     const loginPage = new LoginPage(page);
     
-    const email = TEST_USER.email;
-    const password = TEST_USER.password;
-
-    console.log(`[TEST] Logging in with Existing User: ${email}`);
+    console.log('[TEST] Requesting Firebase email link');
 
     // DIRECT NAVIGATION STRATEGY
     const idpUrl = 'http://localhost:5173/?client_id=test-client&redirect_uri=http://localhost:3000&state=test-state';
@@ -97,14 +85,8 @@ test.describe('Authentication Flow (Happy Path)', () => {
       page.getByRole('heading', { name: /Inicia sesión en tu cuenta|Portal de Acceso/i })
     ).toBeVisible({ timeout: 10000 });
 
-    // 6. Perform Login (Directly)
-    await loginPage.loginWithEmail(email, password);
-
-    // 7. Verify Redirection back to Client
-    await expect(page).toHaveURL(/localhost:3000/);
-
-    // 8. Verify Token Reception
-    await mockPage.verifyTokenReceived();
+    // 6. Request email link. Completing the link requires mailbox access and is covered manually.
+    await loginPage.requestEmailLink(process.env.TEST_USER_EMAIL!);
   });
 });
 

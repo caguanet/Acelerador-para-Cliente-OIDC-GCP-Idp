@@ -3,7 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=11"
+  },
   "scripts": {
+    "preinstall": "node scripts/ensure-pnpm.mjs",
     "dev": "vite",
     "dev:simulation": "node scripts/cleanup-ports.mjs && concurrently \"vite --force\" \"vite -c vite.config.mock.js --force\"",
     "build": "tsc && vite build",
@@ -16,7 +22,7 @@
     "verify:skills": "node scripts/verify-skills-lock.mjs",
     "skills:refresh-lock": "node scripts/update-skills-lock-hashes.mjs",
     "verify:regression": "node scripts/verify-regression.mjs",
-    "verify:ci": "npm run verify:regression"
+    "verify:ci": "pnpm run verify:regression"
   },
   "dependencies": {
     "firebase": "^10.0.0",
