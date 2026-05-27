@@ -44,6 +44,13 @@ set VAL_FIREBASE_API_KEY=AIzaSyByRyUZPbLYH3-J3vj_gsKShz1M2qDTnoo
 set VAL_FIREBASE_AUTH_DOMAIN=etb-identity-omnicanal.firebaseapp.com
 set VAL_FIREBASE_PROJECT_ID=etb-identity-omnicanal
 
+:: reCAPTCHA Enterprise
+:: VAL_RECAPTCHA_SITE_KEY es publica; VAL_RECAPTCHA_API_KEY es privada y debe ser
+:: una API key separada, restringida solo a recaptchaenterprise.googleapis.com.
+set VAL_RECAPTCHA_PROJECT_ID=etb-identity-omnicanal
+set VAL_RECAPTCHA_SITE_KEY=6Lfak_0sAAAAAIMausKbKkGMKHe5W_RVxa4h3FGN
+set VAL_RECAPTCHA_API_KEY=
+
 :: ==============================================================================================
 :: NO MODIFICAR DEBAJO DE ESTA LÍNEA A MENOS QUE SEPA LO QUE HACE
 :: ==============================================================================================
@@ -70,7 +77,7 @@ echo [FASE 1] Aprovisionando Infraestructura...
 :: 1. Habilitar APIs
 echo [INFO] Habilitando APIs de GCP...
 :: Se agregan compute.googleapis.com (para SA default) e iam.googleapis.com
-call gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com secretmanager.googleapis.com compute.googleapis.com iam.googleapis.com --project=%PROJECT_ID%
+call gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com secretmanager.googleapis.com compute.googleapis.com iam.googleapis.com recaptchaenterprise.googleapis.com --project=%PROJECT_ID%
 if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo al habilitar APIs. & exit /b 1 )
 
 echo [INFO] Esperando 15 segundos para la propagacion de Service Accounts...
@@ -173,6 +180,39 @@ if not "%VAL_FIREBASE_PROJECT_ID%"=="" (
     )
 )
 
+if not "%VAL_RECAPTCHA_PROJECT_ID%"=="" (
+    call gcloud secrets describe RECAPTCHA_PROJECT_ID >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [INFO] Actualizando RECAPTCHA_PROJECT_ID...
+        echo %VAL_RECAPTCHA_PROJECT_ID%| gcloud secrets versions add RECAPTCHA_PROJECT_ID --data-file=- --quiet
+    ) else (
+        echo [INFO] Creando RECAPTCHA_PROJECT_ID...
+        echo %VAL_RECAPTCHA_PROJECT_ID%| gcloud secrets create RECAPTCHA_PROJECT_ID --data-file=-
+    )
+)
+
+if not "%VAL_RECAPTCHA_SITE_KEY%"=="" (
+    call gcloud secrets describe RECAPTCHA_SITE_KEY >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [INFO] Actualizando RECAPTCHA_SITE_KEY...
+        echo %VAL_RECAPTCHA_SITE_KEY%| gcloud secrets versions add RECAPTCHA_SITE_KEY --data-file=- --quiet
+    ) else (
+        echo [INFO] Creando RECAPTCHA_SITE_KEY...
+        echo %VAL_RECAPTCHA_SITE_KEY%| gcloud secrets create RECAPTCHA_SITE_KEY --data-file=-
+    )
+)
+
+if not "%VAL_RECAPTCHA_API_KEY%"=="" (
+    call gcloud secrets describe RECAPTCHA_API_KEY >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [INFO] Actualizando RECAPTCHA_API_KEY...
+        echo %VAL_RECAPTCHA_API_KEY%| gcloud secrets versions add RECAPTCHA_API_KEY --data-file=- --quiet
+    ) else (
+        echo [INFO] Creando RECAPTCHA_API_KEY...
+        echo %VAL_RECAPTCHA_API_KEY%| gcloud secrets create RECAPTCHA_API_KEY --data-file=-
+    )
+)
+
 :: 5. Permiso para que la SA de Cloud Run lea los secretos (requerido por --set-secrets)
 echo [INFO] Otorgando Secret Manager Secret Accessor a 'idp-service-sa'...
 call gcloud projects add-iam-policy-binding %PROJECT_ID% --member="serviceAccount:idp-service-sa@%PROJECT_ID%.iam.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" --project=%PROJECT_ID%
@@ -222,7 +262,10 @@ call gcloud run deploy idp-service ^
   --set-env-vars "VITE_ALLOWED_ORIGINS=pending_configuration" ^
   --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest ^
   --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest ^
-  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest
+  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest ^
+  --set-secrets RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest ^
+  --set-secrets RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest ^
+  --set-secrets RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest
 
 if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo en el Despliegue Inicial. & exit /b 1 )
 

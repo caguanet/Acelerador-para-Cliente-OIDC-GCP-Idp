@@ -32,9 +32,21 @@ window.APP_CONFIG = {
     "http://localhost:5173"
   ],
 
+  // Canonical IdP origin. When set, email links and direct visits through
+  // alternate Cloud Run URLs are normalized to this origin.
+  // canonicalIdpOrigin: "https://idp-service-2tczqvffra-ue.a.run.app",
+
   // Set to false in production to hide the test dashboard/landing page
   enableLandingPage: true,
 
+  // Set to true in preview/production when the IdP must only be opened by
+  // authorized OIDC clients with client_id + redirect_uri.
+  requireOidcRedirect: false,
+
   // Backend URL
-  BACKEND_URL: "http://localhost:8080"
+  BACKEND_URL: "http://localhost:8080",
+
+  // Public reCAPTCHA Enterprise site key for registration/OTP risk checks.
+  // Backend assessments still require RECAPTCHA_PROJECT_ID and RECAPTCHA_API_KEY.
+  recaptchaSiteKey: "6Lfak_0sAAAAAIMausKbKkGMKHe5W_RVxa4h3FGN"
 };

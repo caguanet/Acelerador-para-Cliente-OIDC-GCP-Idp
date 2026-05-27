@@ -1,286 +1,301 @@
-# Guía de Despliegue: Cloud Run (OIDC Service)
+# Guia de despliegue Cloud Run
 
-> [!TIP]
-> **Despliegue Rápido (One-Shot):**
-> Este documento detalla paso a paso el proceso de despliegue.
-> Para entornos donde se desee minimizar la intervención manual, puede utilizar el script automatizado:
-> `scripts/one-shot-deploy.cmd`
->
-> *Nota: Asegúrese de editar las variables de configuración en el script antes de ejecutarlo.*
+Este documento cubre el pipeline de build/deploy de `idp-service` y el troubleshooting propio del despliegue. La configuracion productiva viva de variables, secretos, IAM, Firebase/Auth, MuleSoft y reCAPTCHA esta centralizada en [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md).
 
-## 1. Resumen Ejecutivo
+## Alcance
 
-Este documento define la **Estrategia de Despliegue en Producción** para el Proveedor de Identidad OpenID Connect (OIDC). La arquitectura aprovecha **Google Cloud Run** para proporcionar una infraestructura serverless, altamente disponible y autoescalable.
+| Tema | Documento |
+| --- | --- |
+| Build, Artifact Registry, Cloud Build, deploy y rollback de revision | Este documento |
+| Secret Manager, variables productivas, IAM `idp-service-sa`, Firebase/Auth, reCAPTCHA, MuleSoft | [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md) |
+| Setup local, `.env.local`, simulacion y pruebas en maquina de desarrollo | [CONFIGURACION-PASO-A-PASO.md](CONFIGURACION-PASO-A-PASO.md) |
+| Proveedores externos, Anypoint, MS-4, Firestore y recuperacion de contrasena | [IDP_GCP_MULESOFT_MANUAL.md](IDP_GCP_MULESOFT_MANUAL.md) |
 
-**Alcance:**
-*   **Aprovisionamiento:** Creación de recursos base (Artifact Registry, Secret Manager).
-*   **Despliegue Continuo (CD):** Compilación y publicación de nuevas versiones del servicio.
+## Prerrequisitos
 
----
+1. Instalar Google Cloud SDK.
+   - Windows: descargar `GoogleCloudSDKInstaller.exe` desde <https://cloud.google.com/sdk/docs/install>.
+   - macOS/Linux: usar el instalador oficial de Google Cloud SDK.
+2. Autenticar la cuenta:
 
-## 2. Prerrequisitos
+   ```bash
+   gcloud auth login
+   ```
 
-### 2.1. Instalación de Google Cloud SDK (Windows)
-### 2.1. Instalación de Google Cloud SDK (Windows)
-**Paso 1:** Descargue el instalador manualmente desde [Google Cloud SDK Installer](https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe).
+3. Seleccionar proyecto:
 
-Alternativamente, si tiene la herramienta `curl` disponible en su CMD, ejecute:
-```cmd
-curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe
-GoogleCloudSDKInstaller.exe
+   ```bash
+   gcloud config set project etb-identity-omnicanal
+   ```
+
+4. Verificar cuenta y proyecto:
+
+   ```bash
+   gcloud auth list --filter=status:ACTIVE --format='value(account)'
+   gcloud config get-value project
+   ```
+
+5. Confirmar permisos minimos para quien ejecuta el deploy:
+   - Cloud Run Admin.
+   - Cloud Build Editor o permisos equivalentes para ejecutar builds.
+   - Artifact Registry Writer/Admin sobre el repositorio.
+   - Service Account User sobre `idp-service-sa`, si se especifica la service account en deploy.
+   - Secret Manager Viewer/Accessor solo si necesita validar secretos; la configuracion productiva se detalla en la guia canonica.
+
+## Variables de sesion
+
+Usar estos valores para el ambiente validado:
+
+```bash
+export PROJECT_ID=etb-identity-omnicanal
+export REGION=us-east1
+export ARTIFACT_REPO_NAME=idp-repo
+export SERVICE_NAME=idp-service
+export SERVICE_ACCOUNT=idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com
+export IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/${SERVICE_NAME}
 ```
-**Paso 2:** Complete el asistente de instalación. Asegúrese de seleccionar la opción "Bundled Python" si no tiene Python instalado y marque la opción de iniciar sesión.
 
-### 2.2. Autenticación Inicial
-Una vez instalado, reinicie su terminal y ejecute:
-```cmd
-gcloud auth login
-```
-Este comando abrirá un navegador para que inicie sesión con su cuenta de Google Cloud.
-
-### 2.3. Configuración del Entorno
-*   **Roles IAM:** `Run Admin`, `Artifact Registry Admin`, `Secret Manager Accessor`.
-*   **Docker:** Daemon local en ejecución (si se compila localmente).
-
----
-
-## 3. Configuración Global
-
-**IMPORTANTE:** Defina estas variables al inicio de su sesión de terminal.
+En Windows CMD:
 
 ```cmd
-:: --- 1. Identificadores del Proyecto (OBLIGATORIO) ---
-:: Nombre del proyecto en GCP
-set PROJECT_ID=<TU_PROJECT_ID>
-
-:: Nombre para el REPOSITORIO DE ARTEFACTOS (Donde se alojarán las imágenes Docker)
-:: Ejemplo: "infra-registry", "oidc-artifacts", "backend-repo"
-set ARTIFACT_REPO_NAME=<TU_NOMBRE_DE_REPOSITORIO>
-
-:: Región de Despliegue (Debe coincidir con la del script)
-:: Opciones recomendadas para LatAm Norte: us-east1 (Default), us-central1, southamerica-east1
+set PROJECT_ID=etb-identity-omnicanal
 set REGION=us-east1
-
-:: --- 3. Secretos de la Aplicación (SENSIBLE) ---
-:: Defina aquí los valores REALES.
-:: ADVERTENCIA: Al ejecutar esto, los valores quedarán en el historial de su terminal.
-:: Se recomienda limpiar el historial tras la ejecución.
-set VAL_FIREBASE_API_KEY=<TU_API_KEY_REAL>
-set VAL_FIREBASE_AUTH_DOMAIN=<TU_AUTH_DOMAIN_REAL>
-set VAL_FIREBASE_PROJECT_ID=<TU_FIREBASE_PROJECT_ID_REAL>
+set ARTIFACT_REPO_NAME=idp-repo
+set SERVICE_NAME=idp-service
+set SERVICE_ACCOUNT=idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com
+set IMAGE_URI=%REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/%SERVICE_NAME%
 ```
 
----
+## APIs e infraestructura base
 
-## 4. Aprovisionamiento de Infraestructura (One-Time Setup)
+Habilitar APIs si el proyecto es nuevo:
 
-Esta sección se ejecuta **una única vez** al inicializar el proyecto. Su objetivo es preparar el terreno (APIs, Repositorios, Secretos). No despliega la aplicación.
-
-```cmd
-:: 1. Habilitar APIs
-setlocal enabledelayedexpansion
-gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com secretmanager.googleapis.com
-
-:: 2. Verificar/Crear Artifact Registry
-echo [INFO] Verificando repositorio: %ARTIFACT_REPO_NAME%...
-call gcloud artifacts repositories describe %ARTIFACT_REPO_NAME% --location=%REGION% >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [INFO] El repositorio '%ARTIFACT_REPO_NAME%' NO existe. Creando automáticamente...
-    gcloud artifacts repositories create %ARTIFACT_REPO_NAME% --repository-format=docker --location=%REGION% --description="Registro de Imagenes OIDC"
-) else (
-    echo [INFO] Repositorio detectado. Continuando...
-)
-
-:: 3. Asignación de Permisos IAM (Cloud Build Service Account)
-:: Crítico para que el pipeline de CI/CD pueda acceder a los secretos y al registro.
-echo [INFO] Configurando permisos IAM para Cloud Build...
-for /f "tokens=*" %i in ('gcloud projects describe %PROJECT_ID% --format^="value(projectNumber)"') do set PROJ_NUM=%i
-gcloud projects add-iam-policy-binding %PROJECT_ID% --member="serviceAccount:%PROJ_NUM%@cloudbuild.gserviceaccount.com" --role="roles/artifactregistry.admin" >nul
-gcloud projects add-iam-policy-binding %PROJECT_ID% --member="serviceAccount:%PROJ_NUM%-compute@developer.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" >nul
-
-
-:: 3. Gestión de Secretos (Lógica Automática: Crear o Rotar)
-echo [INFO] Configurando secretos en Secret Manager...
-
-:: --- FIREBASE_API_KEY ---
-call gcloud secrets describe FIREBASE_API_KEY >nul 2>&1
-if !ERRORLEVEL! EQU 0 (
-    echo [INFO] El secreto FIREBASE_API_KEY ya existe. Agregando nueva versión...
-    echo %VAL_FIREBASE_API_KEY%| gcloud secrets versions add FIREBASE_API_KEY --data-file=- --quiet
-) else (
-    echo [INFO] Creando secreto FIREBASE_API_KEY...
-    echo %VAL_FIREBASE_API_KEY%| gcloud secrets create FIREBASE_API_KEY --data-file=-
-)
-
-:: --- FIREBASE_AUTH_DOMAIN ---
-call gcloud secrets describe FIREBASE_AUTH_DOMAIN >nul 2>&1
-if !ERRORLEVEL! EQU 0 (
-    echo [INFO] El secreto FIREBASE_AUTH_DOMAIN ya existe. Agregando nueva versión...
-    echo %VAL_FIREBASE_AUTH_DOMAIN%| gcloud secrets versions add FIREBASE_AUTH_DOMAIN --data-file=- --quiet
-) else (
-    echo [INFO] Creando secreto FIREBASE_AUTH_DOMAIN...
-    echo %VAL_FIREBASE_AUTH_DOMAIN%| gcloud secrets create FIREBASE_AUTH_DOMAIN --data-file=-
-)
-
-:: --- FIREBASE_PROJECT_ID ---
-call gcloud secrets describe FIREBASE_PROJECT_ID >nul 2>&1
-if !ERRORLEVEL! EQU 0 (
-    echo [INFO] El secreto FIREBASE_PROJECT_ID ya existe. Agregando nueva versión...
-    echo %VAL_FIREBASE_PROJECT_ID%| gcloud secrets versions add FIREBASE_PROJECT_ID --data-file=- --quiet
-) else (
-    echo [INFO] Creando secreto FIREBASE_PROJECT_ID...
-    echo %VAL_FIREBASE_PROJECT_ID%| gcloud secrets create FIREBASE_PROJECT_ID --data-file=-
-)
+```bash
+gcloud services enable \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
+  run.googleapis.com \
+  secretmanager.googleapis.com \
+  --project="${PROJECT_ID}"
 ```
 
----
+Crear Artifact Registry si no existe:
 
-## 5. Pipeline de Despliegue de Aplicación (OIDC Service)
-
-Este script se ejecuta recurrentemente para liberar nuevas versiones del **Identity Provider**.
-
-```cmd
-:: 1. Compilar Imagen y Subir a Artifact Registry
-:: Nota: Se usa la ruta regionalizada standard (pkg.dev)
-gcloud builds submit --tag %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/idp-service
-
-:: 2. Desplegar Nueva Revisión en Cloud Run
-gcloud run deploy idp-service ^
-  --image %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/idp-service ^
-  --platform managed ^
-  --region %REGION% ^
-  --allow-unauthenticated ^
-  --set-env-vars APP_MODE=IDP ^
-  --set-env-vars "VITE_ALLOWED_ORIGINS=https://tu-cliente.com|https://otro-cliente.com" ^
-  :: Nota: El script one-shot-deploy.cmd automatiza esto usando la URL del propio servicio.
-  --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest ^
-  --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest ^
-  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest
+```bash
+gcloud artifacts repositories describe "${ARTIFACT_REPO_NAME}" \
+  --location="${REGION}" \
+  --project="${PROJECT_ID}" \
+  || gcloud artifacts repositories create "${ARTIFACT_REPO_NAME}" \
+    --repository-format=docker \
+    --location="${REGION}" \
+    --description="Registro de imagenes OIDC" \
+    --project="${PROJECT_ID}"
 ```
 
----
+La creacion y versionado de secretos no se documenta aqui para evitar duplicidad. Ver [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#4-secret-manager).
 
-## 6. Configuración Post-Despliegue (Integración)
+## Build de imagen
 
-Tras el despliegue, el servicio será accesible vía HTTPS, pero requiere autorización en los proveedores externos.
+El `Dockerfile` usa `node:22-alpine` en build y runtime porque el repo declara `pnpm@11.2.2`, version que requiere Node >= 22.13. No bajar la imagen base a Node 18/20 sin cambiar tambien `packageManager` y validar `pnpm install --frozen-lockfile` en Cloud Build.
 
-1.  **Identity Platform (GCP):** Agregar dominio de Cloud Run a "Authorized Domains".
-2.  **API Credentials (GCP):**
-    *   **HTTP Referrers:** Agregar el dominio del servicio (`https://idp-service-.....run.app/*`)
-    *   **IMPORTANTE:** Si desarrolla localmente, agregue también `http://localhost:XXXX/*`.
-    *   **API Restrictions:** Si restringe la Key, asegúrese de permitir:
-        *   `Identity Toolkit API`
-        *   `Token Service API`
-3.  **OAuth Credentials:** Agregar dominio a "Authorized JavaScript Origins".
-4.  **(Recomendado) Actualizar VITE_ALLOWED_ORIGINS:**
-    El script automatizado añade la URL del propio servicio. Para hacerlo manualmente:
-    ```cmd
-    :: Obtener URL
-    for /f "tokens=*" %i in ('gcloud run services describe idp-service --region %REGION% --format^="value(status.url)"') do set SERVICE_URL=%i
-    :: Actualizar Servicio (Self-Reference + Localhost)
-    :: NOTA: Use comillas dobles y escape el pipe con ^|
-    gcloud run services update idp-service --region %REGION% --update-env-vars "VITE_ALLOWED_ORIGINS=%SERVICE_URL%^|http://localhost:3000"
-    ```
+Desde la raiz del repo:
 
-> [!TIP]
-> **Desarrollo Local:**
-> Si planea desarrollar clientes OIDC externos (como la Solución Demo), asegúrese de agregar también `http://localhost:XXXX` (donde XXXX es el puerto local de su cliente) a la variable `VITE_ALLOWED_ORIGINS` del IdP y a los "Authorized JavaScript origins" de la Credencial OAuth en GCP.
-
----
-
-## 7. Anexo: Despliegue de Cliente Mock (Entornos de Calidad)
-
-Uso exclusivo para pruebas de integración en nube.
-
-```cmd
-:: 1. Compilar Artifact Mock
-gcloud builds submit --tag %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/mock-client --file=Dockerfile.mock
-
-:: 2. Desplegar Servicio Mock
-gcloud run deploy mock-client ^
-  --image %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/mock-client ^
-  --platform managed ^
-  --region %REGION% ^
-  --allow-unauthenticated ^
-  --set-env-vars APP_MODE=MOCK ^
-  --set-env-vars VITE_IDP_URL=https://idp-service-xyz.run.app
-
-:: 3. Interconexión Automática (Cierre del Círculo)
-echo [INFO] Capturando URL del Mock Client...
-for /f "tokens=*" %i in ('gcloud run services describe mock-client --region %REGION% --format^="value(status.url)"') do set MOCK_URL=%i
-echo [INFO] Mock URL: %MOCK_URL%
-
-echo [INFO] Actualizando Whitelist del IDP...
-:: ADVERTENCIA: Se usa '|' como separador para evitar conflictos de parsing en CMD
-gcloud run services update idp-service ^
-  --region %REGION% ^
-  --set-env-vars "^,^VITE_ALLOWED_ORIGINS=%MOCK_URL%|http://localhost:5173"
-
-echo [EXITO] Despliegue de entorno de pruebas finalizado.
+```bash
+gcloud builds submit \
+  --tag="${IMAGE_URI}" \
+  --project="${PROJECT_ID}"
 ```
 
-**Nota:** Este script asume que `idp-service-xyz.run.app` es la URL correcta. Si es la primera vez, verifique la salida del paso de despliegue principal.
+Validar que la imagen exista:
 
----
+```bash
+gcloud artifacts docker images list \
+  "${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}" \
+  --project="${PROJECT_ID}"
+```
 
-## 8. Resolución de Problemas (Troubleshooting)
+## Deploy de `idp-service`
 
-Errores comunes detectados en operación.
+Antes de desplegar, confirmar que la matriz de secretos y variables esperada esta definida en [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#6-cloud-run---editar-idp-service).
 
-| Error Visible | Causa Probable | Solución |
-| :--- | :--- | :--- |
-| `auth/requests-from-referer-blocked` | Faltan dominios en API Key o OAuth. | Revisar Configuración Post-Despliegue (Referrers y Origins en GCP/Firebase). |
-| `Error de seguridad: El dominio ... no está autorizado` | Variable `VITE_ALLOWED_ORIGINS` incorrecta. | El script usa `|` como separador. Verifique que Cloud Run tenga ambos dominios (IDP y Mock/Cliente). |
-| `Illegal url for new iframe` | Secretos corruptos (espacios ocultos). | Repita el paso de gestión de secretos usando `echo|set /p` para evitar saltos de línea. |
-| Login Loop / Redirección infinita | Configuración OIDC circular. | Verifique que el Client ID sea el correcto y que el Mock no se apunte a sí mismo como IDP. |
+Ejemplo minimo de deploy inicial:
 
----
+```bash
+gcloud run deploy "${SERVICE_NAME}" \
+  --image="${IMAGE_URI}" \
+  --platform=managed \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --service-account="${SERVICE_ACCOUNT}" \
+  --allow-unauthenticated \
+  --set-env-vars=APP_MODE=IDP,NODE_ENV=production
+```
 
-### 9. Políticas de Organización (Troubleshooting Enterprise)
-Si despliega en un proyecto dentro de una Organización (G Suite / Cloud Identity), es posible que falle con errores tipo:
-*   `FAILED_PRECONDITION: One or more users named in the policy do not belong to a permitted customer`
-*   `IAM Policy Binding Failed: ... domain restricted ...`
+Para un deploy productivo completo, usar la matriz de `--update-secrets` y `--update-env-vars` de la guia canonica. No copiar secretos como texto plano.
 
-Esto se debe a la política **"Domain Restricted Sharing"** (`constraints/iam.allowedPolicyMemberDomains`).
+Obtener URL y revision:
 
-#### Solución 1: Consola de Google Cloud (Recomendada)
-1.  Vaya a **IAM & Admin > Organization Policies**.
-2.  Busque la política **"Domain restricted sharing"**.
-3.  Haga clic en **Edit** (o Manage Policy).
-4.  Seleccione **"Customize"** (Personalizar) para el proyecto actual.
-5.  En "Policy enforcement", seleccione **"Replace"**.
-6.  En "Rules", agregue una regla **"Allow All"**.
-7.  Guarde y reintente el comando de hacer público el servicio.
+```bash
+gcloud run services describe "${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --format='value(status.latestReadyRevisionName,status.url)'
+```
 
-#### Solución 2: CLI (Override)
-Si tiene permisos de administrador de políticas, puede sobrescribir la restricción via CLI:
+## Apuntamiento temporal a QA sobre `idp-service`
 
-1.  Cree un archivo `policy.yaml`:
-    ```yaml
-    name: projects/%PROJECT_ID%/policies/iam.allowedPolicyMemberDomains
-    spec:
-      rules:
-      - allowAll: true
-    ```
-2.  Aplique la política:
-    ```cmd
-    gcloud resource-manager org-policies set-policy policy.yaml --project=%PROJECT_ID%
-    ```
-3.  Haga público el servicio:
-    ```cmd
-    gcloud run services add-iam-policy-binding idp-service --member=allUsers --role=roles/run.invoker --region=%REGION% --project=%PROJECT_ID%
-    ```
+Uso exclusivo para ventanas de prueba controladas donde el mismo sitio publicado se apunta a MuleSoft QA y luego se revierte a produccion. No crear secretos con sufijo `_QA` en esta modalidad: los nombres runtime se mantienen iguales y se actualizan los valores montados en el servicio.
 
-## 10. Estrategia DevOps: Dominios Personalizados
+Antes de cambiar el apuntamiento, guardar una copia de la configuracion activa:
 
-Para entornos productivos, evite usar las URLs por defecto `*.run.app`.
+```bash
+mkdir -p tmp/cloud-run-backups
+gcloud run services describe "${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --format=yaml > "tmp/cloud-run-backups/${SERVICE_NAME}-before-qa.yaml"
+```
 
-### Opción A: Mapeo de Dominio (Cloud Run)
-1.  Vaya a **Cloud Run > Manage Custom Domains**.
-2.  Mapee `auth.su-empresa.com` al servicio `idp-service`.
-3.  Actualice **UNA VEZ** los orígenes autorizados en GCP/Firebase.
-4.  Beneficio: Puede recrear el servicio sin romper la confianza de los clientes OAuth.
+Actualizar Secret Manager con valores QA vigentes para los mismos Secret IDs que consume `idp-service`:
 
-### Opción B: Load Balancer (Enterprise)
-Recomendado para WAF, certificados gestionados y cumplimiento normativo. El dominio apunta a la IP del balanceador, desacoplando completamente la red del servicio de cómputo.
+```text
+MULESOFT_OAUTH_URL
+MULESOFT_BASE_URL_MS1
+MULESOFT_BASE_URL_MS2
+MULESOFT_BASE_URL_MS3
+MULESOFT_CLIENT_ID
+MULESOFT_CLIENT_SECRET
+MULESOFT_OAUTH_CLIENT_ID
+MULESOFT_OAUTH_CLIENT_SECRET
+MULESOFT_OAUTH_ACCOUNT_ID
+```
 
+Nota QA: si MuleSoft define `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` como campos vacios en el body del token service, mantener el secreto/variable con valor vacio. El BFF respeta esos vacios explicitos y solo usa fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` cuando la variable OAuth no existe.
+
+Endpoints QA esperados:
+
+```text
+MULESOFT_OAUTH_URL=https://oauth-etb-security-services-QA.us-e2.cloudhub.io:443/security/v1/access_token
+MULESOFT_BASE_URL_MS1=https://customer-xapi-services-qa.us-e2.cloudhub.io:443
+MULESOFT_BASE_URL_MS2=https://experience-xapi-services-qa.us-e2.cloudhub.io
+MULESOFT_BASE_URL_MS3=https://experience-xapi-services-qa.us-e2.cloudhub.io
+MULESOFT_ENABLE_MS4=false
+```
+
+Crear una nueva revision apuntada a QA:
+
+```bash
+gcloud run services update "${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --service-account="${SERVICE_ACCOUNT}" \
+  --update-env-vars='APP_ENV=qa,APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false' \
+  --update-secrets='MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_CLIENT_ID=MULESOFT_OAUTH_CLIENT_ID:latest,MULESOFT_OAUTH_CLIENT_SECRET=MULESOFT_OAUTH_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest'
+```
+
+Validar que el servicio no este usando simulacion:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="idp-service" AND resource.labels.location="us-east1" AND "MOCK MS-"' \
+  --project="${PROJECT_ID}" \
+  --limit=20 \
+  --format='value(timestamp,textPayload,jsonPayload.message)'
+```
+
+Para volver a produccion, restaurar las versiones productivas de Secret Manager y crear una nueva revision con:
+
+```bash
+gcloud run services update "${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --service-account="${SERVICE_ACCOUNT}" \
+  --update-env-vars='APP_ENV=prod,APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false'
+```
+
+Confirmar despues de la reversa que `APP_ENV=prod`, que los secretos activos corresponden a produccion y que no quedan valores QA montados en `idp-service`.
+
+## Cliente mock en Cloud Run
+
+Uso exclusivo para pruebas de integracion controladas.
+
+```bash
+export MOCK_IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/mock-client
+
+gcloud builds submit \
+  --tag="${MOCK_IMAGE_URI}" \
+  --file=Dockerfile.mock \
+  --project="${PROJECT_ID}"
+
+gcloud run deploy mock-client \
+  --image="${MOCK_IMAGE_URI}" \
+  --platform=managed \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --allow-unauthenticated \
+  --set-env-vars=APP_MODE=MOCK,VITE_IDP_URL=https://idp-service-2tczqvffra-ue.a.run.app
+```
+
+Luego agregar la URL del mock a `VITE_ALLOWED_ORIGINS` solo en QA/dev. La forma canonica de editar esa variable esta en [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#62-editar-por-consola).
+
+## Rollback
+
+Listar revisiones:
+
+```bash
+gcloud run revisions list \
+  --service="${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}"
+```
+
+Enviar todo el trafico a una revision anterior:
+
+```bash
+gcloud run services update-traffic "${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --to-revisions=REVISION_ANTERIOR=100
+```
+
+Tambien puede hacerse en consola:
+
+```text
+Menu > Cloud Run > idp-service > Revisions > Manage traffic
+```
+
+## Troubleshooting de deploy
+
+| Sintoma | Causa probable | Accion |
+| --- | --- | --- |
+| `PERMISSION_DENIED` al ejecutar build/deploy | La cuenta no tiene permisos sobre Cloud Build, Artifact Registry, Cloud Run o service account. | Revisar `IAM & Admin > IAM` y los prerequisitos de este documento. |
+| `Setting IAM policy failed` al permitir acceso publico | Politica de organizacion restringe `allUsers`. | Revisar `IAM & Admin > Organization Policies > Domain restricted sharing`. |
+| Revision no queda `Ready` | Imagen no arranca, puerto incorrecto, env var faltante o secreto inaccesible. | Revisar logs de Cloud Run y validar matriz en [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#11-validacion-posterior-al-cambio). |
+| Login falla despues del deploy | Configuracion Firebase/Auth, dominios, API key o `VITE_ALLOWED_ORIGINS`. | Revisar guia canonica de configuracion productiva. |
+| Registro cae en mock o bypass | Faltan variables MuleSoft/reCAPTCHA reales. | Revisar secciones MuleSoft y reCAPTCHA de la guia canonica. |
+
+Logs recientes:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="idp-service" AND resource.labels.location="us-east1" AND severity>=WARNING' \
+  --project="${PROJECT_ID}" \
+  --limit=50 \
+  --format='value(timestamp,severity,textPayload,jsonPayload.message)'
+```
+
+## Dominios personalizados
+
+Para produccion, evitar depender de URLs `*.run.app`.
+
+Opcion Cloud Run custom domain:
+
+```text
+Menu > Cloud Run > Manage custom domains
+```
+
+1. Mapear el dominio corporativo al servicio `idp-service`.
+2. Actualizar `Authorized domains`, API key referrers, OAuth origins/redirect URIs y `VITE_ALLOWED_ORIGINS` en la guia canonica.
+3. Mantener URLs temporales solo en QA o durante ventana de migracion.
+
+Opcion enterprise: Load Balancer + certificado gestionado + Cloud Armor. Esta opcion desacopla el dominio publico del servicio Cloud Run y permite WAF/politicas corporativas.

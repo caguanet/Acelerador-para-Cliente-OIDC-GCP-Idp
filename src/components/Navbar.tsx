@@ -7,6 +7,14 @@ interface NavbarProps {
   onLogoutClick: () => void;
 }
 
+function maskEmail(email: string | null) {
+  if (!email) return 'Usuario autenticado';
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return 'Usuario autenticado';
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}${'*'.repeat(Math.max(3, local.length - visible.length))}@${domain}`;
+}
+
 export function Navbar({ user, onLoginClick, onLogoutClick }: NavbarProps) {
   return (
     <nav className="navbar">
@@ -21,7 +29,7 @@ export function Navbar({ user, onLoginClick, onLogoutClick }: NavbarProps) {
           </button>
         ) : (
           <div className="user-badge">
-            <span>{user.email}</span>
+            <span title="Correo de la sesión">{maskEmail(user.email)}</span>
             <button className="nav-btn-logout" onClick={onLogoutClick}>
               Salir
             </button>

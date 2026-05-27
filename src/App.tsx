@@ -6,56 +6,28 @@ import { PasswordlessLoginForm } from './components/PasswordlessLoginForm';
 import { RegisterForm } from './components/RegisterForm';
 import { StoreBadges } from './components/StoreBadges';
 import { themeConfig } from './config/theme';
+import { FirebaseActionForm, shouldRenderFirebaseAction } from './components/FirebaseActionForm';
+import { AccessDeniedScreen } from './components/AccessDeniedScreen';
+import { EmailLinkActionForm } from './components/EmailLinkActionForm';
+import {
+  getCanonicalIdpUrlForCurrentLocation,
+  isValidOrigin,
+  requiresOidcRedirect,
+  resolveAccessGate,
+  type AccessGateResult,
+} from './utils/oidcGate';
+import { buildOidcFragment, redirectToOidcPartner } from './utils/oidcRedirect';
 
 type AuthView = 'login' | 'register';
 
-type OidcParams = {
-  redirect_uri: string | null;
-  client_id: string | null;
-  state: string | null;
-  prompt: string | null;
-};
-
-const emptyOidc: OidcParams = { redirect_uri: null, client_id: null, state: null, prompt: null };
-
-function isValidOrigin(urlStr: string) {
-  try {
-    const targetUrl = new URL(urlStr);
-    const validationOrigins = [...(window.APP_CONFIG?.allowedOrigins || [])];
-    if (import.meta.env.DEV && validationOrigins.length === 0) {
-      return targetUrl.hostname === 'localhost';
-    }
-    return validationOrigins.some((origin) => targetUrl.origin === origin);
-  } catch {
-    return false;
-  }
-}
-
-/** Lectura síncrona de query OIDC en el primer render (evita un frame con UI incorrecta antes del useEffect). */
-function loadOidcFromUrl(): { oidcParams: OidcParams; oidcError: string | null } {
-  const params = new URLSearchParams(window.location.search);
-  const redirect_uri = params.get('redirect_uri');
-  const client_id = params.get('client_id');
-  const state = params.get('state');
-  const prompt = params.get('prompt');
-
-  if (redirect_uri && client_id) {
-    if (!isValidOrigin(redirect_uri)) {
-      return {
-        oidcParams: emptyOidc,
-        oidcError: `Error de Seguridad: El dominio de redirección no está autorizado.`,
-      };
-    }
-    return { oidcParams: { redirect_uri, client_id, state, prompt }, oidcError: null };
-  }
-  return { oidcParams: emptyOidc, oidcError: null };
-}
-
-function App() {
+function LoginApp({ gate }: { gate: AccessGateResult }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authView, setAuthView] = useState<AuthView>('login');
 
-  const [{ oidcParams, oidcError }, setOidc] = useState(() => loadOidcFromUrl());
+  const [{ oidcParams, oidcError }, setOidc] = useState(() => ({
+    oidcParams: gate.oidcParams,
+    oidcError: gate.oidcError,
+  }));
 
   const setOidcError = (msg: string | null) =>
     setOidc((prev) => ({ ...prev, oidcError: msg }));
@@ -73,13 +45,21 @@ function App() {
       try {
         if (user) {
           const idToken = await user.getIdToken(true); // force refresh for new expiry
-          targetUrl.hash = `id_token=${idToken}&state=${state}`;
+          targetUrl.hash = buildOidcFragment({ id_token: idToken, state });
         } else {
-          targetUrl.hash = `error=login_required&error_description=${encodeURIComponent('Sesión no activa en el IdP')}&state=${state}`;
+          targetUrl.hash = buildOidcFragment({
+            error: 'login_required',
+            error_description: 'Sesión no activa en el IdP',
+            state,
+          });
         }
       } catch (err) {
         console.error('Silent refresh error', err);
-        targetUrl.hash = `error=server_error&error_description=${encodeURIComponent('No se pudo renovar el token')}&state=${state}`;
+        targetUrl.hash = buildOidcFragment({
+          error: 'server_error',
+          error_description: 'No se pudo renovar el token',
+          state,
+        });
       }
       window.location.href = targetUrl.toString();
     });
@@ -96,9 +76,7 @@ function App() {
           setOidcError(`Error de seguridad: El dominio no está autorizado para recibir credenciales.`);
           return;
         }
-        const targetUrl = new URL(oidcParams.redirect_uri);
-        targetUrl.hash = `id_token=${idToken}&state=${oidcParams.state || ''}`;
-        window.location.href = targetUrl.toString();
+        redirectToOidcPartner(oidcParams.redirect_uri, idToken, oidcParams.state || '');
         return;
       }
 
@@ -138,13 +116,13 @@ function App() {
               <p style={{ color: 'var(--brand-text-secondary)' }}>Redirigiendo...</p>
             </div>
           ) : oidcError ? (
-            <div className="login-error-state">
+            <div className="login-error-state" role="alert">
               <div className="login-error-icon">✕</div>
               <h2>Acceso No Autorizado</h2>
               <p>{oidcError}</p>
-              <a href="/" className="login-btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
-                Volver al Inicio
-              </a>
+              <p className="login-error-guidance">
+                Cierra esta ventana e ingresa nuevamente desde la aplicación autorizada.
+              </p>
             </div>
           ) : loggedIn ? (
             <div className="login-error-state">
@@ -163,6 +141,8 @@ function App() {
                 <PasswordlessLoginForm
                   onSignInSuccess={handleLoginSuccess}
                   onGoToRegister={() => setAuthView('register')}
+                  oidcContextRequired={requiresOidcRedirect()}
+                  hasValidOidcContext={Boolean(oidcParams.redirect_uri && oidcParams.client_id)}
                 />
               )}
 
@@ -189,6 +169,30 @@ function App() {
 
     </div>
   );
+}
+
+function App() {
+  const canonicalTarget = getCanonicalIdpUrlForCurrentLocation();
+  if (canonicalTarget) {
+    window.location.replace(canonicalTarget);
+    return null;
+  }
+
+  const gate = resolveAccessGate();
+
+  if (gate.oidcError) {
+    return <AccessDeniedScreen message={gate.oidcError} />;
+  }
+
+  if (gate.isEmailLinkSignInAction) {
+    return <EmailLinkActionForm oidcParams={gate.oidcParams} />;
+  }
+
+  if (shouldRenderFirebaseAction()) {
+    return <FirebaseActionForm />;
+  }
+
+  return <LoginApp gate={gate} />;
 }
 
 export default App

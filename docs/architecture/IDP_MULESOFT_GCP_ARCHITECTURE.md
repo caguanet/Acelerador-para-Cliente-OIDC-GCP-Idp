@@ -1,10 +1,217 @@
 # Arquitectura IdP GCP + MuleSoft + OTP ETB
 
-Fecha de corte: 2026-05-07.
+Fecha de corte: 2026-05-25.
 
 Este documento define la arquitectura objetivo para integrar el IdP SPA del repo con GCP Identity Platform y los servicios MuleSoft existentes de ETB. Complementa `docs/architecture/TECH_README.md` y mantiene la decisión actual del producto: IdP SPA stateless con OIDC Implicit Flow hacia los clientes OIDC.
 
 Decision formal: [ADR 0001 - IdP SPA Stateless + BFF Stateful Acotado](decisions/0001-idp-spa-stateless-bff-stateful.md). El BFF es stateful solo para MuleSoft, OTP, MS-4, auditoria y Admin SDK; no reemplaza el contrato OIDC stateless del IdP hacia los Relying Parties.
+
+Manual operativo y despliegue: [docs/guides/IDP_GCP_MULESOFT_MANUAL.md](../guides/IDP_GCP_MULESOFT_MANUAL.md). Plan por fases (BFF modular futuro): [docs/planning/IDP_GCP_MULESOFT_IMPLEMENTATION_PLAN.md](../planning/IDP_GCP_MULESOFT_IMPLEMENTATION_PLAN.md).
+
+## Implementación actual en el repositorio
+
+Esta sección describe **lo que está implementado hoy en código**, no solo el diseño objetivo. El proxy MuleSoft vive en el mismo proceso Express que sirve el build del IdP (`server/server.js`, puerto `8080` en Cloud Run). No existe aún el árbol modular `idp-bff-service` del plan de fases; esa estructura sigue siendo objetivo.
+
+### Resumen
+
+| Capa | Ubicación | Rol |
+| --- | --- | --- |
+| IdP SPA (login OIDC) | `src/App.tsx`, `src/components/PasswordlessLoginForm.tsx` | OIDC Implicit, Firebase Auth; **no llama MuleSoft** |
+| Registro ETB (OTP) | `src/components/RegisterForm.tsx` | Orquesta el flujo vía `fetch` al BFF |
+| BFF / proxy MuleSoft | `server/server.js` | MS-1…MS-4, sesión, rate limit, reCAPTCHA, Firebase Admin SDK |
+| Config runtime | `GET /config.js` en `server/server.js` | Inyecta `window.APP_CONFIG` sin secretos MuleSoft |
+
+La sesión de registro (`sessionId`) se guarda en un **`Map` en memoria** con TTL de 15 minutos. El diseño objetivo prevé **Firestore** (`otp_sessions`); eso aún no está implementado.
+
+### Arquitectura implementada (vista de componentes)
+
+```mermaid
+flowchart TB
+    subgraph Cliente["Navegador"]
+        SPA["IdP SPA — src/App.tsx<br/>Login OIDC + silent refresh"]
+        REG["RegisterForm.tsx<br/>Hogares / MiPymes"]
+    end
+
+    subgraph BFF["BFF — server/server.js"]
+        CFG["GET /config.js"]
+        L1["POST /api/customer/lookup → MS-1"]
+        L2["POST /api/customer/otp/send → MS-2"]
+        L3["POST /api/customer/otp/validate → MS-3"]
+        L4["POST /api/customers/register → MS-4 + Admin SDK"]
+        SESS["sessionStore Map en memoria<br/>email enmascarado al cliente"]
+        TOK["getMuleSoftBearerToken()"]
+    end
+
+    subgraph MuleSoft["MuleSoft CloudHub"]
+        MS1["MS-1 GET /v1/customer"]
+        MS2["MS-2 POST .../customer/otp"]
+        MS3["MS-3 POST .../otp/validation"]
+        MS4["MS-4 POST .../customer/register<br/>contrato Anypoint pendiente"]
+    end
+
+    subgraph GCP["GCP"]
+        FB["Firebase Auth / Identity Platform"]
+        SM["Secret Manager / env del servicio"]
+    end
+
+    SPA -->|"signIn / getIdToken"| FB
+    REG --> L1 & L2 & L3 & L4
+    L1 & L2 & L3 & L4 --> SESS
+    L1 & L2 & L3 & L4 --> TOK
+    TOK --> SM
+    L1 --> MS1
+    L2 --> MS2
+    L3 --> MS3
+    L4 --> MS4
+    L4 -->|"createUser + customToken"| FB
+```
+
+### Mapa código ↔ servicio MuleSoft
+
+| Paso | Servicio | Endpoint BFF (implementado) | Archivo / función |
+| --- | --- | --- | --- |
+| 1 | MS-1 consulta cliente | `POST /api/customer/lookup` | `server/server.js` — handler ~línea 377 |
+| 2 | MS-2 envío OTP | `POST /api/customer/otp/send` | `server/server.js` — handler ~línea 530 |
+| 3 | MS-3 validación OTP | `POST /api/customer/otp/validate` | `server/server.js` — handler ~línea 610 |
+| 4 | MS-4 + Identity Platform | `POST /api/customers/register` | `server/server.js` — handler ~línea 703 |
+| UI registro | — | `fetch('/api/...')` | `src/components/RegisterForm.tsx` |
+| Token OAuth MuleSoft | — | `getMuleSoftBearerToken()` | `server/server.js` — ~línea 269 |
+| Path MS-3 (normalización URL) | — | `getMulesoftOtpValidationPath()` | `server/server.js` — ~línea 178 |
+| Elegibilidad MS-1 | — | `getReliableRegistrationEligibility()` | `server/server.js` — ~línea 192 |
+
+### Secuencia de registro (implementación actual)
+
+Los nombres de ruta BFF difieren del diseño objetivo documentado más abajo (`/api/customers/lookup` vs `/api/customer/lookup`). Esta secuencia refleja el código vigente.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant UI as RegisterForm.tsx
+    participant BFF as server/server.js
+    participant MS as MuleSoft
+    participant GCP as Firebase Admin SDK
+
+    U->>UI: Documento (+ NIT/rep. legal si MiPymes)
+    UI->>BFF: POST /api/customer/lookup + reCAPTCHA
+    BFF->>BFF: rate limit + correlationId + sessionId (Map)
+    BFF->>MS: OAuth token + MS-1 GET /v1/customer
+    MS-->>BFF: contactData.email + elegibilidad
+    BFF-->>UI: sessionId + maskedEmail
+
+    UI->>BFF: POST /api/customer/otp/send
+    BFF->>MS: OAuth token + MS-2 POST OTP (correo de sesión)
+    MS-->>BFF: id_transaccion
+    BFF-->>UI: success
+
+    U->>UI: Código 6 dígitos
+    UI->>BFF: POST /api/customer/otp/validate
+    BFF->>MS: OAuth token + MS-3 POST validación
+    BFF-->>UI: verificationToken (un solo uso, TTL 10 min)
+
+    U->>UI: Contraseña + teléfono + términos
+    UI->>BFF: POST /api/customers/register
+    opt MULESOFT_ENABLE_MS4=true y MS-4 configurado
+        BFF->>MS: OAuth token + MS-4 POST /operations/v1/customer/register
+    end
+    BFF->>GCP: createUser + setCustomUserClaims
+    GCP-->>BFF: customToken
+    BFF-->>UI: customToken
+    UI->>GCP: signInWithCustomToken → id_token OIDC
+```
+
+### Login OIDC (sin MuleSoft)
+
+El login principal y el silent refresh (`prompt=none`) usan solo Firebase desde la SPA. MuleSoft participa únicamente en **registro / alta digital ETB**.
+
+```mermaid
+sequenceDiagram
+    actor App as Cliente OIDC
+    participant IdP as App.tsx
+    participant FB as Firebase Auth
+
+    App->>IdP: ?client_id&redirect_uri&response_type=id_token
+    IdP->>IdP: Valida redirect_uri (APP_CONFIG)
+    alt prompt=none
+        IdP->>FB: getIdToken(true) si hay sesión
+    else login normal
+        U->>IdP: Email link / contraseña / social
+        IdP->>FB: signIn*
+    end
+    FB-->>IdP: id_token
+    IdP->>App: redirect_uri#id_token=...&state=...
+```
+
+### Variables de entorno del BFF (servidor)
+
+No deben exponerse en `public/config.js` ni en el navegador.
+
+| Variable | Uso |
+| --- | --- |
+| `MULESOFT_BASE_URL_MS1` | Base URL MS-1 (`GET /v1/customer`) |
+| `MULESOFT_BASE_URL_MS2` | Base URL MS-2 (envío OTP) |
+| `MULESOFT_BASE_URL_MS3` | Base URL MS-3 (validación OTP) |
+| `MULESOFT_ENABLE_MS4` | Feature flag para invocar MS-4; `false` por defecto en la fase actual |
+| `MULESOFT_BASE_URL_MS4` | Base URL MS-4 (alta digital; pendiente de contrato productivo) |
+| `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` | Headers/credenciales hacia CloudHub |
+| `MULESOFT_OAUTH_URL` | OAuth `client_credentials` para bearer dinámico |
+| `MULESOFT_OAUTH_CLIENT_ID` / `MULESOFT_OAUTH_CLIENT_SECRET` / `MULESOFT_OAUTH_ACCOUNT_ID` | Credenciales del body para el servicio ETB OAuth 2.0 |
+| `GOOGLE_APPLICATION_CREDENTIALS` / `FIREBASE_CONFIG` | Firebase Admin SDK local; en Cloud Run se usan Application Default Credentials de la service account |
+| `RECAPTCHA_*` | Verificación antes de lookup y envío OTP |
+| `VITE_ALLOWED_ORIGINS` | Origenes permitidos para `redirect_uri` OIDC; se publica en `/config.js` |
+| `CORS_ALLOWED_ORIGINS` | Origenes permitidos para llamadas browser al BFF y guard server-side de rutas sensibles |
+
+Detalle operativo y valores QA: [IDP_GCP_MULESOFT_MANUAL.md](../guides/IDP_GCP_MULESOFT_MANUAL.md).
+
+Reglas transversales MuleSoft:
+
+- Cada llamada a MS-1/MS-2/MS-3 y futuro MS-4 solicita un token nuevo al servicio `MULESOFT_OAUTH_URL`.
+- Si `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` existen con valor vacio, el BFF envia esos campos vacios en el body del token service. El fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` aplica solo cuando la variable OAuth no existe.
+- Los headers `name` y `source` viajan siempre con valor `IDP-MiETB`.
+- `X-CORRELATION-ID` se genera una sola vez al iniciar la sesion de registro y se conserva para token service, MS-1, MS-2, MS-3 y futuro MS-4.
+
+Reglas transversales de origen:
+
+- Las rutas sensibles de registro validan `Origin` o `Referer` contra `CORS_ALLOWED_ORIGINS` en el servidor.
+- Este control complementa CORS, reCAPTCHA y rate limit porque Cloud Run es publico y CORS no bloquea clientes server-to-server.
+
+### Modo mock vs llamadas reales
+
+```mermaid
+flowchart LR
+    A["¿MULESOFT_BASE_URL_MS*<br/>y MULESOFT_CLIENT_ID definidos?"] -->|No| B["Mock: email ficticio,<br/>OTP 123456 o 654321"]
+    A -->|Sí| C["Llamadas reales CloudHub"]
+    C --> D{"¿MULESOFT_ENABLE_MS4=true?"}
+    D -->|No| E["Registro solo Firebase<br/>sin MS-4"]
+    D -->|Sí| F["Exigir MULESOFT_BASE_URL_MS4<br/>y ejecutar MS-4 antes de createUser"]
+```
+
+Condición en código: `isMockMode` cuando falta URL, la URL contiene `mock`, o no hay `MULESOFT_CLIENT_ID`.
+
+### Detalle de integración MuleSoft en `server/server.js`
+
+| MS | Método y path hacia MuleSoft | Notas de implementación |
+| --- | --- | --- |
+| MS-1 | `GET {MS1}/v1/customer?ORIGIN=TELECENTER&CUSTOMER_ID=...&CUSTOMER_ID_TYPE=...` | MiPymes añade `COMPANY_ID` / `COMPANY_ID_TYPE`. Headers: `systemId: MIGRACION`, `name`/`source: IDP-MiETB`, `client_id`, `client_secret`, `Authorization` |
+| MS-2 | `POST {MS2}/operations/v1/customer/otp` | Body: `aplicacion: IDP-MiETB`, canal `EMAIL`, `valor_canal` = correo de sesión (no elegido por usuario) |
+| MS-3 | `POST` vía `getMulesoftOtpValidationPath(base)` | Soporta variantes de base URL (`v1customer` vs `v1/customer`) |
+| MS-4 | `POST {MS4}/operations/v1/customer/register` | Path **provisional** en repo; contrato definitivo pendiente en Anypoint — ver [HU-MS4](../planning/HU-MS4-REGISTRO-CLIENTE-IDP-GCP.md) |
+
+Elegibilidad en código (hasta indicador fidedigno de negocio): `eligibleForDigitalRegistration`, `hasActiveServices`, o `registrationEligibility.status === "ELIGIBLE"`.
+
+Claims tras registro (`setCustomUserClaims`): `customerType`, `documentHash`, `registration_source: mulesoft_otp`, `auth_level: otp_verified`; MiPymes añade `companyDocumentHash`.
+
+### Brecha: objetivo vs implementado
+
+| Tema | Objetivo (este doc / plan) | Implementado hoy |
+| --- | --- | --- |
+| Proyecto BFF | `idp-bff-service` TypeScript modular | Monolito `server/server.js` |
+| Sesión OTP | Firestore `otp_sessions` | `Map` en memoria |
+| Rutas BFF registro | `/api/customers/lookup`, `/api/otp/send`, `/api/otp/verify` | `/api/customer/lookup`, `/api/customer/otp/send`, `/api/customer/otp/validate` |
+| Headers MuleSoft `name`/`source`/`aplicacion` | `IDP-MiETB` | Implementado en `server/server.js` |
+| MS-4 | Contrato `POST /v1/digital-identity/registration` (recomendado) | `POST /operations/v1/customer/register` provisional |
+| Health check BFF | `GET /healthz` | `GET /api/health` |
+| Auditoría | Firestore `accept_logs` | No persistido en servidor actual |
 
 ## Mapa Visual Rápido
 
@@ -76,7 +283,7 @@ Para MiPymes la validación se realiza con NIT de empresa y representante legal:
 | --- | --- | --- |
 | MS-1 consulta cliente | `GET https://customer-xapi-services-QA.us-e2.cloudhub.io:443/v1/customer` | Retorna `customer[]`, datos de contacto, `segment` y `services[]`. |
 | MS-2 genera/envía OTP | `POST https://mule-worker-internal-experience-xapi-services-QA.us-e2.cloudhub.io:8082/operations/v1/customer/otp` | Envía OTP al correo registrado y retorna `id_transaccion`. |
-| MS-3 valida OTP | `POST https://experience-xapi-services-QA.us-e2.cloudhub.io:443/operations/v1customer/otp/validation` | Valida `id_transaccion` + código OTP. |
+| MS-3 valida OTP | `POST https://experience-xapi-services-QA.us-e2.cloudhub.io:443/operations/v1/customer/otp/validation` | Valida `id_transaccion` + código OTP. |
 | MS-4 registra cliente digital | Pendiente de definición MuleSoft | Debe registrar la aceptación/alta digital en sistemas ETB antes de crear o habilitar el usuario en Identity Platform. |
 
 Los secretos MuleSoft (`client_id`, `client_secret`, bearer JWT) deben vivir en Secret Manager. No deben viajar al navegador ni a `public/config.js`.
@@ -239,6 +446,8 @@ stateDiagram-v2
 ```
 
 ## Flujo Registro Hogares
+
+> **Nota:** Los diagramas de esta sección y la de MiPymes describen el **flujo objetivo** (Firestore, rutas `/api/customers/*` y `/api/otp/*`). Para rutas, archivos y secuencia **implementados hoy**, ver [Implementación actual en el repositorio](#implementación-actual-en-el-repositorio).
 
 ```mermaid
 sequenceDiagram

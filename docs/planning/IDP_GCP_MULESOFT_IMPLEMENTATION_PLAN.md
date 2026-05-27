@@ -216,7 +216,7 @@ MS-2:
 MS-3:
 
 - Method: `POST`.
-- Path: `/operations/v1customer/otp/validation`.
+- Path: `/operations/v1/customer/otp/validation`.
 - Body:
   - `aplicacion`
   - `tipo_canal: "CORREO ELECTRONICO"`

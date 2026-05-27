@@ -1,0 +1,29 @@
+- generic [ref=e2]:
+  - region "Centro Jurídico Internacional" [ref=e3]:
+    - generic [ref=e4]:
+      - img "Centro Jurídico Internacional" [ref=e5]
+      - generic [ref=e6]:
+        - heading "Gestión jurídica en un solo lugar" [level=1] [ref=e7]
+        - paragraph [ref=e8]: Accede a órdenes, radicados, reportes y seguimiento operativo desde el sistema Gabriela.
+    - generic [ref=e9]: Centro Jurídico Internacional
+  - main [ref=e10]:
+    - generic [ref=e12]:
+      - heading "Iniciar sesión" [level=2] [ref=e13]
+      - paragraph [ref=e14]: Ingresa con tus credenciales institucionales.
+      - generic [ref=e15]:
+        - generic [ref=e16]: Usuario
+        - generic [ref=e17]:
+          - generic [ref=e18]: 
+          - textbox "Usuario" [active] [ref=e19]:
+            - /placeholder: Nombre de usuario
+      - generic [ref=e20]:
+        - generic [ref=e21]: Contraseña
+        - generic [ref=e22]:
+          - generic [ref=e23]: 
+          - textbox "Contraseña" [ref=e24]
+          - generic [ref=e25]: Contraseña institucional
+          - button "Mostrar contraseña" [ref=e26] [cursor=pointer]:
+            - generic [ref=e27]: 
+      - button "Ingresar" [ref=e28] [cursor=pointer]
+      - text: 
+      - generic [ref=e29]: Sesión segura para usuarios autorizados

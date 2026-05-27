@@ -1,0 +1,44 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - img "ETB — Empresa de Telecomunicaciones de Bogotá" [ref=e5]
+      - generic [ref=e6]:
+        - strong [ref=e7]: Simulación · aplicación partner
+        - generic [ref=e8]: Delegación de acceso vía OpenID Connect hacia el IdP en localhost:5173. Esta vista se sirve desde 127.0.0.1:3000.
+    - generic "Ejecución local" [ref=e9]: Entorno local
+  - generic [ref=e10]:
+    - generic:
+      - img
+    - generic [ref=e11]:
+      - region "Acceso federado de prueba" [ref=e12]:
+        - generic [ref=e13]: Techco · confianza digital
+        - heading "Acceso federado de prueba" [level=1] [ref=e14]
+        - paragraph [ref=e15]:
+          - text: Esta vista simula una aplicación de socio que delega el inicio de sesión al IdP. Úsala en desarrollo para validar redirecciones,
+          - code [ref=e16]: id_token
+          - text: y renovación silenciosa — sin ofrecer servicios comerciales reales.
+        - generic [ref=e17]:
+          - generic [ref=e18]: Claim de marca (manual de imagen · sin punto final)
+          - paragraph [ref=e19]:
+            - text: Serás lo que
+            - generic [ref=e20]: creas
+        - generic "Características simuladas" [ref=e21]:
+          - generic [ref=e22]: OIDC implicit
+          - generic [ref=e23]: Origen · 127.0.0.1:3000
+          - generic [ref=e24]: Mock seguro
+      - generic "Ingreso al ecosistema" [ref=e25]:
+        - generic [ref=e26]:
+          - heading "Ingreso al ecosistema" [level=2] [ref=e27]
+          - paragraph [ref=e28]:
+            - text: Al continuar, el navegador abrirá el IdP. Tras autenticarse, regresará aquí con el
+            - code [ref=e29]: id_token
+            - text: en el fragmento de la URL.
+        - generic [ref=e31]:
+          - button "Iniciar sesión con el proveedor de identidad" [ref=e32] [cursor=pointer]:
+            - generic [ref=e33]: Iniciar sesión con el proveedor de identidad
+            - img [ref=e34]
+          - paragraph [ref=e36]: Solo laboratorio local. No sustituye términos legales ni disponibilidad de servicios ETB.
+  - contentinfo "Aviso de simulación" [ref=e37]:
+    - generic [ref=e40]:
+      - heading "Aviso de simulación" [level=2] [ref=e41]
+      - paragraph [ref=e42]: Esta interfaz solo ilustra el flujo de inicio de sesión federado para fines de demostración o capacitación. No es el canal oficial de atención, facturación ni autogestión ETB; no debe usarse con datos sensibles de clientes reales ni interpretarse como disponibilidad de servicios en producción.

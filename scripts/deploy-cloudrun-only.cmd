@@ -28,7 +28,10 @@ call gcloud run deploy idp-service ^
   --set-env-vars "VITE_ALLOWED_ORIGINS=pending_configuration" ^
   --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest ^
   --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest ^
-  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest
+  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest ^
+  --set-secrets RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest ^
+  --set-secrets RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest ^
+  --set-secrets RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest
 if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo deploy. Si aparece IAM policy, ejecute el paso 4 abajo. & exit /b 1 )
 
 echo [3/4] Obteniendo URL y actualizando VITE_ALLOWED_ORIGINS...

@@ -1,0 +1,70 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - img "ETB — Empresa de Telecomunicaciones de Bogotá" [ref=e5]
+      - generic [ref=e6]:
+        - strong [ref=e7]: Simulación · aplicación partner
+        - generic [ref=e8]: Delegación de acceso vía OpenID Connect hacia el IdP en localhost:5173. Esta vista se sirve desde 127.0.0.1:3000.
+    - generic "Ejecución local" [ref=e9]: Entorno local
+  - generic [ref=e10]:
+    - generic:
+      - img
+    - generic [ref=e11]:
+      - region "Acceso federado de prueba" [ref=e12]:
+        - generic [ref=e13]: Techco · confianza digital
+        - heading "Acceso federado de prueba" [level=1] [ref=e14]
+        - paragraph [ref=e15]:
+          - text: Esta vista simula una aplicación de socio que delega el inicio de sesión al IdP. Úsala en desarrollo para validar redirecciones,
+          - code [ref=e16]: id_token
+          - text: y renovación silenciosa — sin ofrecer servicios comerciales reales.
+        - generic [ref=e17]:
+          - generic [ref=e18]: Claim de marca (manual de imagen · sin punto final)
+          - paragraph [ref=e19]:
+            - text: Serás lo que
+            - generic [ref=e20]: creas
+        - generic "Características simuladas" [ref=e21]:
+          - generic [ref=e22]: OIDC implicit
+          - generic [ref=e23]: Origen · 127.0.0.1:3000
+          - generic [ref=e24]: Mock seguro
+      - generic "Ingreso al ecosistema" [ref=e25]:
+        - generic [ref=e26]:
+          - heading "Ingreso al ecosistema" [level=2] [ref=e27]
+          - paragraph [ref=e28]:
+            - text: Al continuar, el navegador abrirá el IdP. Tras autenticarse, regresará aquí con el
+            - code [ref=e29]: id_token
+            - text: en el fragmento de la URL.
+        - generic [ref=e31]:
+          - generic [ref=e32]: ✓
+          - paragraph [ref=e33]: Sesión simulada activa
+          - paragraph [ref=e34]: "Token recibido (JWT):"
+          - region "Contenido del token" [ref=e35]: eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL2lkcC1zZXJ2aWNlLTI5NjA5MTc1NDI1OC51cy1lYXN0MS5ydW4uYXBwIiwiYXVkIjoibW9jay1jbGllbnQtYXBwIiwic3ViIjoidXNlci0xMjMiLCJlbWFpbCI6InFhQGV4YW1wbGUuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJVc3VhcmlvIFFBIiwiYXV0aF90aW1lIjoxNzc5ODM2NDAwLCJpYXQiOjE3Nzk4MzY0MDAsImV4cCI6MTc3OTg0MDAwMCwiZmlyZWJhc2UiOnsic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.sig
+          - generic "Claims recibidos del IdP" [ref=e36]:
+            - paragraph [ref=e37]: Claims recibidos del IdP
+            - generic [ref=e38]:
+              - term [ref=e39]: iss
+              - definition [ref=e40]: https://idp-service-296091754258.us-east1.run.app
+              - term [ref=e41]: aud
+              - definition [ref=e42]: mock-client-app
+              - term [ref=e43]: sub
+              - definition [ref=e44]: user-123
+              - term [ref=e45]: email
+              - definition [ref=e46]: qa@example.com
+              - term [ref=e47]: email_verified
+              - definition [ref=e48]: "true"
+              - term [ref=e49]: name
+              - definition [ref=e50]: Usuario QA
+              - term [ref=e51]: auth_time
+              - definition [ref=e52]: 26/05/2026, 6:00:00 p. m.
+              - term [ref=e53]: iat
+              - definition [ref=e54]: 26/05/2026, 6:00:00 p. m.
+              - term [ref=e55]: exp
+              - definition [ref=e56]: 26/05/2026, 7:00:00 p. m.
+              - term [ref=e57]: firebase
+              - definition [ref=e58]: "{ \"sign_in_provider\": \"password\" }"
+            - group [ref=e59]:
+              - generic "Ver payload completo" [ref=e60] [cursor=pointer]
+          - button "Cerrar sesión (solo este mock)" [ref=e61] [cursor=pointer]
+  - contentinfo "Aviso de simulación" [ref=e62]:
+    - generic [ref=e65]:
+      - heading "Aviso de simulación" [level=2] [ref=e66]
+      - paragraph [ref=e67]: Esta interfaz solo ilustra el flujo de inicio de sesión federado para fines de demostración o capacitación. No es el canal oficial de atención, facturación ni autogestión ETB; no debe usarse con datos sensibles de clientes reales ni interpretarse como disponibilidad de servicios en producción.

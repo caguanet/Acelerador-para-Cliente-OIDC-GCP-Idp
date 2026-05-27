@@ -36,9 +36,21 @@ const RESEND_COOLDOWN = 30;
 const OTP_EXPIRY_SECONDS = 5 * 60;
 const PENDING_SOCIAL_PROVIDER_KEY = 'idp.pendingSocialProvider';
 const emptyDigits = (): string[] => Array<string>(OTP_LENGTH).fill('');
+const VERIFY_IDENTITY_ERROR = 'No pudimos verificar tus datos en este momento. Revisa la información e inténtalo nuevamente.';
+const SEND_OTP_ERROR = 'No pudimos enviar el código de seguridad. Inténtalo nuevamente en unos minutos.';
+const VERIFY_CODE_ERROR = 'No pudimos validar el código. Revísalo o solicita uno nuevo.';
+const RESEND_OTP_ERROR = 'No pudimos reenviar el código. Inténtalo nuevamente en unos minutos.';
+const COMPLETE_REGISTRATION_ERROR = 'No pudimos completar el registro. Inténtalo nuevamente en unos minutos.';
+const NETWORK_ERROR = 'No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo.';
+const RECAPTCHA_ENTERPRISE_SCRIPT_ID = 'recaptcha-enterprise-script';
+const RECAPTCHA_SIM_TOKEN = 'SIM_TOKEN';
 
 type CustomerType = 'HOGARES' | 'MIPYMES';
 type DocType = 'CC' | 'CE' | 'NIT' | 'TI' | 'PP';
+type ApiJson = Record<string, unknown>;
+type RecaptchaAction = 'lookup' | 'otp_send';
+
+let recaptchaScriptPromise: Promise<void> | null = null;
 
 /**
  * Hogares flow:  IDENTIFY → VERIFY → PASSWORD
@@ -77,6 +89,115 @@ function getPendingSocialProvider(providerId: string | null) {
     }
 }
 
+function getConfiguredRecaptchaSiteKey(): string {
+    const runtimeKey = window.APP_CONFIG?.recaptchaSiteKey;
+    const envKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    return (runtimeKey || envKey || '').trim();
+}
+
+function loadRecaptchaEnterprise(siteKey: string): Promise<void> {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve();
+    if (window.grecaptcha?.enterprise) return Promise.resolve();
+    if (recaptchaScriptPromise) return recaptchaScriptPromise;
+
+    recaptchaScriptPromise = new Promise((resolve, reject) => {
+        const existingScript = document.getElementById(RECAPTCHA_ENTERPRISE_SCRIPT_ID);
+        if (existingScript) {
+            existingScript.addEventListener('load', () => resolve(), { once: true });
+            existingScript.addEventListener('error', () => reject(new Error('No pudimos cargar la verificación de seguridad.')), { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = RECAPTCHA_ENTERPRISE_SCRIPT_ID;
+        script.src = `https://www.google.com/recaptcha/enterprise.js?render=${encodeURIComponent(siteKey)}`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = () => {
+            recaptchaScriptPromise = null;
+            reject(new Error('No pudimos cargar la verificación de seguridad.'));
+        };
+        document.head.appendChild(script);
+    });
+
+    return recaptchaScriptPromise;
+}
+
+async function getRecaptchaToken(action: RecaptchaAction): Promise<string> {
+    const siteKey = getConfiguredRecaptchaSiteKey();
+    if (!siteKey) return RECAPTCHA_SIM_TOKEN;
+
+    await loadRecaptchaEnterprise(siteKey);
+    const enterprise = window.grecaptcha?.enterprise;
+    if (!enterprise) {
+        throw new Error('No pudimos cargar la verificación de seguridad.');
+    }
+
+    await new Promise<void>((resolve) => enterprise.ready(resolve));
+    return enterprise.execute(siteKey, { action });
+}
+
+async function readApiJson(response: Response): Promise<ApiJson | null> {
+    if (response.status === 204 || response.status === 205) return null;
+
+    try {
+        if (typeof response.text === 'function') {
+            const text = await response.text();
+            if (!text.trim()) return null;
+
+            try {
+                const parsed = JSON.parse(text);
+                return isApiJson(parsed) ? parsed : null;
+            } catch (err) {
+                console.warn('La API devolvió una respuesta que no es JSON válido.', {
+                    status: response.status,
+                    error: err,
+                });
+                return null;
+            }
+        }
+
+        const parsed = await response.json();
+        return isApiJson(parsed) ? parsed : null;
+    } catch (err) {
+        console.warn('No fue posible leer la respuesta JSON de la API.', {
+            status: response.status,
+            error: err,
+        });
+        return null;
+    }
+}
+
+function isApiJson(value: unknown): value is ApiJson {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getApiString(data: ApiJson | null, key: string): string {
+    const value = data?.[key];
+    return typeof value === 'string' ? value : '';
+}
+
+function getApiErrorMessage(data: ApiJson | null, fallback: string): string {
+    return getSafeDisplayMessage(getApiString(data, 'error'), fallback);
+}
+
+function getSafeErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof TypeError) return NETWORK_ERROR;
+    if (error instanceof Error) return getSafeDisplayMessage(error.message, fallback);
+    return fallback;
+}
+
+function getSafeDisplayMessage(message: string, fallback: string): string {
+    const cleanMessage = message.trim();
+    if (!cleanMessage || cleanMessage.length > 180 || looksTechnical(cleanMessage)) return fallback;
+    return cleanMessage;
+}
+
+function looksTechnical(message: string): boolean {
+    return /failed to execute|unexpected end of json|json input|syntaxerror|response\.json|firebase:|auth\/|mulesoft|returned status|stack trace|servidor|interno/i.test(message);
+}
+
 export interface RegisterFormProps {
     onRegisterSuccess: (user: any) => void;
     onGoToLogin: () => void;
@@ -91,7 +212,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
     const [docNumber, setDocNumber] = useState('');
     const [acceptTerms, setAcceptTerms] = useState(false);
     const [acceptDataPolicy, setAcceptDataPolicy] = useState(false);
-    const [recaptchaOk, setRecaptchaOk] = useState(false);
     const [identifyError, setIdentifyError] = useState('');
     const [isIdentifying, setIsIdentifying] = useState(false);
 
@@ -139,6 +259,15 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         const id = setInterval(() => setResendCountdown(c => c - 1), 1000);
         return () => clearInterval(id);
     }, [resendCountdown]);
+
+    useEffect(() => {
+        const siteKey = getConfiguredRecaptchaSiteKey();
+        if (!siteKey) return;
+
+        loadRecaptchaEnterprise(siteKey).catch((err) => {
+            console.warn('No fue posible precargar reCAPTCHA Enterprise.', err);
+        });
+    }, []);
 
     useEffect(() => {
         if (step !== 'VERIFY' || expiryCountdown <= 0) return;
@@ -189,50 +318,57 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         if (!docNumber.trim()) { setIdentifyError('Ingresa tu número de identificación.'); return; }
         if (!acceptTerms) { setIdentifyError('Debes aceptar los términos y condiciones.'); return; }
         if (!acceptDataPolicy) { setIdentifyError('Debes aceptar las políticas de tratamiento de datos.'); return; }
-        if (!recaptchaOk) { setIdentifyError('Completa la verificación de seguridad.'); return; }
         setIsIdentifying(true);
         try {
+            const lookupRecaptchaToken = await getRecaptchaToken('lookup');
             const response = await fetch('/api/customer/lookup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     docType,
                     docNumber,
-                    recaptchaToken: 'SIM_TOKEN',
+                    recaptchaToken: lookupRecaptchaToken,
                     customerType: 'HOGARES',
                     acceptTerms,
                     acceptDataPolicy
                 })
             });
 
+            const data = await readApiJson(response);
             if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'No fue posible verificar tu identidad.');
+                throw new Error(getApiErrorMessage(data, VERIFY_IDENTITY_ERROR));
             }
 
-            const data = await response.json();
-            setSessionId(data.sessionId);
-            setMaskedEmail(data.maskedEmail);
+            const nextSessionId = getApiString(data, 'sessionId');
+            const nextMaskedEmail = getApiString(data, 'maskedEmail');
+            if (!nextSessionId || !nextMaskedEmail) {
+                throw new Error(VERIFY_IDENTITY_ERROR);
+            }
+
+            setSessionId(nextSessionId);
+            setMaskedEmail(nextMaskedEmail);
             setVerificationToken('');
 
             // Send initial OTP automatically
+            const otpRecaptchaToken = await getRecaptchaToken('otp_send');
             const sendResponse = await fetch('/api/customer/otp/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    sessionId: data.sessionId,
-                    recaptchaToken: 'SIM_TOKEN'
+                    sessionId: nextSessionId,
+                    recaptchaToken: otpRecaptchaToken
                 })
             });
 
+            const sendData = await readApiJson(sendResponse);
             if (!sendResponse.ok) {
-                const sendErr = await sendResponse.json();
-                throw new Error(sendErr.error || 'No fue posible enviar el código OTP de seguridad.');
+                throw new Error(getApiErrorMessage(sendData, SEND_OTP_ERROR));
             }
 
             enterVerifyStep();
-        } catch (err: any) {
-            setIdentifyError(err.message || 'No fue posible verificar tu identidad. Intenta de nuevo.');
+        } catch (err: unknown) {
+            console.warn('No fue posible iniciar el registro de Hogares.', err);
+            setIdentifyError(getSafeErrorMessage(err, VERIFY_IDENTITY_ERROR));
         } finally {
             setIsIdentifying(false);
         }
@@ -278,9 +414,9 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         if (!repLastName.trim()) { setLegalRepError('Ingresa el apellido del representante legal.'); return; }
         if (!acceptTerms) { setLegalRepError('Debes aceptar los términos y condiciones.'); return; }
         if (!acceptDataPolicy) { setLegalRepError('Debes aceptar las políticas de tratamiento de datos.'); return; }
-        if (!recaptchaOk) { setLegalRepError('Completa la verificación de seguridad.'); return; }
         setIsSubmittingRep(true);
         try {
+            const lookupRecaptchaToken = await getRecaptchaToken('lookup');
             const response = await fetch('/api/customer/lookup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -290,40 +426,47 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                     repDocType,
                     repDocNumber,
                     lastName: repLastName,
-                    recaptchaToken: 'SIM_TOKEN',
+                    recaptchaToken: lookupRecaptchaToken,
                     customerType: 'MIPYMES',
                     acceptTerms,
                     acceptDataPolicy
                 })
             });
 
+            const data = await readApiJson(response);
             if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'No fue posible verificar la identidad del representante legal.');
+                throw new Error(getApiErrorMessage(data, VERIFY_IDENTITY_ERROR));
             }
 
-            const data = await response.json();
-            setSessionId(data.sessionId);
-            setMaskedEmail(data.maskedEmail);
+            const nextSessionId = getApiString(data, 'sessionId');
+            const nextMaskedEmail = getApiString(data, 'maskedEmail');
+            if (!nextSessionId || !nextMaskedEmail) {
+                throw new Error(VERIFY_IDENTITY_ERROR);
+            }
+
+            setSessionId(nextSessionId);
+            setMaskedEmail(nextMaskedEmail);
 
             // Send initial OTP automatically
+            const otpRecaptchaToken = await getRecaptchaToken('otp_send');
             const sendResponse = await fetch('/api/customer/otp/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    sessionId: data.sessionId,
-                    recaptchaToken: 'SIM_TOKEN'
+                    sessionId: nextSessionId,
+                    recaptchaToken: otpRecaptchaToken
                 })
             });
 
+            const sendData = await readApiJson(sendResponse);
             if (!sendResponse.ok) {
-                const sendErr = await sendResponse.json();
-                throw new Error(sendErr.error || 'No fue posible enviar el código OTP de seguridad.');
+                throw new Error(getApiErrorMessage(sendData, SEND_OTP_ERROR));
             }
 
             enterVerifyStep();
-        } catch (err: any) {
-            setLegalRepError(err.message || 'No fue posible procesar la solicitud. Intenta de nuevo.');
+        } catch (err: unknown) {
+            console.warn('No fue posible iniciar el registro de MiPymes.', err);
+            setLegalRepError(getSafeErrorMessage(err, VERIFY_IDENTITY_ERROR));
         } finally {
             setIsSubmittingRep(false);
         }
@@ -368,16 +511,21 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                 })
             });
 
+            const data = await readApiJson(response);
             if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'Código OTP incorrecto o expirado.');
+                throw new Error(getApiErrorMessage(data, VERIFY_CODE_ERROR));
             }
 
-            const data = await response.json();
-            setVerificationToken(data.verificationToken || '');
+            const nextVerificationToken = getApiString(data, 'verificationToken');
+            if (!nextVerificationToken) {
+                throw new Error(VERIFY_CODE_ERROR);
+            }
+
+            setVerificationToken(nextVerificationToken);
             setVerifySuccess(true);
-        } catch (err: any) {
-            setVerifyError(err.message || 'No fue posible verificar el código. Intenta de nuevo.');
+        } catch (err: unknown) {
+            console.warn('No fue posible validar el código OTP.', err);
+            setVerifyError(getSafeErrorMessage(err, VERIFY_CODE_ERROR));
         } finally {
             setIsVerifying(false);
         }
@@ -387,18 +535,19 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         if (resendCountdown > 0 || isSending) return;
         setIsSending(true);
         try {
+            const otpRecaptchaToken = await getRecaptchaToken('otp_send');
             const response = await fetch('/api/customer/otp/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId,
-                    recaptchaToken: 'SIM_TOKEN'
+                    recaptchaToken: otpRecaptchaToken
                 })
             });
 
+            const data = await readApiJson(response);
             if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'No fue posible reenviar el código OTP.');
+                throw new Error(getApiErrorMessage(data, RESEND_OTP_ERROR));
             }
 
             setDigits(emptyDigits());
@@ -406,8 +555,9 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
             setExpiryCountdown(OTP_EXPIRY_SECONDS);
             setVerifyError('');
             requestAnimationFrame(() => inputRefs.current[0]?.focus());
-        } catch (err: any) {
-            setVerifyError(err.message || 'Error al reenviar el código OTP.');
+        } catch (err: unknown) {
+            console.warn('No fue posible reenviar el código OTP.', err);
+            setVerifyError(getSafeErrorMessage(err, RESEND_OTP_ERROR));
         } finally {
             setIsSending(false);
         }
@@ -427,17 +577,17 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
             })
         });
 
+        const data = await readApiJson(response);
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'No fue posible completar el registro.');
+            throw new Error(getApiErrorMessage(data, COMPLETE_REGISTRATION_ERROR));
         }
 
-        const data = await response.json();
-        if (!data.customToken) {
-            throw new Error('No fue posible iniciar sesión con el registro validado.');
+        const customToken = getApiString(data, 'customToken');
+        if (!customToken) {
+            throw new Error(COMPLETE_REGISTRATION_ERROR);
         }
 
-        const cred = await signInWithCustomToken(auth, data.customToken);
+        const cred = await signInWithCustomToken(auth, customToken);
         const pendingProviderId = window.sessionStorage.getItem(PENDING_SOCIAL_PROVIDER_KEY);
         const pendingProvider = getPendingSocialProvider(pendingProviderId);
         if (pendingProvider) {
@@ -464,8 +614,9 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         setIsRegistering(true);
         try {
             await completeRegistrationWithBff(password);
-        } catch (err: any) {
-            setPasswordError(err.message || 'Error al crear la cuenta.');
+        } catch (err: unknown) {
+            console.warn('No fue posible completar el registro.', err);
+            setPasswordError(getSafeErrorMessage(err, COMPLETE_REGISTRATION_ERROR));
         } finally {
             setIsRegistering(false);
         }
@@ -526,8 +677,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                         <input type="checkbox" checked={acceptDataPolicy} onChange={e => setAcceptDataPolicy(e.target.checked)} />
                         <span>Acepto las <button type="button" className="reg-link">políticas de tratamiento</button> de mis datos</span>
                     </label>
-
-                    <RecaptchaMock checked={recaptchaOk} onChange={setRecaptchaOk} />
 
                     {identifyError && <div className="auth-alert error" role="alert">{identifyError}</div>}
 
@@ -662,8 +811,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                         <input type="checkbox" checked={acceptDataPolicy} onChange={e => setAcceptDataPolicy(e.target.checked)} />
                         <span>Acepto las <button type="button" className="reg-link">políticas de tratamiento</button> de mis datos</span>
                     </label>
-
-                    <RecaptchaMock checked={recaptchaOk} onChange={setRecaptchaOk} />
 
                     {legalRepError && <div className="auth-alert error" role="alert">{legalRepError}</div>}
 
@@ -849,27 +996,6 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
                     {isRegistering ? 'Registrando\u2026' : 'Completar registro'}
                 </button>
             </form>
-        </div>
-    );
-}
-
-// ── Shared reCAPTCHA mock ─────────────────────────────────────────────────────
-function RecaptchaMock({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-    return (
-        <div className="otp-recaptcha-area">
-            <div className="otp-recaptcha-mock">
-                <label className="otp-recaptcha-check">
-                    <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} aria-label="Verificación de seguridad" />
-                    <span>No soy un robot</span>
-                </label>
-                <div className="otp-recaptcha-badge">
-                    <svg aria-hidden="true" width="32" height="32" viewBox="0 0 64 64" fill="none">
-                        <path d="M32 4L56 18V46L32 60L8 46V18L32 4Z" fill="#4A90D9" opacity="0.15" stroke="#4A90D9" strokeWidth="2" />
-                        <path d="M32 14L48 23V41L32 50L16 41V23L32 14Z" fill="#4A90D9" opacity="0.3" />
-                    </svg>
-                    <div className="otp-recaptcha-brand"><span>reCAPTCHA</span><small>Privacidad · Términos</small></div>
-                </div>
-            </div>
         </div>
     );
 }
