@@ -9,6 +9,95 @@ import admin from 'firebase-admin';
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+function sanitizeCspReportField(value) {
+    if (typeof value !== 'string' || !value.trim()) return '';
+    try {
+        const parsed = new URL(value);
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+        return value.slice(0, 180);
+    }
+}
+
+function normalizeCspReport(body) {
+    try {
+        const parsed = JSON.parse(body || '{}');
+        const report = Array.isArray(parsed)
+            ? parsed[0]
+            : parsed['csp-report'] || parsed;
+
+        return {
+            documentUri: sanitizeCspReportField(report['document-uri'] || report.url),
+            blockedUri: sanitizeCspReportField(report['blocked-uri'] || report.blockedURL),
+            violatedDirective: String(report['violated-directive'] || report.effectiveDirective || '').slice(0, 120),
+            disposition: String(report.disposition || '').slice(0, 40),
+        };
+    } catch {
+        return { parseError: true, rawLength: String(body || '').length };
+    }
+}
+
+function getDefaultCspReportOnlyPolicy() {
+    const reportUri = getTrimmedEnv('CSP_REPORT_URI') || '/api/security/csp-report';
+    return [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+        "script-src 'self' https://www.gstatic.com https://www.google.com https://www.recaptcha.net",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: https:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://www.google.com https://www.recaptcha.net",
+        "frame-src 'self' https://*.firebaseapp.com https://www.google.com https://www.recaptcha.net",
+        "worker-src 'self' blob:",
+        `report-uri ${reportUri}`,
+    ].join('; ');
+}
+
+function getCspReportOnlyPolicy() {
+    const override = getTrimmedEnv('CONTENT_SECURITY_POLICY_REPORT_ONLY');
+    if (override) return override;
+    if (!getBooleanEnv('CSP_REPORT_ONLY')) return '';
+    return getDefaultCspReportOnlyPolicy();
+}
+
+// Cloud Run terminates TLS/proxying at Google Frontend; trust the first proxy
+// so rate limiters use the real client IP from X-Forwarded-For.
+app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (process.env.NODE_ENV === 'production') {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    const cspReportOnly = getCspReportOnlyPolicy();
+    if (cspReportOnly) {
+        res.setHeader('Content-Security-Policy-Report-Only', cspReportOnly);
+    }
+    next();
+});
+
+app.post(
+    '/api/security/csp-report',
+    express.text({
+        type: ['application/csp-report', 'application/reports+json', 'application/json', 'text/plain'],
+        limit: '16kb'
+    }),
+    (req, res) => {
+        console.warn(JSON.stringify({
+            event: 'security.csp_report',
+            ip: req.ip,
+            userAgent: String(req.get('user-agent') || '').slice(0, 180),
+            report: normalizeCspReport(req.body),
+        }));
+        res.status(204).end();
+    }
+);
+
 // --- Security: Limit JSON Payload size to 10KB (DoS protection) ---
 app.use(express.json({ limit: '10kb' }));
 
@@ -17,6 +106,29 @@ function parseOriginList(value = '') {
         .split(/[|,]/)
         .map(origin => origin.trim())
         .filter(Boolean);
+}
+
+function getTrimmedEnv(...names) {
+    for (const name of names) {
+        const value = process.env[name];
+        if (typeof value === 'string' && value.trim()) {
+            return value.trim();
+        }
+    }
+    return '';
+}
+
+function getEnvValueOrFallback(name, fallback = '') {
+    if (Object.prototype.hasOwnProperty.call(process.env, name)) {
+        return String(process.env[name] || '').trim();
+    }
+    return fallback;
+}
+
+function getBooleanEnv(name, fallback = false) {
+    const value = getTrimmedEnv(name);
+    if (!value) return fallback;
+    return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
 const configuredCorsOrigins = parseOriginList(process.env.CORS_ALLOWED_ORIGINS || process.env.VITE_ALLOWED_ORIGINS || '');
@@ -31,7 +143,7 @@ app.use(cors({
         if (configuredCorsOrigins.includes(origin)) {
             return callback(null, true);
         }
-        return callback(new Error('Origen no permitido por CORS.'));
+        return callback(null, false);
     }
 }));
 
@@ -45,7 +157,12 @@ const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const VERIFICATION_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_OTP_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 3);
 const OTP_LOCK_MS = Number(process.env.OTP_LOCK_MS || 2 * 60 * 60 * 1000);
+const LOOKUP_RATE_LIMIT_MAX = Number(process.env.LOOKUP_RATE_LIMIT_MAX || 10);
+const OTP_SEND_RATE_LIMIT_MAX = Number(process.env.OTP_SEND_RATE_LIMIT_MAX || 5);
+const OTP_VALIDATE_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_RATE_LIMIT_MAX || 15);
+const ID_QUERY_MAX_PER_HOUR = Number(process.env.ID_QUERY_MAX_PER_HOUR || 5);
 const otpLockStore = new Map();
+const MULESOFT_APP_ID = 'IDP-MiETB';
 
 // Periodic Session Cleanup to avoid memory leaks
 setInterval(() => {
@@ -63,7 +180,7 @@ setInterval(() => {
 // --- Security: Rate Limiters by IP ---
 const lookupLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 mins
-    max: 10,
+    max: LOOKUP_RATE_LIMIT_MAX,
     message: { error: 'Límite de búsquedas excedido. Por favor intenta más tarde.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -71,7 +188,7 @@ const lookupLimiter = rateLimit({
 
 const otpSendLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 mins
-    max: 5,
+    max: OTP_SEND_RATE_LIMIT_MAX,
     message: { error: 'Límite de envío de OTP excedido. Por favor intenta más tarde.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -79,7 +196,7 @@ const otpSendLimiter = rateLimit({
 
 const otpValidateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 mins
-    max: 15,
+    max: OTP_VALIDATE_RATE_LIMIT_MAX,
     message: { error: 'Límite de intentos de validación excedido. Por favor intenta más tarde.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -87,7 +204,7 @@ const otpValidateLimiter = rateLimit({
 
 // --- Security: Brute-force mitigation by ID (Cédula/NIT) ---
 const idQueryTracker = new Map();
-const maxQueriesPerIdPerHour = 5;
+const maxQueriesPerIdPerHour = ID_QUERY_MAX_PER_HOUR;
 
 function isIdBlocked(docId) {
     const now = Date.now();
@@ -134,6 +251,71 @@ function isValidDocNumber(docNumber) {
 
 function getIdentityKey(docType, docNumber) {
     return `${normalizeDocType(docType)}:${normalizeDocNumber(docNumber)}`;
+}
+
+function createCorrelationId() {
+    return `${MULESOFT_APP_ID}-${crypto.randomUUID()}`;
+}
+
+function getSessionCorrelationId(session) {
+    if (!session.correlationId) {
+        session.correlationId = createCorrelationId();
+    }
+    return session.correlationId;
+}
+
+function getMulesoftHeaders(correlationId, extraHeaders = {}) {
+    return {
+        'name': MULESOFT_APP_ID,
+        'source': MULESOFT_APP_ID,
+        'X-CORRELATION-ID': correlationId,
+        ...extraHeaders
+    };
+}
+
+function getMulesoftLogUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+        return String(url || '').split('?')[0];
+    }
+}
+
+function logMulesoftEvent(event, details = {}, level = 'log') {
+    const payload = {
+        event,
+        app: MULESOFT_APP_ID,
+        ...details
+    };
+    console[level](JSON.stringify(payload));
+}
+
+function getRequestBrowserOrigin(req) {
+    const origin = req.get('origin');
+    if (origin) return origin;
+
+    const referer = req.get('referer');
+    if (!referer) return '';
+
+    try {
+        return new URL(referer).origin;
+    } catch {
+        return '';
+    }
+}
+
+function requireAllowedBrowserOrigin(req, res, next) {
+    if (configuredCorsOrigins.length === 0 && process.env.NODE_ENV !== 'production') {
+        return next();
+    }
+
+    const requestOrigin = getRequestBrowserOrigin(req);
+    if (!requestOrigin || !configuredCorsOrigins.includes(requestOrigin)) {
+        return res.status(403).json({ error: 'Origen no autorizado para esta operación.' });
+    }
+
+    return next();
 }
 
 function getMipymesIdentityKey(companyDocType, companyDocNumber, repDocType, repDocNumber) {
@@ -184,9 +366,9 @@ function getMulesoftOtpValidationPath(baseUrl) {
         return `${normalized}/otp/validation`;
     }
     if (normalized.endsWith('/operations/v1')) {
-        return `${normalized}customer/otp/validation`;
+        return `${normalized}/customer/otp/validation`;
     }
-    return `${normalized}/operations/v1customer/otp/validation`;
+    return `${normalized}/operations/v1/customer/otp/validation`;
 }
 
 function getReliableRegistrationEligibility(customer) {
@@ -242,15 +424,15 @@ function isValidPhoneNumber(phoneNumber) {
 // --- Firebase Admin SDK Initialization ---
 let isFirebaseAdminInitialized = false;
 try {
-    // If running in GCP Cloud Run, it automatically picks up service account metadata
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG) {
+    // Cloud Run resolves ADC from the attached service account metadata server.
+    // Local runs can still use GOOGLE_APPLICATION_CREDENTIALS or FIREBASE_CONFIG.
+    if (admin.apps.length === 0) {
         admin.initializeApp();
-        isFirebaseAdminInitialized = true;
-        console.log('Firebase Admin SDK initialized successfully.');
-    } else {
-        console.warn('Firebase Admin SDK: No credentials found. Running in simulation mode.');
     }
+    isFirebaseAdminInitialized = true;
+    console.log('Firebase Admin SDK initialized successfully.');
 } catch (error) {
+    isFirebaseAdminInitialized = false;
     console.error('Failed to initialize Firebase Admin:', error.message);
 }
 
@@ -266,24 +448,33 @@ function maskEmail(email) {
 }
 
 // --- Dynamic OAuth 2.0 MuleSoft Bearer JWT Generator ---
-async function getMuleSoftBearerToken() {
+async function getMuleSoftBearerToken(correlationId) {
     const clientId = process.env.MULESOFT_CLIENT_ID;
     const clientSecret = process.env.MULESOFT_CLIENT_SECRET;
     const tokenUrl = process.env.MULESOFT_OAUTH_URL;
+    const oauthClientId = getEnvValueOrFallback('MULESOFT_OAUTH_CLIENT_ID', clientId);
+    const oauthClientSecret = getEnvValueOrFallback('MULESOFT_OAUTH_CLIENT_SECRET', clientSecret);
+    const oauthAccountId = process.env.MULESOFT_OAUTH_ACCOUNT_ID;
 
-    if (!clientId || !clientSecret || !tokenUrl) {
-        // Fallback to static bearer JWT if provided, otherwise simulation string
-        return process.env.MULESOFT_BEARER_JWT || 'SIMULATED_MULESOFT_JWT_TOKEN';
+    if (!clientId || !clientSecret || !tokenUrl || !oauthAccountId) {
+        throw new Error('MuleSoft OAuth configuration is incomplete.');
     }
 
     try {
+        const headers = getMulesoftHeaders(correlationId || createCorrelationId(), {
+            'Content-Type': 'application/json',
+            'client_id': clientId,
+            'client_secret': clientSecret
+        });
+
         const response = await fetch(tokenUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
+            headers,
+            body: JSON.stringify({
                 grant_type: 'client_credentials',
-                client_id: clientId,
-                client_secret: clientSecret
+                client_id: oauthClientId,
+                client_secret: oauthClientSecret,
+                ...(oauthAccountId ? { account_id: oauthAccountId } : {})
             })
         });
 
@@ -292,7 +483,11 @@ async function getMuleSoftBearerToken() {
         }
 
         const data = await response.json();
-        return data.access_token || data.token;
+        const accessToken = data.access_token || data.token;
+        if (!accessToken) {
+            throw new Error('MuleSoft Token Auth response did not include an access token.');
+        }
+        return accessToken;
     } catch (error) {
         console.error('Error fetching dynamic MuleSoft bearer token:', error.message);
         throw error;
@@ -351,30 +546,33 @@ async function verifyRecaptcha(token, action) {
 // Serve window.APP_CONFIG inside public / Cloud Run container
 app.get('/config.js', (req, res) => {
     res.type('application/javascript');
-    const mode = process.env.APP_MODE || 'IDP';
+    const mode = getTrimmedEnv('APP_MODE') || 'IDP';
     
     const firebaseConfig = {
-        apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
-        authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN,
-        projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID
+        apiKey: getTrimmedEnv('VITE_FIREBASE_API_KEY', 'FIREBASE_API_KEY'),
+        authDomain: getTrimmedEnv('VITE_FIREBASE_AUTH_DOMAIN', 'FIREBASE_AUTH_DOMAIN'),
+        projectId: getTrimmedEnv('VITE_FIREBASE_PROJECT_ID', 'FIREBASE_PROJECT_ID')
     };
 
-    const allowedOriginsEnv = process.env.VITE_ALLOWED_ORIGINS || '';
-    const allowedOrigins = allowedOriginsEnv.split('|').map(o => o.trim()).filter(o => o);
+    const allowedOrigins = parseOriginList(process.env.VITE_ALLOWED_ORIGINS || '');
+    const canonicalIdpOrigin = getTrimmedEnv('CANONICAL_IDP_ORIGIN', 'VITE_IDP_URL');
+    const appConfig = {
+        MODE: mode,
+        IDP_URL: canonicalIdpOrigin,
+        canonicalIdpOrigin,
+        allowedOrigins,
+        firebase: firebaseConfig,
+        recaptchaSiteKey: getTrimmedEnv('VITE_RECAPTCHA_SITE_KEY', 'RECAPTCHA_SITE_KEY'),
+        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT')
+    };
 
-    res.send(`window.APP_CONFIG = { 
-        MODE: "${mode}",
-        IDP_URL: "${process.env.VITE_IDP_URL || ''}",
-        allowedOrigins: ${JSON.stringify(allowedOrigins)},
-        firebase: ${JSON.stringify(firebaseConfig)},
-        recaptchaSiteKey: "${process.env.VITE_RECAPTCHA_SITE_KEY || process.env.RECAPTCHA_SITE_KEY || ''}"
-    };`);
+    res.send(`window.APP_CONFIG = ${JSON.stringify(appConfig)};`);
 });
 
 // --- API Endpoints ---
 
 // 1. Customer Lookup (MS-1)
-app.post('/api/customer/lookup', lookupLimiter, async (req, res) => {
+app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, async (req, res) => {
     const {
         docType,
         docNumber,
@@ -425,6 +623,7 @@ app.post('/api/customer/lookup', lookupLimiter, async (req, res) => {
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS1;
     const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const correlationId = createCorrelationId();
 
     try {
         let realEmail = '';
@@ -438,7 +637,7 @@ app.post('/api/customer/lookup', lookupLimiter, async (req, res) => {
             eligibleForRegistration = true;
         } else {
             // Get Dynamic Bearer Token for MuleSoft
-            const bearerToken = await getMuleSoftBearerToken();
+            const bearerToken = await getMuleSoftBearerToken(correlationId);
             const query = new URLSearchParams({
                 ORIGIN: 'TELECENTER',
                 CUSTOMER_ID: normalizedDocNumber,
@@ -451,19 +650,32 @@ app.post('/api/customer/lookup', lookupLimiter, async (req, res) => {
             }
 
             const url = `${mUrl}/v1/customer?${query.toString()}`;
+            const ms1Start = Date.now();
+            logMulesoftEvent('mulesoft.ms1.request', {
+                correlationId,
+                method: 'GET',
+                url: getMulesoftLogUrl(url),
+                customerType: normalizedCustomerType,
+                identity: maskIdentityKey(identityKey)
+            });
             
             const response = await fetch(url, {
                 method: 'GET',
-                headers: {
+                headers: getMulesoftHeaders(correlationId, {
                     'systemId': 'MIGRACION',
-                    'name': 'telecenter',
-                    'source': 'telecenter',
-                    'X-CORRELATION-ID': `BFF-LOOKUP-${crypto.randomUUID()}`,
                     'client_id': process.env.MULESOFT_CLIENT_ID,
                     'client_secret': process.env.MULESOFT_CLIENT_SECRET,
                     'Authorization': `Bearer ${bearerToken}`
-                }
+                })
             });
+            const durationMs = Date.now() - ms1Start;
+
+            logMulesoftEvent(response.ok ? 'mulesoft.ms1.response' : 'mulesoft.ms1.error', {
+                correlationId,
+                status: response.status,
+                durationMs,
+                url: getMulesoftLogUrl(url)
+            }, response.ok ? 'log' : 'error');
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -510,6 +722,7 @@ app.post('/api/customer/lookup', lookupLimiter, async (req, res) => {
             status: 'INITIATED',
             verificationTokenHash: null,
             verificationTokenUsed: false,
+            correlationId,
             createdAt: now,
             expiresAt: now + SESSION_TTL_MS
         });
@@ -527,7 +740,7 @@ app.post('/api/customer/lookup', lookupLimiter, async (req, res) => {
 });
 
 // 2. Generate and Send OTP (MS-2)
-app.post('/api/customer/otp/send', otpSendLimiter, async (req, res) => {
+app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, async (req, res) => {
     const { sessionId, recaptchaToken } = req.body;
 
     if (!sessionId) {
@@ -556,6 +769,7 @@ app.post('/api/customer/otp/send', otpSendLimiter, async (req, res) => {
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS2 || process.env.MULESOFT_BASE_URL_MS3;
     const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const correlationId = getSessionCorrelationId(session);
 
     const chosenChannel = 'EMAIL';
     const channelValue = session.realEmail;
@@ -567,18 +781,25 @@ app.post('/api/customer/otp/send', otpSendLimiter, async (req, res) => {
             console.log(`[MOCK MS-2] OTP sent via ${chosenChannel} to ${maskEmail(channelValue)}. TxId: ${transactionId}`);
             await new Promise(r => setTimeout(r, 500));
         } else {
-            const bearerToken = await getMuleSoftBearerToken();
-            const response = await fetch(`${mUrl}/operations/v1/customer/otp`, {
+            const bearerToken = await getMuleSoftBearerToken(correlationId);
+            const url = `${mUrl}/operations/v1/customer/otp`;
+            const ms2Start = Date.now();
+            logMulesoftEvent('mulesoft.ms2.request', {
+                correlationId,
                 method: 'POST',
-                headers: {
+                url: getMulesoftLogUrl(url),
+                channel: chosenChannel,
+                identity: maskIdentityKey(session.identityKey)
+            });
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: getMulesoftHeaders(correlationId, {
                     'Content-Type': 'application/json',
-                    'name': 'telecenter',
-                    'source': 'telecenter',
-                    'X-CORRELATION-ID': `BFF-OTP-SEND-${crypto.randomUUID()}`,
                     'Authorization': `Bearer ${bearerToken}`
-                },
+                }),
                 body: JSON.stringify({
-                    aplicacion: "telecenter",
+                    aplicacion: MULESOFT_APP_ID,
                     id_almacenamiento: "",
                     nombre_cliente: session.docNumber,
                     identificacion_cliente: session.docNumber,
@@ -586,6 +807,14 @@ app.post('/api/customer/otp/send', otpSendLimiter, async (req, res) => {
                     valor_canal: channelValue
                 })
             });
+            const durationMs = Date.now() - ms2Start;
+
+            logMulesoftEvent(response.ok ? 'mulesoft.ms2.response' : 'mulesoft.ms2.error', {
+                correlationId,
+                status: response.status,
+                durationMs,
+                url: getMulesoftLogUrl(url)
+            }, response.ok ? 'log' : 'error');
 
             if (!response.ok) {
                 throw new Error(`MuleSoft MS-2 Send OTP returned status ${response.status}`);
@@ -607,7 +836,7 @@ app.post('/api/customer/otp/send', otpSendLimiter, async (req, res) => {
 });
 
 // 3. Validate OTP (MS-3)
-app.post('/api/customer/otp/validate', otpValidateLimiter, async (req, res) => {
+app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateLimiter, async (req, res) => {
     const { sessionId, code } = req.body;
 
     if (!sessionId || !/^\d{6}$/.test(String(code || ''))) {
@@ -630,6 +859,7 @@ app.post('/api/customer/otp/validate', otpValidateLimiter, async (req, res) => {
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS3;
     const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const correlationId = getSessionCorrelationId(session);
 
     try {
         let isOtpValid = false;
@@ -639,23 +869,37 @@ app.post('/api/customer/otp/validate', otpValidateLimiter, async (req, res) => {
             await new Promise(r => setTimeout(r, 600));
             isOtpValid = code === '123456' || code === '654321';
         } else {
-            const bearerToken = await getMuleSoftBearerToken();
-            const response = await fetch(getMulesoftOtpValidationPath(mUrl), {
+            const bearerToken = await getMuleSoftBearerToken(correlationId);
+            const url = getMulesoftOtpValidationPath(mUrl);
+            const ms3Start = Date.now();
+            logMulesoftEvent('mulesoft.ms3.request', {
+                correlationId,
                 method: 'POST',
-                headers: {
+                url: getMulesoftLogUrl(url),
+                identity: maskIdentityKey(session.identityKey)
+            });
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: getMulesoftHeaders(correlationId, {
                     'Content-Type': 'application/json',
-                    'name': 'telecenter',
-                    'source': 'telecenter',
-                    'X-CORRELATION-ID': `BFF-OTP-VALIDATE-${crypto.randomUUID()}`,
                     'Authorization': `Bearer ${bearerToken}`
-                },
+                }),
                 body: JSON.stringify({
-                    aplicacion: "telecenter",
+                    aplicacion: MULESOFT_APP_ID,
                     tipo_canal: "EMAIL",
                     id_transaccion: session.otpTransactionId,
                     codigo: code
                 })
             });
+            const durationMs = Date.now() - ms3Start;
+
+            logMulesoftEvent(response.ok ? 'mulesoft.ms3.response' : 'mulesoft.ms3.error', {
+                correlationId,
+                status: response.status,
+                durationMs,
+                url: getMulesoftLogUrl(url)
+            }, response.ok ? 'log' : 'warn');
 
             if (response.ok) {
                 isOtpValid = true;
@@ -699,8 +943,8 @@ app.post('/api/customer/otp/validate', otpValidateLimiter, async (req, res) => {
     }
 });
 
-// 4. Register customer after verified OTP (MS-4 + Identity Platform)
-app.post('/api/customers/register', async (req, res) => {
+// 4. Register customer after verified OTP (optional MS-4 + Identity Platform)
+app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res) => {
     const { sessionId, verificationToken, password, phoneNumber, acceptTerms, acceptDataPolicy } = req.body;
 
     if (!sessionId || !verificationToken || !isPasswordStrong(password) || !isValidPhoneNumber(phoneNumber)) {
@@ -734,19 +978,33 @@ app.post('/api/customers/register', async (req, res) => {
         return res.status(403).json({ error: 'No fue posible completar el registro con la información validada.' });
     }
 
+    const isMs4Enabled = process.env.MULESOFT_ENABLE_MS4 === 'true';
     const mUrl = process.env.MULESOFT_BASE_URL_MS4;
     const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const correlationId = getSessionCorrelationId(session);
 
-    if (mUrl && !isMockMode) {
+    // MS-4 is intentionally disabled until MuleSoft delivers the productive
+    // Alta Digital contract. Expected future sequence: after MS-3 validates OTP
+    // and before Admin SDK creates/updates the Identity Platform user, call
+    // MuleSoft Alta Digital with OTP transaction, customer identity, contact
+    // phone, accepted terms, and provider "GCP_IDENTITY_PLATFORM".
+    if (isMs4Enabled && !mUrl) {
+        return res.status(503).json({ error: 'MS-4 no está configurado para completar el alta digital.' });
+    }
+
+    if (isMs4Enabled && isMockMode) {
+        return res.status(503).json({ error: 'MS-4 no tiene configuración productiva válida.' });
+    }
+
+    if (isMs4Enabled) {
         try {
-            const bearerToken = await getMuleSoftBearerToken();
+            const bearerToken = await getMuleSoftBearerToken(correlationId);
             const ms4Response = await fetch(`${mUrl}/operations/v1/customer/register`, {
                 method: 'POST',
-                headers: {
+                headers: getMulesoftHeaders(correlationId, {
                     'Content-Type': 'application/json',
-                    'X-CORRELATION-ID': `BFF-MS4-${crypto.randomUUID()}`,
                     'Authorization': `Bearer ${bearerToken}`
-                },
+                }),
                 body: JSON.stringify({
                     id_transaccion_otp: session.otpTransactionId,
                     tipo_cliente: session.customerType,
@@ -792,12 +1050,16 @@ app.post('/api/customers/register', async (req, res) => {
 
         const customClaims = {
             customerType: session.customerType,
+            documentType: session.docType,
+            documentNumber: session.docNumber,
             documentHash: hashSecret(getIdentityKey(session.docType, session.docNumber)),
             registration_source: 'mulesoft_otp',
             auth_level: 'otp_verified'
         };
 
         if (session.customerType === 'MIPYMES') {
+            customClaims.companyDocumentType = session.companyDocType;
+            customClaims.companyDocumentNumber = session.companyDocNumber;
             customClaims.companyDocumentHash = hashSecret(getIdentityKey(session.companyDocType, session.companyDocNumber));
         }
 
@@ -805,6 +1067,12 @@ app.post('/api/customers/register', async (req, res) => {
 
         const customToken = await admin.auth().createCustomToken(userRecord.uid, {
             customerType: session.customerType,
+            documentType: session.docType,
+            documentNumber: session.docNumber,
+            ...(session.customerType === 'MIPYMES' ? {
+                companyDocumentType: session.companyDocType,
+                companyDocumentNumber: session.companyDocNumber
+            } : {}),
             auth_level: 'otp_verified'
         });
 

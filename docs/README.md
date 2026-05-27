@@ -21,7 +21,7 @@ Technical design, component diagrams, sequence flows, and security guidelines.
 Diseño técnico, diagramas de componentes, flujos de secuencia y guías de seguridad.
 
 - [**TECH_README.md**](architecture/TECH_README.md) — Architecture overview, class diagrams, OIDC sequence flows, cloud deployment diagrams, and security best practices.
-- [**IDP_MULESOFT_GCP_ARCHITECTURE.md**](architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md) — Target architecture for the IdP, MuleSoft OTP, MS-4, BFF, Identity Platform, and trust boundaries.
+- [**IDP_MULESOFT_GCP_ARCHITECTURE.md**](architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md) — Arquitectura objetivo e **implementación actual** (mapa código ↔ MS-1…MS-4, diagramas de flujo, brecha objetivo vs `server/server.js`).
 - [**ADR 0001**](architecture/decisions/0001-idp-spa-stateless-bff-stateful.md) — Formal decision: keep the IdP SPA stateless while adding a stateful BFF only for MuleSoft, OTP, MS-4, audit, and Admin SDK.
 
 ---
@@ -32,9 +32,11 @@ Step-by-step instructions for developers and operators.
 Instrucciones paso a paso para desarrolladores y operadores.
 
 - [**DEVELOPERS.md**](guides/DEVELOPERS.md) — Local environment setup, running the dev server, unit and E2E tests, and white-label customization.
-- [**DEPLOY.md**](guides/DEPLOY.md) — Production deployment guide: Cloud Run, Artifact Registry, Secret Manager, troubleshooting, and custom domains.
-- [**CONFIGURACION-PASO-A-PASO.md**](guides/CONFIGURACION-PASO-A-PASO.md) — Explicit configuration checklist for local development and GCP deployment, with exact console navigation paths and commands.
-- [**IDP_GCP_MULESOFT_MANUAL.md**](guides/IDP_GCP_MULESOFT_MANUAL.md) — Operational runbook for GCP, Identity Platform, social providers, MuleSoft Anypoint, Cloud Run BFF, MS-4, and password recovery.
+- [**IDP_LAUNCHER_IMPLEMENTATION.md**](guides/IDP_LAUNCHER_IMPLEMENTATION.md) — Guia tecnica para integrar un Launcher con el IdP: redireccion inicial, retorno exitoso/fallido, `allowedOrigins`, `state`, `id_token` y renovacion silenciosa.
+- [**DEPLOY.md**](guides/DEPLOY.md) — Build/deploy pipeline guide: Cloud Build, Artifact Registry, Cloud Run revisions, rollback, and deployment troubleshooting.
+- [**CONFIGURACION-PASO-A-PASO.md**](guides/CONFIGURACION-PASO-A-PASO.md) — Explicit local setup checklist: Identity Platform basics, `.env.local`, mock client, and local tests.
+- [**GCP_FIREBASE_PROD_CONFIGURATION.md**](guides/GCP_FIREBASE_PROD_CONFIGURATION.md) — Canonical production configuration and mitigation runbook for Cloud Run `idp-service`, Secret Manager, Firebase/Auth IAM, MuleSoft, and reCAPTCHA.
+- [**IDP_GCP_MULESOFT_MANUAL.md**](guides/IDP_GCP_MULESOFT_MANUAL.md) — Operational runbook for social providers, Firestore/audit, MuleSoft Anypoint, MS-4, and password recovery.
 - [**BRANDING_ETB.md**](guides/BRANDING_ETB.md) — Central ETB branding guide: tokens, runtime theme mapping, governance, and documentation workflow.
 - [**UX_STANDARDS.md**](guides/UX_STANDARDS.md) — Mandatory UX-first standards: user-friendly errors, performance-aware UI, and secure interaction rules.
 

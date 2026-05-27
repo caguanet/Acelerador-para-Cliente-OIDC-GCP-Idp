@@ -14,13 +14,45 @@ vi.mock('firebase/auth', () => ({
   OAuthProvider: vi.fn(() => ({})),
 }));
 
+function fillHogaresLookupForm(docNumber = '123456789') {
+  fireEvent.change(screen.getByLabelText('N° de identificación'), {
+    target: { value: docNumber },
+  });
+  fireEvent.click(screen.getByText(/Acepto los/i).closest('label')!.querySelector('input')!);
+  fireEvent.click(screen.getByText(/Acepto las/i).closest('label')!.querySelector('input')!);
+}
+
 describe('RegisterForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    document.getElementById('recaptcha-enterprise-script')?.remove();
+    delete (window as any).APP_CONFIG;
+    delete (window as any).grecaptcha;
+  });
+
+  it('precarga reCAPTCHA Enterprise cuando existe site key y no muestra un captcha visual falso', async () => {
+    (window as any).APP_CONFIG = {
+      MODE: 'IDP',
+      recaptchaSiteKey: 'test-site-key',
+    };
+
+    render(<RegisterForm onRegisterSuccess={vi.fn()} onGoToLogin={vi.fn()} />);
+
+    expect(screen.queryByText(/No soy un robot/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^reCAPTCHA$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /verificación de seguridad|validación segura/i })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(document.getElementById('recaptcha-enterprise-script')).toHaveAttribute(
+        'src',
+        'https://www.google.com/recaptcha/enterprise.js?render=test-site-key',
+      );
+    });
   });
 
   it('pide solo documento al iniciar y muestra documento no editable tras OTP valido', async () => {
@@ -65,7 +97,6 @@ describe('RegisterForm', () => {
     });
     fireEvent.click(screen.getByText(/Acepto los/i).closest('label')!.querySelector('input')!);
     fireEvent.click(screen.getByText(/Acepto las/i).closest('label')!.querySelector('input')!);
-    fireEvent.click(screen.getByRole('checkbox', { name: /Verificación de seguridad/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Crear cuenta$/i }));
 
     await screen.findByRole('heading', { name: /Verifica tu cuenta/i });
@@ -143,7 +174,6 @@ describe('RegisterForm', () => {
     });
     fireEvent.click(screen.getByText(/Acepto los/i).closest('label')!.querySelector('input')!);
     fireEvent.click(screen.getByText(/Acepto las/i).closest('label')!.querySelector('input')!);
-    fireEvent.click(screen.getByRole('checkbox', { name: /Verificación de seguridad/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Crear cuenta$/i }));
 
     await screen.findByRole('heading', { name: /Verifica tu cuenta/i });
@@ -175,5 +205,62 @@ describe('RegisterForm', () => {
     expect(screen.getByLabelText('Correo registrado')).toHaveValue('re****@empresa.com.co');
     expect(screen.getByPlaceholderText('Número de teléfono')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Contraseña')).toBeInTheDocument();
+  });
+
+  it('no expone errores técnicos cuando lookup responde con JSON inválido', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      },
+    }));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<RegisterForm onRegisterSuccess={vi.fn()} onGoToLogin={vi.fn()} />);
+
+    fillHogaresLookupForm('9774689');
+    fireEvent.click(screen.getByRole('button', { name: /^Crear cuenta$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('No pudimos verificar tus datos en este momento. Revisa la información e inténtalo nuevamente.');
+    expect(alert).not.toHaveTextContent(/Unexpected end of JSON input|Failed to execute|Response/i);
+  });
+
+  it('muestra un error accionable cuando el envio OTP responde sin cuerpo JSON', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/customer/lookup') {
+        return {
+          ok: true,
+          json: async () => ({
+            sessionId: 'session-empty-otp',
+            maskedEmail: 'cl****@etb.com.co',
+          }),
+        };
+      }
+
+      if (url === '/api/customer/otp/send') {
+        return new Response('', {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<RegisterForm onRegisterSuccess={vi.fn()} onGoToLogin={vi.fn()} />);
+
+    fillHogaresLookupForm();
+    fireEvent.click(screen.getByRole('button', { name: /^Crear cuenta$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('No pudimos enviar el código de seguridad. Inténtalo nuevamente en unos minutos.');
+    expect(alert).not.toHaveTextContent(/Unexpected end of JSON input|Failed to execute|Response/i);
   });
 });

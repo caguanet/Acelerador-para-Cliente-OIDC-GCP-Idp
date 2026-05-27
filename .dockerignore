@@ -6,8 +6,15 @@ dist
 coverage
 .git
 .github
+.playwright-mcp
 llm
-scripts
+scripts/*
+!scripts/ensure-pnpm.mjs
+!scripts/install-hooks.mjs
+tmp
+tmp-*
+test-results
+playwright-report
 task.md
 implementation_plan.md
 README.md

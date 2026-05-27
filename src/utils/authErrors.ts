@@ -42,6 +42,8 @@ export function getFriendlyAuthErrorMessage(
       "El enlace venció. Solicita uno nuevo para continuar.",
     "auth/invalid-action-code":
       "El enlace no es válido o ya fue usado. Solicita uno nuevo para continuar.",
+    "auth/weak-password":
+      "Crea una contraseña más segura para continuar.",
 
     // Recuperación
     "auth/missing-email": "Ingresa tu correo para enviarte el enlace de recuperación.",

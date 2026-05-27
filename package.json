@@ -11,7 +11,12 @@
   "scripts": {
     "preinstall": "node scripts/ensure-pnpm.mjs",
     "dev": "vite",
+    "dev:qa": "vite --mode qa --force",
+    "dev:full": "node scripts/cleanup-ports.mjs && concurrently -n bff,spa -c blue,green \"node scripts/run-env.mjs .env.local pnpm --dir server start\" \"pnpm run dev\"",
+    "dev:full:qa": "node scripts/cleanup-ports.mjs && node scripts/dev-full-qa.mjs",
     "dev:simulation": "node scripts/cleanup-ports.mjs && concurrently \"vite --force\" \"vite -c vite.config.mock.js --force\"",
+    "dev:qa:simulation": "node scripts/cleanup-ports.mjs && concurrently \"pnpm run dev:qa\" \"vite -c vite.config.mock.js --mode qa --force\"",
+    "server:qa": "node scripts/run-env.mjs .env.qa.local pnpm --dir server start",
     "build": "tsc && vite build",
     "prepare": "node scripts/install-hooks.mjs",
     "test": "vitest",

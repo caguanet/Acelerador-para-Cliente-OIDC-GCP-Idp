@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import {
     FacebookAuthProvider,
     GoogleAuthProvider,
@@ -6,6 +6,7 @@ import {
     User,
     getAdditionalUserInfo,
     isSignInWithEmailLink,
+    onAuthStateChanged,
     sendPasswordResetEmail,
     sendSignInLinkToEmail,
     signInWithEmailLink,
@@ -14,6 +15,16 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getFriendlyAuthErrorMessage } from '../utils/authErrors';
+import {
+    claimEmailLinkOidcRedirect,
+    clearEmailLinkTabCoordination,
+    getActiveEmailLinkIntentId,
+    isEmailLinkTabCoordinationEnabled,
+    startPrimaryEmailLinkTab,
+    stopPrimaryEmailLinkTab,
+    subscribeEmailLinkAuthComplete,
+} from '../utils/emailLinkTabCoordination';
+import { getCanonicalIdpOrigin } from '../utils/oidcGate';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_FOR_SIGN_IN_KEY = 'idp.emailForSignIn';
@@ -50,6 +61,9 @@ type LoginMode = 'SIGN_IN' | 'RECOVERY';
 interface PasswordlessLoginFormProps {
     onSignInSuccess: (user: User) => void;
     onGoToRegister: () => void;
+    /** Si true, no se envía enlace ni se autentica sin contexto OIDC válido. */
+    oidcContextRequired?: boolean;
+    hasValidOidcContext?: boolean;
 }
 
 function validateEmail(email: string) {
@@ -59,10 +73,20 @@ function validateEmail(email: string) {
 }
 
 function getActionUrl() {
-    return `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    const canonicalOrigin = getCanonicalIdpOrigin() || window.location.origin;
+    return `${canonicalOrigin}${window.location.pathname}${window.location.search}`;
 }
 
-export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: PasswordlessLoginFormProps) {
+function getPasswordResetContinueUrl() {
+    return `${window.location.origin}/`;
+}
+
+export function PasswordlessLoginForm({
+    onSignInSuccess,
+    onGoToRegister,
+    oidcContextRequired = false,
+    hasValidOidcContext = true,
+}: PasswordlessLoginFormProps) {
     const [mode, setMode] = useState<LoginMode>('SIGN_IN');
     const [email, setEmail] = useState('');
     const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
@@ -70,6 +94,61 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
     const [isSocialLoading, setIsSocialLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+    const [waitingForEmailLink, setWaitingForEmailLink] = useState(false);
+    const waitingForEmailLinkRef = useRef(false);
+    const completedEmailLinkIntentRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        waitingForEmailLinkRef.current = waitingForEmailLink;
+    }, [waitingForEmailLink]);
+
+    // Pestaña original: cuando el enlace del correo autentica en otra pestaña, redirigir desde aquí al partner.
+    useEffect(() => {
+        if (!waitingForEmailLink || !hasValidOidcContext || !isEmailLinkTabCoordinationEnabled()) {
+            return;
+        }
+
+        completedEmailLinkIntentRef.current = null;
+
+        const completeFromPrimaryTab = (user: User) => {
+            if (!waitingForEmailLinkRef.current) return;
+
+            const intentId = getActiveEmailLinkIntentId();
+            if (!intentId) return;
+            if (completedEmailLinkIntentRef.current !== intentId) return;
+            if (!claimEmailLinkOidcRedirect(intentId)) return;
+
+            stopPrimaryEmailLinkTab();
+            clearEmailLinkTabCoordination(intentId);
+            completedEmailLinkIntentRef.current = null;
+            setWaitingForEmailLink(false);
+            window.localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY);
+            onSignInSuccess(user);
+        };
+
+        const unsubAuth = onAuthStateChanged(auth, (user) => {
+            if (user) completeFromPrimaryTab(user);
+        });
+
+        const unsubChannel = subscribeEmailLinkAuthComplete((intentId) => {
+            const activeIntentId = getActiveEmailLinkIntentId();
+            if (intentId !== activeIntentId) return;
+            completedEmailLinkIntentRef.current = intentId;
+        });
+
+        return () => {
+            unsubAuth();
+            unsubChannel();
+        };
+    }, [waitingForEmailLink, hasValidOidcContext, onSignInSuccess]);
+
+    useEffect(() => {
+        return () => {
+            if (waitingForEmailLinkRef.current) {
+                stopPrimaryEmailLinkTab();
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (!isSignInWithEmailLink(auth, window.location.href)) return;
@@ -110,6 +189,11 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
         setError('');
         setSuccessMsg('');
 
+        if (oidcContextRequired && !hasValidOidcContext) {
+            setError('Acceso restringido: ingresa desde una aplicación autorizada para iniciar sesión.');
+            return;
+        }
+
         const validationError = validateEmail(email);
         if (validationError) {
             setError(validationError);
@@ -123,7 +207,16 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
                 handleCodeInApp: true,
             });
             window.localStorage.setItem(EMAIL_FOR_SIGN_IN_KEY, email);
-            setSuccessMsg('Te enviamos un enlace seguro. Abre el correo en este dispositivo para continuar.');
+
+            if (hasValidOidcContext && isEmailLinkTabCoordinationEnabled()) {
+                startPrimaryEmailLinkTab();
+                setWaitingForEmailLink(true);
+                setSuccessMsg(
+                    'Te enviamos un enlace seguro. Abre el correo en este dispositivo; al confirmar el enlace, continuaremos aquí y te llevaremos a la aplicación.',
+                );
+            } else {
+                setSuccessMsg('Te enviamos un enlace seguro. Abre el correo en este dispositivo para continuar.');
+            }
         } catch (err: any) {
             setError(getFriendlyAuthErrorMessage(err, 'login'));
         } finally {
@@ -154,7 +247,10 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
 
         setIsLoading(true);
         try {
-            await sendPasswordResetEmail(auth, email);
+            await sendPasswordResetEmail(auth, email, {
+                url: getPasswordResetContinueUrl(),
+                handleCodeInApp: false,
+            });
             setSuccessMsg(SAFE_RECOVERY_MESSAGE);
         } catch (err: any) {
             const code = typeof err?.code === 'string' ? err.code : '';
@@ -196,18 +292,26 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
         setError('');
         setSuccessMsg('');
         setNeedsEmailConfirmation(false);
+        if (waitingForEmailLink) {
+            stopPrimaryEmailLinkTab();
+            clearEmailLinkTabCoordination();
+            completedEmailLinkIntentRef.current = null;
+            setWaitingForEmailLink(false);
+        }
     };
 
     const title = mode === 'RECOVERY'
         ? 'Recuperar contraseña'
-        : needsEmailConfirmation
-            ? 'Confirma tu correo'
-            : 'Inicia sesión en tu cuenta';
+        : waitingForEmailLink
+            ? 'Revisa tu correo'
+            : needsEmailConfirmation
+                ? 'Confirma tu correo'
+                : 'Inicia sesión en tu cuenta';
 
     return (
         <div className="login-form">
             <h2 className="login-form-title">{title}</h2>
-            {mode === 'SIGN_IN' && !needsEmailConfirmation && (
+            {mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink && (
                 <p className="login-form-subtitle">
                     ¿No tienes cuenta en Mi ETB?{' '}
                     <button type="button" data-testid="go-register" onClick={onGoToRegister}>
@@ -223,6 +327,12 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
 
             {error && <div className="auth-alert error" role="alert">{error}</div>}
             {successMsg && <div className="auth-alert success" role="status">{successMsg}</div>}
+
+            {waitingForEmailLink && (
+                <div className="auth-alert success" role="status" aria-live="polite">
+                    <p style={{ margin: 0 }}>Esperando que confirmes el enlace del correo…</p>
+                </div>
+            )}
 
             <form onSubmit={needsEmailConfirmation ? handleConfirmEmailForLink : mode === 'RECOVERY' ? handlePasswordRecovery : handleSendEmailLink} noValidate>
                 <div className="login-field">
@@ -243,7 +353,7 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
                     />
                 </div>
 
-                <button type="submit" disabled={isLoading} className="login-btn-primary">
+                <button type="submit" disabled={isLoading || waitingForEmailLink} className="login-btn-primary">
                     {isLoading
                         ? 'Procesando...'
                         : needsEmailConfirmation
@@ -254,7 +364,7 @@ export function PasswordlessLoginForm({ onSignInSuccess, onGoToRegister }: Passw
                 </button>
             </form>
 
-            {mode === 'SIGN_IN' && !needsEmailConfirmation && (
+            {mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink && (
                 <>
                     <div className="otp-divider"><span>o continúa con</span></div>
 

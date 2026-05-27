@@ -17,6 +17,7 @@ const facebookProvider = new FacebookAuthProvider();
 // Shared constants
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INVALID_CRED_CODES = new Set(['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password']);
+const SAFE_RECOVERY_MESSAGE = 'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.';
 
 interface BrandLoginFormProps {
     onSignInSuccess: (user: any) => void;
@@ -122,9 +123,14 @@ export function BrandLoginForm({ onSignInSuccess }: BrandLoginFormProps) {
         setIsLoading(true);
         try {
             await sendPasswordResetEmail(auth, email);
-            setSuccessMsg(`Se envió un enlace de recuperación a ${email}`);
+            setSuccessMsg(SAFE_RECOVERY_MESSAGE);
         } catch (err: any) {
-            setError(getFriendlyAuthErrorMessage(err, 'recovery'));
+            const code = typeof err?.code === 'string' ? err.code : '';
+            if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+                setSuccessMsg(SAFE_RECOVERY_MESSAGE);
+            } else {
+                setError(getFriendlyAuthErrorMessage(err, 'recovery'));
+            }
         } finally {
             setIsLoading(false);
         }

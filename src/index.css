@@ -545,6 +545,7 @@ ul.firebaseui-idp-list {
 }
 .login-error-state h2 { color: var(--brand-error); font-size: 1.2rem; margin-bottom: 0.75rem; }
 .login-error-state p  { color: var(--brand-text-secondary); font-size: 0.875rem; line-height: 1.5; margin-bottom: 1.5rem; }
+.login-error-state .login-error-guidance { margin-bottom: 0; }
 
 /* ---- Client ID note ---- */
 .login-client-id {
@@ -1224,6 +1225,247 @@ ul.firebaseui-idp-list {
 .login-pwd-label--3 { color: #43a047; }
 
 /* ================================================
+   FIREBASE EMAIL ACTIONS — Password reset
+   ================================================ */
+.action-page {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr;
+    background: linear-gradient(180deg, var(--brand-hero-gradient-start) 0%, var(--brand-hero-gradient-end) 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.action-page::before,
+.action-page::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    pointer-events: none;
+}
+
+.action-page::before {
+    width: 220px;
+    height: 220px;
+    top: -72px;
+    left: -72px;
+}
+
+.action-page::after {
+    width: 280px;
+    height: 280px;
+    right: -104px;
+    bottom: -116px;
+}
+
+.action-brand-panel {
+    display: none;
+}
+
+.action-card-panel {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(1.5rem, env(safe-area-inset-top, 0px)) 1.25rem max(1.5rem, env(safe-area-inset-bottom, 0px));
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+}
+
+.action-card {
+    width: 100%;
+    max-width: 390px;
+    background: var(--brand-card-bg);
+    border-radius: 18px;
+    padding: 2.25rem 1.35rem 2rem;
+    box-shadow: 0 18px 46px rgba(8, 7, 7, 0.18);
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.action-logo {
+    display: block;
+    width: 58px;
+    height: 46px;
+    object-fit: contain;
+}
+
+.action-logo-shell {
+    width: 88px;
+    height: 70px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 1.5rem;
+    background: linear-gradient(145deg, var(--brand-primary) 0%, var(--brand-secondary) 100%);
+    box-shadow: 0 10px 26px rgba(var(--brand-primary-rgb), 0.22);
+}
+
+.action-kicker {
+    color: var(--brand-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.5rem;
+}
+
+.action-form .login-form-title,
+.action-form .login-form-subtitle {
+    text-align: left;
+}
+
+.action-form .login-form-subtitle strong {
+    color: var(--brand-primary);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.action-label {
+    display: block;
+    color: var(--brand-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin: 0 0 0.45rem;
+}
+
+.action-form .login-field input {
+    color: var(--brand-text);
+    background: #fff;
+    border-color: rgba(var(--brand-primary-rgb), 0.28);
+}
+
+.action-form .login-field input:user-invalid {
+    border-color: var(--brand-error);
+    background: var(--brand-error-surface);
+}
+
+.action-password-rules {
+    margin: 0.55rem 0 1.25rem;
+}
+
+.action-state {
+    text-align: center;
+}
+
+.action-state h2 {
+    color: var(--brand-primary);
+    font-size: 1.45rem;
+    margin: 0 0 0.6rem;
+}
+
+.action-state p {
+    color: var(--brand-text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    margin: 0 0 1.35rem;
+}
+
+.action-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid rgba(var(--brand-secondary-rgb), 0.18);
+    border-top-color: var(--brand-secondary);
+    border-radius: 50%;
+    margin: 0 auto 1.1rem;
+    animation: actionSpin 0.8s linear infinite;
+}
+
+@keyframes actionSpin {
+    to { transform: rotate(360deg); }
+}
+
+.action-success-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 1rem;
+    background: rgba(var(--brand-secondary-rgb), 0.12);
+    color: var(--brand-primary);
+    font-size: 1.65rem;
+    font-weight: 800;
+}
+
+.action-link-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .action-spinner {
+        animation: none;
+    }
+}
+
+@media (min-width: 1024px) {
+    .action-page {
+        grid-template-columns: minmax(0, 1fr) 520px;
+        background:
+            linear-gradient(90deg, rgba(0, 75, 144, 0.18) 0%, rgba(0, 146, 188, 0.12) 58%, rgba(248, 249, 251, 0) 100%),
+            url('/branding/login-hero.png') center / cover no-repeat,
+            #004b90;
+    }
+
+    .action-page::before,
+    .action-page::after {
+        display: none;
+    }
+
+    .action-brand-panel {
+        display: flex;
+        align-items: flex-end;
+        min-height: 100vh;
+        padding: 4rem 6vw;
+        box-sizing: border-box;
+    }
+
+    .action-brand-copy {
+        display: none;
+        max-width: 460px;
+        color: white;
+        text-align: left;
+    }
+
+    .action-brand-copy h1 {
+        font-size: 3rem;
+        line-height: 1.06;
+        margin: 0 0 0.85rem;
+        font-weight: 900;
+    }
+
+    .action-brand-copy p {
+        max-width: 34rem;
+        font-size: 1rem;
+        line-height: 1.65;
+        margin: 0;
+        color: rgba(255, 255, 255, 0.92);
+    }
+
+    .action-card-panel {
+        justify-content: flex-start;
+        padding: 2rem 4rem 2rem 0;
+    }
+
+    .action-card {
+        max-width: 430px;
+        padding: 2.75rem 2.6rem 2.45rem;
+        border-radius: 18px;
+        box-shadow: 0 22px 54px rgba(8, 7, 7, 0.18);
+    }
+
+    .action-logo-shell {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+/* ================================================
    OTP VERIFICATION FORM
    ================================================ */
 
@@ -1328,70 +1570,6 @@ ul.firebaseui-idp-list {
     font-weight: 700;
     flex-shrink: 0;
     margin-top: 0.1rem;
-}
-
-/* ── reCAPTCHA placeholder ── */
-.otp-recaptcha-area {
-    display: flex;
-    justify-content: center;
-    margin-top: 0.75rem;
-    margin-bottom: 0.75rem;
-}
-
-.otp-recaptcha-mock {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border: 1px solid #d3d3d3;
-    border-radius: 4px;
-    background: #f9f9f9;
-    padding: 0.75rem 1rem;
-    width: 100%;
-    max-width: 300px;
-    box-sizing: border-box;
-}
-
-.otp-recaptcha-check {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    cursor: pointer;
-    font-size: 0.875rem;
-    color: #333;
-    font-family: 'Lexend Deca', sans-serif;
-}
-
-.otp-recaptcha-check input[type="checkbox"] {
-    width: 24px;
-    height: 24px;
-    cursor: pointer;
-    accent-color: var(--brand-secondary);
-    flex-shrink: 0;
-}
-
-.otp-recaptcha-badge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.2rem;
-}
-
-.otp-recaptcha-brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.otp-recaptcha-brand span {
-    font-size: 0.65rem;
-    color: #666;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-}
-
-.otp-recaptcha-brand small {
-    font-size: 0.55rem;
-    color: #999;
 }
 
 /* ── Divider ── */

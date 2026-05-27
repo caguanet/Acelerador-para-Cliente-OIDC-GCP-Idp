@@ -10,6 +10,7 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 > *   [**docs/guides/BRAND_ASSETS.md**](docs/guides/BRAND_ASSETS.md): Logos ETB en repo, mock y sincronización con el Manual de imagen (PDF).
 > *   [**docs/guides/UX_STANDARDS.md**](docs/guides/UX_STANDARDS.md): Estándar UX-first (errores amigables, intuición, performance y seguridad en UI).
 > *   [**CONFIGURACION-PASO-A-PASO.md**](docs/guides/CONFIGURACION-PASO-A-PASO.md): Guía explícita de configuración (local + despliegue) con cada paso y archivo a modificar.
+> *   [**IDP_LAUNCHER_IMPLEMENTATION.md**](docs/guides/IDP_LAUNCHER_IMPLEMENTATION.md): Guía técnica para integrar un sitio Launcher con el IdP y manejar retorno exitoso/fallido.
 > *   [**DEPLOY.md**](docs/guides/DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
 > *   [**TECH_README.md**](docs/architecture/TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
 > *   [**DESIGN.md**](DESIGN.md): Guía corta de UI para agentes (el branding en runtime sigue en `APP_CONFIG`).

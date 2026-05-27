@@ -403,6 +403,75 @@
       margin-top: 0.75rem;
     }
 
+    .claims-panel {
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    .claims-title {
+      margin: 0 0 0.65rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--etb-deep);
+      font-weight: 700;
+    }
+
+    .claims-grid {
+      display: grid;
+      grid-template-columns: minmax(7rem, 0.42fr) 1fr;
+      gap: 0.45rem 0.75rem;
+      margin: 0;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0, 76, 143, 0.04);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      border-radius: var(--radius-md);
+    }
+
+    .claims-grid dt {
+      color: var(--etb-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .claims-grid dd {
+      margin: 0;
+      color: var(--etb-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .claims-raw {
+      margin-top: 0.75rem;
+      border: 1px solid rgba(0, 76, 143, 0.11);
+      border-radius: var(--radius-md);
+      background: #fafcfe;
+      overflow: hidden;
+    }
+
+    .claims-raw summary {
+      cursor: pointer;
+      padding: 0.7rem 0.9rem;
+      color: var(--etb-deep);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .claims-raw pre {
+      margin: 0;
+      padding: 0 0.9rem 0.9rem;
+      max-height: 210px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.68rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--etb-text);
+    }
+
     /* Pie — aviso corto de contexto (no documentación de repo) */
     .site-footer {
       position: relative;
@@ -462,12 +531,13 @@
       <div class="brand-logo-wrap">
         <img
           class="brand-logo-img"
-          src="/branding/etb-logo-white.svg"
+          src="branding/etb-logo-white.svg"
           alt="ETB — Empresa de Telecomunicaciones de Bogotá"
           width="140"
           height="42"
           decoding="async"
           fetchpriority="high"
+          onerror="this.onerror=null; this.src='public/branding/etb-logo-white.svg';"
         />
       </div>
       <div class="brand-text">
@@ -528,6 +598,7 @@
                 <path d="M5 12h14M13 6l6 6-6 6"/>
               </svg>
             </button>
+            <p id="auth-error" class="hint" role="alert" style="display:none; color:#a6192e;"></p>
             <p class="hint">Solo laboratorio local. No sustituye términos legales ni disponibilidad de servicios ETB.</p>
           </div>
 
@@ -536,6 +607,14 @@
             <p style="margin:0; text-align:center; font-weight:600; color:var(--etb-deep);">Sesión simulada activa</p>
             <p style="margin:0.35rem 0 0; text-align:center; font-size:0.85rem; color:var(--etb-muted);">Token recibido (JWT):</p>
             <div id="token-display" class="token-box" role="region" aria-label="Contenido del token"></div>
+            <div class="claims-panel" aria-labelledby="claims-title">
+              <p id="claims-title" class="claims-title">Claims recibidos del IdP</p>
+              <dl id="claims-display" class="claims-grid"></dl>
+              <details class="claims-raw">
+                <summary>Ver payload completo</summary>
+                <pre id="claims-raw-display"></pre>
+              </details>
+            </div>
             <button type="button" id="logout-btn" class="btn btn-logout">Cerrar sesión (solo este mock)</button>
           </div>
         </div>
@@ -561,9 +640,36 @@
     const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
     const CLIENT_ID = 'mock-client-app';
     const REDIRECT_URI = CONFIG.MOCK_CLIENT_URL || window.location.origin;
+    const OIDC_STATE_KEY = 'mock_oidc_state';
+    const OIDC_REFRESH_STATE_KEY = 'mock_oidc_refresh_state';
+    const CLAIM_ORDER = [
+      'iss',
+      'aud',
+      'sub',
+      'email',
+      'email_verified',
+      'name',
+      'phone_number',
+      'auth_time',
+      'iat',
+      'exp',
+      'firebase'
+    ];
 
     // Texto visible alineado con hosts reales (puertos u orígenes pueden cambiar según despliegue).
     (function applyRuntimeLabels() {
+      const localHostnames = new Set(['localhost', '127.0.0.1', '::1']);
+      const isLocal = localHostnames.has(window.location.hostname);
+      const envLabel =
+        CONFIG.ENV_LABEL ||
+        CONFIG.APP_ENV_LABEL ||
+        (isLocal ? 'Entorno local' : 'Ambiente previo');
+      const envPill = document.querySelector('.pill-env');
+      if (envPill) {
+        envPill.textContent = envLabel;
+        envPill.title = isLocal ? 'Ejecución local' : 'Ambiente previo, no producción';
+      }
+
       const line = document.getElementById('mock-delegation-line');
       if (line) {
         try {
@@ -588,12 +694,114 @@
     const tokenSection = document.getElementById('token-section');
     const loginSection = document.getElementById('login-section');
     const tokenDisplay = document.getElementById('token-display');
+    const claimsDisplay = document.getElementById('claims-display');
+    const claimsRawDisplay = document.getElementById('claims-raw-display');
+    const authError = document.getElementById('auth-error');
+
+    function setAuthError(message) {
+      if (!authError) return;
+      authError.textContent = message || '';
+      authError.style.display = message ? 'block' : 'none';
+    }
+
+    function createOidcState(prefix) {
+      const randomBytes = new Uint8Array(16);
+      crypto.getRandomValues(randomBytes);
+      const random = Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      return `${prefix}-${Date.now().toString(36)}-${random}`;
+    }
+
+    function buildAuthUrl({ state, prompt }) {
+      const params = new URLSearchParams({
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        response_type: 'id_token',
+        state
+      });
+      if (prompt) params.set('prompt', prompt);
+      return `${IDP_URL}/?${params.toString()}`;
+    }
+
+    function validateReturnedState(returnedState, storageKey) {
+      const expectedState = sessionStorage.getItem(storageKey);
+      if (!expectedState) return true;
+      if (returnedState === expectedState) {
+        sessionStorage.removeItem(storageKey);
+        return true;
+      }
+      return false;
+    }
+
+    function decodeBase64Url(value) {
+      const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=');
+      const binary = atob(padded);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+
+    function decodeJwtPayload(token) {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      return JSON.parse(decodeBase64Url(parts[1]));
+    }
+
+    function formatClaimValue(key, value) {
+      if ((key === 'iat' || key === 'exp' || key === 'auth_time') && typeof value === 'number') {
+        return new Date(value * 1000).toLocaleString('es-CO', {
+          dateStyle: 'medium',
+          timeStyle: 'medium'
+        });
+      }
+
+      if (Array.isArray(value)) return value.join(', ');
+      if (value && typeof value === 'object') return JSON.stringify(value, null, 2);
+      if (typeof value === 'boolean') return value ? 'true' : 'false';
+      if (value === null || value === undefined || value === '') return '(sin valor)';
+      return String(value);
+    }
+
+    function renderClaims(token) {
+      if (!claimsDisplay || !claimsRawDisplay) return;
+
+      try {
+        const claims = decodeJwtPayload(token);
+        if (!claims) throw new Error('El token no tiene formato JWT');
+
+        const keys = [
+          ...CLAIM_ORDER.filter((key) => Object.prototype.hasOwnProperty.call(claims, key)),
+          ...Object.keys(claims).filter((key) => !CLAIM_ORDER.includes(key)).sort()
+        ];
+
+        claimsDisplay.textContent = '';
+        for (const key of keys) {
+          const term = document.createElement('dt');
+          term.textContent = key;
+
+          const description = document.createElement('dd');
+          description.textContent = formatClaimValue(key, claims[key]);
+
+          claimsDisplay.append(term, description);
+        }
+
+        claimsRawDisplay.textContent = JSON.stringify(claims, null, 2);
+      } catch (error) {
+        claimsDisplay.textContent = '';
+
+        const term = document.createElement('dt');
+        term.textContent = 'error';
+
+        const description = document.createElement('dd');
+        description.textContent = 'No fue posible decodificar los claims del token recibido.';
+
+        claimsDisplay.append(term, description);
+        claimsRawDisplay.textContent = error instanceof Error ? error.message : String(error);
+      }
+    }
 
     function getTokenExpiration(token) {
       try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload = decodeJwtPayload(token);
         return payload.exp ? payload.exp * 1000 : null;
       } catch (e) {
         return null;
@@ -602,15 +810,33 @@
 
     function checkHash() {
       const hash = window.location.hash;
-      if (hash && hash.includes('id_token=')) {
-        const token = hash.split('id_token=')[1].split('&')[0];
+      if (!hash) return;
+
+      const fragment = new URLSearchParams(hash.slice(1));
+      const token = fragment.get('id_token');
+      const error = fragment.get('error');
+      const returnedState = fragment.get('state') || '';
+
+      if (token) {
+        const isRefreshReturn = Boolean(sessionStorage.getItem(OIDC_REFRESH_STATE_KEY));
+        const storageKey = isRefreshReturn ? OIDC_REFRESH_STATE_KEY : OIDC_STATE_KEY;
+        if (!validateReturnedState(returnedState, storageKey)) {
+          sessionStorage.removeItem('mock_token');
+          setAuthError('No pudimos validar la respuesta del IdP. Inicia sesión nuevamente.');
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
         showToken(token);
         scheduleSilentRefresh(token);
         window.history.replaceState(null, '', window.location.pathname);
-      } else if (hash && hash.includes('error=login_required')) {
+      } else if (error === 'login_required') {
         sessionStorage.removeItem('mock_token');
+        sessionStorage.removeItem(OIDC_REFRESH_STATE_KEY);
         clearTimeout(window._refreshTimeout);
         location.reload();
+      } else if (error) {
+        setAuthError(fragment.get('error_description') || 'El IdP no pudo completar el acceso.');
+        window.history.replaceState(null, '', window.location.pathname);
       }
     }
 
@@ -622,14 +848,17 @@
       const refreshBeforeMs = 10 * 60 * 1000;
       const delay = Math.max(0, expMs - Date.now() - refreshBeforeMs);
       refreshTimeoutId = setTimeout(() => {
-        const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=refresh&prompt=none`;
-        window.location.href = authUrl;
+        const state = createOidcState('refresh');
+        sessionStorage.setItem(OIDC_REFRESH_STATE_KEY, state);
+        window.location.href = buildAuthUrl({ state, prompt: 'none' });
       }, delay);
       window._refreshTimeout = refreshTimeoutId;
     }
 
     function showToken(token) {
+      setAuthError('');
       tokenDisplay.textContent = token;
+      renderClaims(token);
       loginSection.style.display = 'none';
       tokenSection.style.display = 'block';
       sessionStorage.setItem('mock_token', token);
@@ -637,6 +866,8 @@
 
     function logout() {
       sessionStorage.removeItem('mock_token');
+      sessionStorage.removeItem(OIDC_STATE_KEY);
+      sessionStorage.removeItem(OIDC_REFRESH_STATE_KEY);
       location.reload();
     }
 
@@ -649,8 +880,9 @@
     }
 
     loginBtn.addEventListener('click', () => {
-      const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=id_token&state=random_state_string`;
-      window.location.href = authUrl;
+      const state = createOidcState('login');
+      sessionStorage.setItem(OIDC_STATE_KEY, state);
+      window.location.href = buildAuthUrl({ state });
     });
 
     logoutBtn.addEventListener('click', logout);
