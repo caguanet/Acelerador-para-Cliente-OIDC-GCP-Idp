@@ -10,7 +10,7 @@ const CHANNEL_NAME = 'idp-email-link';
 
 const HEARTBEAT_INTERVAL_MS = 2000;
 const HEARTBEAT_TTL_MS = 5000;
-const SECONDARY_REDIRECT_WAIT_MS = 3000;
+const SECONDARY_REDIRECT_WAIT_MS = 10000;
 
 type HeartbeatPayload = {
   intentId: string;
@@ -32,7 +32,7 @@ let activeTabId: string | null = null;
 
 export function isEmailLinkTabCoordinationEnabled(): boolean {
   if (typeof window === 'undefined') return false;
-  return window.APP_CONFIG?.emailLinkPrimaryTabRedirect !== false;
+  return window.APP_CONFIG?.emailLinkPrimaryTabRedirect === true;
 }
 
 export function getActiveEmailLinkIntentId(): string | null {

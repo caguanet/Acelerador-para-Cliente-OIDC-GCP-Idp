@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="970" viewBox="0 0 1200 970">
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#214780"/>
+</marker>
+</defs>
+<rect width="100%" height="100%" fill="white"/>
+<text x="600.0" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">Flujo OIDC normal</text>
+<rect x="345" y="100" width="510" height="88" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="137.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">1. Usuario</text>
+<text x="600.0" y="167.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Selecciona ingresar con ETB</text>
+<line x1="600" y1="188" x2="600" y2="228" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="345" y="238" width="510" height="88" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
+<text x="600.0" y="275.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">2. Cliente OIDC</text>
+<text x="600.0" y="305.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Envia client_id + redirect_uri</text>
+<line x1="600" y1="326" x2="600" y2="366" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="345" y="376" width="510" height="88" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
+<text x="600.0" y="413.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">3. IdP SPA</text>
+<text x="600.0" y="443.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Valida redirect_uri autorizado</text>
+<line x1="600" y1="464" x2="600" y2="504" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="345" y="514" width="510" height="88" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="551.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">4. Identity Platform</text>
+<text x="600.0" y="581.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Autentica y entrega id_token</text>
+<line x1="600" y1="602" x2="600" y2="642" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="345" y="652" width="510" height="88" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
+<text x="600.0" y="689.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">5. IdP SPA</text>
+<text x="600.0" y="719.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Redirige con redirect_uri#id_token</text>
+<line x1="600" y1="740" x2="600" y2="780" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="345" y="790" width="510" height="88" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
+<text x="600.0" y="827.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">6. Cliente OIDC</text>
+<text x="600.0" y="857.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Recibe token y concede acceso</text>
+<text x="600.0" y="948" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="400" fill="#d86055">Si redirect_uri no esta autorizado, el IdP bloquea el acceso y no emite token.</text>
+</svg>

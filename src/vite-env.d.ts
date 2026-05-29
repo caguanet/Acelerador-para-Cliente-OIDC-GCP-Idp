@@ -27,6 +27,10 @@ interface Window {
       projectId: string;
     };
     IDP_URL?: string;
+    CLIENT_ID?: string;
+    REDIRECT_URI?: string;
+    RESPONSE_TYPE?: string;
+    SCOPE?: string;
     /** Origen canonico del IdP para QA/produccion temporal, por ejemplo https://...run.app. */
     canonicalIdpOrigin?: string;
     BACKEND_URL?: string;
@@ -35,7 +39,7 @@ interface Window {
     recaptchaSiteKey?: string;
     enableLandingPage?: boolean;
     requireOidcRedirect?: boolean;
-    /** Si false, la pestaña del correo redirige al partner (comportamiento legacy). Default: true. */
+    /** Si true, la pestaña original intenta redirigir al partner. Default: false. */
     emailLinkPrimaryTabRedirect?: boolean;
     theme?: AppConfigTheme;
   };

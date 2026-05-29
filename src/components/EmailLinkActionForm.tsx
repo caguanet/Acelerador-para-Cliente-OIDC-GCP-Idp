@@ -19,9 +19,10 @@ import {
   notifyEmailLinkAuthComplete,
   waitForPrimaryEmailLinkRedirect,
 } from '../utils/emailLinkTabCoordination';
-import { redirectToOidcPartner } from '../utils/oidcRedirect';
+import { redirectToOidcPartner, redirectToOidcPartnerError } from '../utils/oidcRedirect';
 
 const EMAIL_FOR_SIGN_IN_KEY = 'idp.emailForSignIn';
+const EMAIL_LINK_SEND_LOCK_KEY = 'idp.emailLinkSendLock';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ActionState = 'checking' | 'confirm-email' | 'redirecting' | 'delegated' | 'error';
@@ -34,6 +35,14 @@ function validateEmail(email: string) {
   if (!email.trim()) return 'Ingresa tu correo electrónico.';
   if (!EMAIL_REGEX.test(email)) return 'Ingresa un correo electrónico válido.';
   return '';
+}
+
+function clearEmailLinkSendLock() {
+  try {
+    window.localStorage.removeItem(EMAIL_LINK_SEND_LOCK_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -55,8 +64,26 @@ export function EmailLinkActionForm({ oidcParams }: EmailLinkActionFormProps) {
       return;
     }
     setState('redirecting');
-    const idToken = await user.getIdToken(true);
-    redirectToOidcPartner(oidcParams.redirect_uri, idToken, oidcParams.state || '');
+    try {
+      const idToken = await user.getIdToken(true);
+      redirectToOidcPartner(
+        oidcParams.redirect_uri,
+        idToken,
+        oidcParams.state || '',
+        oidcParams.passthroughParams,
+        oidcParams.nonce,
+      );
+    } catch (err) {
+      console.error('Email link token redirect error', err);
+      redirectToOidcPartnerError(
+        oidcParams.redirect_uri,
+        'server_error',
+        'No se pudo emitir el token',
+        oidcParams.state || '',
+        oidcParams.passthroughParams,
+        oidcParams.nonce,
+      );
+    }
   };
 
   const tryDelegateToPrimaryTab = async (user: User): Promise<boolean> => {
@@ -93,6 +120,7 @@ export function EmailLinkActionForm({ oidcParams }: EmailLinkActionFormProps) {
         return;
       }
       window.localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY);
+      clearEmailLinkSendLock();
       const delegated = await tryDelegateToPrimaryTab(credential.user);
       if (!delegated) {
         await redirectWithToken(credential.user);

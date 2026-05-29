@@ -560,14 +560,84 @@ app.get('/config.js', (req, res) => {
         MODE: mode,
         IDP_URL: canonicalIdpOrigin,
         canonicalIdpOrigin,
+        CLIENT_ID: getTrimmedEnv('OIDC_CLIENT_ID', 'CLIENT_ID'),
+        REDIRECT_URI: getTrimmedEnv('OIDC_REDIRECT_URI', 'REDIRECT_URI'),
+        RESPONSE_TYPE: getTrimmedEnv('OIDC_RESPONSE_TYPE', 'RESPONSE_TYPE'),
+        SCOPE: getTrimmedEnv('OIDC_SCOPE', 'SCOPE'),
         allowedOrigins,
         firebase: firebaseConfig,
         recaptchaSiteKey: getTrimmedEnv('VITE_RECAPTCHA_SITE_KEY', 'RECAPTCHA_SITE_KEY'),
-        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT')
+        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT'),
+        emailLinkPrimaryTabRedirect: getBooleanEnv('EMAIL_LINK_PRIMARY_TAB_REDIRECT', false)
     };
 
     res.send(`window.APP_CONFIG = ${JSON.stringify(appConfig)};`);
 });
+
+// --- Shared: send OTP via MuleSoft MS-2 (EMAIL channel) ---
+// Used by both the registration flow (/api/customer/otp/send) and the
+// email-OTP login flow (/api/customer/otp/start-login). The session must
+// already carry the resolved customer document (docNumber) and realEmail.
+async function sendOtpViaMs2(session) {
+    const mUrl = process.env.MULESOFT_BASE_URL_MS2 || process.env.MULESOFT_BASE_URL_MS3;
+    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const correlationId = getSessionCorrelationId(session);
+    const chosenChannel = 'EMAIL';
+    const channelValue = session.realEmail;
+
+    let transactionId = 'SIM_TX_' + crypto.randomBytes(4).toString('hex');
+
+    if (isMockMode) {
+        console.log(`[MOCK MS-2] OTP sent via ${chosenChannel} to ${maskEmail(channelValue)}. TxId: ${transactionId}`);
+        await new Promise(r => setTimeout(r, 500));
+    } else {
+        const bearerToken = await getMuleSoftBearerToken(correlationId);
+        const url = `${mUrl}/operations/v1/customer/otp`;
+        const ms2Start = Date.now();
+        logMulesoftEvent('mulesoft.ms2.request', {
+            correlationId,
+            method: 'POST',
+            url: getMulesoftLogUrl(url),
+            channel: chosenChannel,
+            identity: maskIdentityKey(session.identityKey)
+        });
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: getMulesoftHeaders(correlationId, {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${bearerToken}`
+            }),
+            body: JSON.stringify({
+                aplicacion: MULESOFT_APP_ID,
+                id_almacenamiento: "",
+                nombre_cliente: session.docNumber,
+                identificacion_cliente: session.docNumber,
+                tipo_canal: chosenChannel,
+                valor_canal: channelValue
+            })
+        });
+        const durationMs = Date.now() - ms2Start;
+
+        logMulesoftEvent(response.ok ? 'mulesoft.ms2.response' : 'mulesoft.ms2.error', {
+            correlationId,
+            status: response.status,
+            durationMs,
+            url: getMulesoftLogUrl(url)
+        }, response.ok ? 'log' : 'error');
+
+        if (!response.ok) {
+            throw new Error(`MuleSoft MS-2 Send OTP returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        transactionId = data.id_transaccion || data.transactionId;
+    }
+
+    session.otpTransactionId = transactionId;
+    session.status = 'OTP_SENT';
+    return transactionId;
+}
 
 // --- API Endpoints ---
 
@@ -739,6 +809,122 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
     }
 });
 
+// 1b. Start email-OTP LOGIN (resolve existing user by email, then MS-2)
+// Only existing Identity Platform users that carry the documentType/documentNumber
+// custom claims (i.e. registered through the ETB/MuleSoft flow) are eligible.
+// Responds generically for any well-formed email to prevent account enumeration.
+app.post('/api/customer/otp/start-login', requireAllowedBrowserOrigin, otpSendLimiter, async (req, res) => {
+    const { email, recaptchaToken } = req.body;
+
+    if (!isValidRegisteredEmail(email)) {
+        return res.status(400).json({ error: 'Ingresa un correo electrónico válido.' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const emailHash = hashSecret(normalizedEmail);
+    const emailRateKey = `EMAIL_LOGIN:${emailHash}`;
+
+    if (isIdBlocked(emailRateKey)) {
+        return res.status(429).json({ error: 'Se ha detectado actividad sospechosa con este correo. Intenta nuevamente más tarde.' });
+    }
+    trackIdQuery(emailRateKey);
+
+    // Verify reCAPTCHA (reuse the otp_send action assessment)
+    const captchaRes = await verifyRecaptcha(recaptchaToken, 'otp_send');
+    if (!captchaRes.success || (captchaRes.score && captchaRes.score < 0.5)) {
+        return res.status(403).json({ error: 'Verificación de seguridad fallida.' });
+    }
+
+    const sessionId = crypto.randomUUID();
+    const now = Date.now();
+    const correlationId = createCorrelationId();
+    const genericResponse = { success: true, sessionId, maskedEmail: maskEmail(normalizedEmail) };
+
+    // Resolve an eligible user via Admin SDK custom claims.
+    let eligibleUser = null;
+    if (isFirebaseAdminInitialized) {
+        try {
+            const userRecord = await admin.auth().getUserByEmail(normalizedEmail);
+            const claims = userRecord.customClaims || {};
+            if (!userRecord.disabled && claims.documentType && claims.documentNumber) {
+                eligibleUser = {
+                    uid: userRecord.uid,
+                    docType: normalizeDocType(claims.documentType),
+                    docNumber: normalizeDocNumber(claims.documentNumber)
+                };
+            }
+        } catch (err) {
+            // auth/user-not-found and any lookup error => ineligible (shadow session)
+            if (err.code && err.code !== 'auth/user-not-found') {
+                console.warn('start-login getUserByEmail error:', err.code);
+            }
+        }
+    }
+
+    if (!eligibleUser) {
+        // Shadow session: never calls MuleSoft, but keeps the flow indistinguishable.
+        sessionStore.set(sessionId, {
+            intent: 'login',
+            isShadow: true,
+            emailHash,
+            maskedEmail: maskEmail(normalizedEmail),
+            identityKey: emailRateKey,
+            isVerified: false,
+            otpTransactionId: null,
+            attempts: 0,
+            status: 'INITIATED',
+            correlationId,
+            createdAt: now,
+            expiresAt: now + SESSION_TTL_MS
+        });
+        logMulesoftEvent('login.otp.start', { correlationId, eligible: false });
+        return res.json(genericResponse);
+    }
+
+    const identityKey = getIdentityKey(eligibleUser.docType, eligibleUser.docNumber);
+    if (isOtpLocked(identityKey)) {
+        return res.status(423).json({ error: getOtpLockMessage() });
+    }
+
+    const session = {
+        intent: 'login',
+        isShadow: false,
+        uid: eligibleUser.uid,
+        realEmail: normalizedEmail,
+        maskedEmail: maskEmail(normalizedEmail),
+        emailHash,
+        docType: eligibleUser.docType,
+        docNumber: eligibleUser.docNumber,
+        identityKey,
+        eligibleForLogin: true,
+        isVerified: false,
+        otpTransactionId: null,
+        attempts: 0,
+        status: 'INITIATED',
+        verificationTokenHash: null,
+        verificationTokenUsed: false,
+        verificationTokenExpiresAt: 0,
+        correlationId,
+        createdAt: now,
+        expiresAt: now + SESSION_TTL_MS
+    };
+    sessionStore.set(sessionId, session);
+
+    try {
+        await sendOtpViaMs2(session);
+        logMulesoftEvent('login.otp.start', {
+            correlationId,
+            eligible: true,
+            identity: maskIdentityKey(identityKey)
+        });
+    } catch (err) {
+        // Do not leak the failure to the caller (anti-enumeration); the user can resend.
+        console.error('start-login MS-2 send failed:', err.message);
+    }
+
+    return res.json(genericResponse);
+});
+
 // 2. Generate and Send OTP (MS-2)
 app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, async (req, res) => {
     const { sessionId, recaptchaToken } = req.body;
@@ -767,68 +953,15 @@ app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, 
         return res.status(403).json({ error: 'Verificación de seguridad fallida.' });
     }
 
-    const mUrl = process.env.MULESOFT_BASE_URL_MS2 || process.env.MULESOFT_BASE_URL_MS3;
-    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
-    const correlationId = getSessionCorrelationId(session);
-
-    const chosenChannel = 'EMAIL';
-    const channelValue = session.realEmail;
+    // Shadow login sessions (non-eligible email) never reach MuleSoft, but they
+    // must respond identically to avoid account enumeration.
+    if (session.isShadow) {
+        return res.json({ success: true, message: 'OTP enviado correctamente.' });
+    }
 
     try {
-        let transactionId = 'SIM_TX_' + crypto.randomBytes(4).toString('hex');
-
-        if (isMockMode) {
-            console.log(`[MOCK MS-2] OTP sent via ${chosenChannel} to ${maskEmail(channelValue)}. TxId: ${transactionId}`);
-            await new Promise(r => setTimeout(r, 500));
-        } else {
-            const bearerToken = await getMuleSoftBearerToken(correlationId);
-            const url = `${mUrl}/operations/v1/customer/otp`;
-            const ms2Start = Date.now();
-            logMulesoftEvent('mulesoft.ms2.request', {
-                correlationId,
-                method: 'POST',
-                url: getMulesoftLogUrl(url),
-                channel: chosenChannel,
-                identity: maskIdentityKey(session.identityKey)
-            });
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: getMulesoftHeaders(correlationId, {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${bearerToken}`
-                }),
-                body: JSON.stringify({
-                    aplicacion: MULESOFT_APP_ID,
-                    id_almacenamiento: "",
-                    nombre_cliente: session.docNumber,
-                    identificacion_cliente: session.docNumber,
-                    tipo_canal: chosenChannel,
-                    valor_canal: channelValue
-                })
-            });
-            const durationMs = Date.now() - ms2Start;
-
-            logMulesoftEvent(response.ok ? 'mulesoft.ms2.response' : 'mulesoft.ms2.error', {
-                correlationId,
-                status: response.status,
-                durationMs,
-                url: getMulesoftLogUrl(url)
-            }, response.ok ? 'log' : 'error');
-
-            if (!response.ok) {
-                throw new Error(`MuleSoft MS-2 Send OTP returned status ${response.status}`);
-            }
-
-            const data = await response.json();
-            transactionId = data.id_transaccion || data.transactionId;
-        }
-
-        // Save transactionId in blind session
-        session.otpTransactionId = transactionId;
-        session.status = 'OTP_SENT';
+        await sendOtpViaMs2(session);
         return res.json({ success: true, message: 'OTP enviado correctamente.' });
-
     } catch (err) {
         console.error('Error during send OTP proxy:', err.message);
         return res.status(500).json({ error: 'No fue posible enviar el código OTP de seguridad.' });
@@ -855,6 +988,17 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
 
     if (session.status === 'BLOCKED' || isOtpLocked(session.identityKey)) {
         return res.status(423).json({ error: getOtpLockMessage() });
+    }
+
+    // Shadow login sessions have no real OTP transaction; treat every code as
+    // invalid (and count attempts) so they are indistinguishable from a wrong code.
+    if (session.isShadow) {
+        const failure = registerOtpFailure(session);
+        return res.status(failure.blocked ? 423 : 400).json({
+            error: failure.blocked
+                ? getOtpLockMessage()
+                : `Código OTP incorrecto. Te quedan ${failure.remainingAttempts} intento(s).`
+        });
     }
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS3;
@@ -1087,6 +1231,69 @@ app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res
     } catch (firebaseErr) {
         console.error('Firebase Admin signup error:', firebaseErr.message);
         return res.status(500).json({ error: 'Error al crear la cuenta de usuario en la base de seguridad.' });
+    }
+});
+
+// 5. Complete email-OTP LOGIN: mint a custom token for the resolved user.
+// signInWithCustomToken on the client establishes a real Identity Platform
+// session and updates the user's lastSignInTime (Custom Auth login).
+app.post('/api/auth/login/complete', requireAllowedBrowserOrigin, otpValidateLimiter, async (req, res) => {
+    const { sessionId, verificationToken } = req.body;
+
+    if (!sessionId || !verificationToken) {
+        return res.status(400).json({ error: 'Faltan datos para completar el inicio de sesión.' });
+    }
+
+    const session = sessionStore.get(sessionId);
+    if (!session || Date.now() > session.expiresAt) {
+        if (session) sessionStore.delete(sessionId);
+        return res.status(404).json({ error: 'La sesión ha expirado. Vuelve a solicitar un código de acceso.' });
+    }
+
+    if (
+        session.intent !== 'login' ||
+        session.isShadow ||
+        !session.eligibleForLogin ||
+        !session.uid ||
+        session.status !== 'OTP_VERIFIED' ||
+        !session.isVerified ||
+        session.verificationTokenUsed ||
+        !session.verificationTokenHash ||
+        Date.now() > session.verificationTokenExpiresAt ||
+        hashSecret(verificationToken) !== session.verificationTokenHash
+    ) {
+        return res.status(403).json({ error: 'La validación de seguridad no está vigente. Solicita un nuevo código de acceso.' });
+    }
+
+    if (!isFirebaseAdminInitialized) {
+        return res.status(503).json({ error: 'El servicio de inicio de sesión no está disponible. Intenta más tarde.' });
+    }
+
+    try {
+        const customToken = await admin.auth().createCustomToken(session.uid, {
+            auth_level: 'otp_email_verified',
+            login_method: 'miuso_email_otp'
+        });
+
+        session.verificationTokenUsed = true;
+        session.status = 'LOGGED_IN';
+
+        // Functional login audit (no PII, no OTP, no token persisted).
+        logMulesoftEvent('login.otp.success', {
+            correlationId: getSessionCorrelationId(session),
+            uid: session.uid,
+            emailHash: session.emailHash,
+            identity: maskIdentityKey(session.identityKey),
+            ipHash: hashSecret(String(req.ip || '')).slice(0, 16),
+            userAgentHash: hashSecret(String(req.get('user-agent') || '')).slice(0, 16),
+            method: 'miuso_email_otp'
+        });
+
+        sessionStore.delete(sessionId);
+        return res.json({ success: true, customToken });
+    } catch (err) {
+        console.error('Error issuing login custom token:', err.message);
+        return res.status(500).json({ error: 'No fue posible completar el inicio de sesión.' });
     }
 });
 

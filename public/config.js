@@ -29,7 +29,9 @@ window.APP_CONFIG = {
   // Allowed Redirect Origins (for OIDC safety)
   allowedOrigins: [
     "http://localhost:3000",
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "https://mietb.etb.com",
+    "https://pedrocasas.pau.solutions"
   ],
 
   // Canonical IdP origin. When set, email links and direct visits through

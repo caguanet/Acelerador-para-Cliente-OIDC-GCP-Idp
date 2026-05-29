@@ -97,7 +97,8 @@ describe('App OIDC Logic', () => {
   });
 
   it('detects OIDC parameters and sends a passwordless email link on valid request', async () => {
-    window.location.search = '?redirect_uri=http://localhost:3000&client_id=test-client';
+    window.location.search =
+      '?redirect_uri=http://localhost:3000&client_id=test-client&state=abc&trace=PAU14%3A56373%3Aew2h6q6y2u229&flow_id=ABC-123';
     render(<App />);
     expect(screen.getByRole('heading', { name: /Inicia sesión en tu cuenta/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Correo electrónico/i)).toBeInTheDocument();
@@ -119,7 +120,23 @@ describe('App OIDC Logic', () => {
         expect.objectContaining({ handleCodeInApp: true }),
       );
     });
+    const actionSettings = (authMocks.sendSignInLinkToEmail as any).mock.calls[0][2] as {
+      url: string;
+    };
+    const actionUrl = new URL(actionSettings.url);
+    expect(actionUrl.searchParams.get('redirect_uri')).toBe('http://localhost:3000');
+    expect(actionUrl.searchParams.get('client_id')).toBe('test-client');
+    expect(actionUrl.searchParams.get('state')).toBe('abc');
+    expect(actionUrl.searchParams.get('trace')).toBe('PAU14:56373:ew2h6q6y2u229');
+    expect(actionUrl.searchParams.get('flow_id')).toBe('ABC-123');
     expect(screen.getByText(/Te enviamos un enlace seguro/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enlace enviado/i })).toBeDisabled();
+
+    const emailInput = screen.getByPlaceholderText(/Correo electrónico/i);
+    fireEvent.submit(emailInput.closest('form') as HTMLFormElement);
+    await waitFor(() => {
+      expect(authMocks.sendSignInLinkToEmail).toHaveBeenCalledTimes(1);
+    });
     // Should show client info
     expect(screen.getByText('test-client')).toBeInTheDocument();
   });
@@ -143,7 +160,7 @@ describe('App OIDC Logic', () => {
     await waitFor(() => {
       expect(authMocks.sendSignInLinkToEmail).toHaveBeenCalled();
     });
-    expect(screen.getByText(/Esperando que confirmes el enlace/i)).toBeInTheDocument();
+    expect(screen.getByText(/Te enviamos un enlace seguro/i)).toBeInTheDocument();
     expect(window.location.href).not.toContain('id_token=old-session-token');
   });
 
@@ -155,6 +172,37 @@ describe('App OIDC Logic', () => {
     // Should show error message
     expect(screen.getByText(/Acceso No Autorizado/i)).toBeInTheDocument();
     expect(screen.getByText(/Error de Seguridad/i)).toBeInTheDocument();
+  });
+
+  it('returns safe launcher params on prompt=none login_required errors', async () => {
+    authMocks.onAuthStateChanged.mockImplementation((_auth, cb) => {
+      window.setTimeout(() => {
+        if (typeof cb === 'function') cb(null);
+      }, 0);
+      return () => {};
+    });
+    window.location.search =
+      '?redirect_uri=http://localhost:3000&client_id=test-client&prompt=none&state=abc&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229';
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(window.location.href).toContain('error=login_required');
+      expect(window.location.href).toContain('state=abc');
+      expect(window.location.href).toContain('nonce=n1');
+      expect(window.location.href).toContain('trace=PAU14%3A56373%3Aew2h6q6y2u229');
+    });
+  });
+
+  it('blocks invalid launcher passthrough params before rendering login', () => {
+    window.location.search =
+      '?redirect_uri=http://localhost:3000&client_id=test-client&trace=%3Cscript%3Ealert(1)%3C%2Fscript%3E';
+
+    render(<App />);
+
+    expect(screen.getByText(/Acceso No Autorizado/i)).toBeInTheDocument();
+    expect(screen.getByText(/parámetros de retorno no válidos/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Correo electrónico/i)).not.toBeInTheDocument();
   });
 
   it('renders login form when no OIDC params', () => {
@@ -264,6 +312,7 @@ describe('App OIDC Logic', () => {
   });
 
   it('delegates email sign-in to primary tab when heartbeat is alive', async () => {
+    (window as any).APP_CONFIG.emailLinkPrimaryTabRedirect = true;
     const coordination = await import('./utils/emailLinkTabCoordination');
     vi.spyOn(coordination, 'isPrimaryEmailLinkTabAlive').mockReturnValue(true);
     vi.spyOn(coordination, 'waitForPrimaryEmailLinkRedirect').mockResolvedValue(true);
@@ -292,8 +341,9 @@ describe('App OIDC Logic', () => {
   it('completes email sign-in action with OIDC nested in continueUrl', async () => {
     authMocks.isSignInWithEmailLink.mockReturnValue(true);
     window.localStorage.setItem('idp.emailForSignIn', 'cliente@etb.com.co');
+    window.localStorage.setItem('idp.emailLinkIntentId', 'stale-primary-tab');
     const continueTarget =
-      'https://idp.example/?client_id=test-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000&state=abc';
+      'https://idp.example/?client_id=test-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000&state=abc&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229&flow_id=ABC-123';
     window.location.search = `?mode=signIn&oobCode=link123&continueUrl=${encodeURIComponent(continueTarget)}`;
 
     render(<App />);
@@ -308,13 +358,48 @@ describe('App OIDC Logic', () => {
     await waitFor(() => {
       expect(window.location.href).toContain('id_token=mock-id-token');
       expect(window.location.href).toContain('state=abc');
+      expect(window.location.href).toContain('nonce=n1');
+      expect(window.location.href).toContain('trace=PAU14%3A56373%3Aew2h6q6y2u229');
+      expect(window.location.href).toContain('flow_id=ABC-123');
+    });
+    expect(screen.queryByText(/Puedes cerrar esta pestaña/i)).not.toBeInTheDocument();
+  });
+
+  it('completes email sign-in action opened in another browser and preserves safe params', async () => {
+    authMocks.isSignInWithEmailLink.mockReturnValue(true);
+    const continueTarget =
+      'https://idp.example/?client_id=test-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000&state=abc&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229&channel=web';
+    window.location.search = `?mode=signIn&oobCode=link123&continueUrl=${encodeURIComponent(continueTarget)}`;
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /Confirma tu correo/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Correo electrónico/i), {
+      target: { value: 'cliente@etb.com.co' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Continuar/i }));
+
+    await waitFor(() => {
+      expect(authMocks.signInWithEmailLink).toHaveBeenCalledWith(
+        {},
+        'cliente@etb.com.co',
+        expect.any(String),
+      );
+    });
+    await waitFor(() => {
+      expect(window.location.href).toContain('id_token=mock-id-token');
+      expect(window.location.href).toContain('state=abc');
+      expect(window.location.href).toContain('nonce=n1');
+      expect(window.location.href).toContain('trace=PAU14%3A56373%3Aew2h6q6y2u229');
+      expect(window.location.href).toContain('channel=web');
     });
   });
 
   it('completes passwordless login when returning with an email link', async () => {
     authMocks.isSignInWithEmailLink.mockReturnValueOnce(true);
     window.localStorage.setItem('idp.emailForSignIn', 'cliente@etb.com.co');
-    window.location.search = '?redirect_uri=http://localhost:3000&client_id=test-client&state=abc';
+    window.location.search =
+      '?redirect_uri=http://localhost:3000&client_id=test-client&state=abc&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229';
 
     render(<App />);
 
@@ -328,6 +413,8 @@ describe('App OIDC Logic', () => {
     await waitFor(() => {
       expect(window.location.href).toContain('id_token=mock-id-token');
       expect(window.location.href).toContain('state=abc');
+      expect(window.location.href).toContain('nonce=n1');
+      expect(window.location.href).toContain('trace=PAU14%3A56373%3Aew2h6q6y2u229');
     });
   });
 });

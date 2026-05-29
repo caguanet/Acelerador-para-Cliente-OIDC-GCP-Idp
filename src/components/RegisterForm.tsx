@@ -7,6 +7,7 @@ import {
     signInWithCustomToken,
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { getConfiguredRecaptchaSiteKey, getRecaptchaToken, loadRecaptchaEnterprise } from '../utils/recaptcha';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const EYE_ICON = (
@@ -42,15 +43,10 @@ const VERIFY_CODE_ERROR = 'No pudimos validar el código. Revísalo o solicita u
 const RESEND_OTP_ERROR = 'No pudimos reenviar el código. Inténtalo nuevamente en unos minutos.';
 const COMPLETE_REGISTRATION_ERROR = 'No pudimos completar el registro. Inténtalo nuevamente en unos minutos.';
 const NETWORK_ERROR = 'No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo.';
-const RECAPTCHA_ENTERPRISE_SCRIPT_ID = 'recaptcha-enterprise-script';
-const RECAPTCHA_SIM_TOKEN = 'SIM_TOKEN';
 
 type CustomerType = 'HOGARES' | 'MIPYMES';
 type DocType = 'CC' | 'CE' | 'NIT' | 'TI' | 'PP';
 type ApiJson = Record<string, unknown>;
-type RecaptchaAction = 'lookup' | 'otp_send';
-
-let recaptchaScriptPromise: Promise<void> | null = null;
 
 /**
  * Hogares flow:  IDENTIFY → VERIFY → PASSWORD
@@ -87,55 +83,6 @@ function getPendingSocialProvider(providerId: string | null) {
         default:
             return null;
     }
-}
-
-function getConfiguredRecaptchaSiteKey(): string {
-    const runtimeKey = window.APP_CONFIG?.recaptchaSiteKey;
-    const envKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
-    return (runtimeKey || envKey || '').trim();
-}
-
-function loadRecaptchaEnterprise(siteKey: string): Promise<void> {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve();
-    if (window.grecaptcha?.enterprise) return Promise.resolve();
-    if (recaptchaScriptPromise) return recaptchaScriptPromise;
-
-    recaptchaScriptPromise = new Promise((resolve, reject) => {
-        const existingScript = document.getElementById(RECAPTCHA_ENTERPRISE_SCRIPT_ID);
-        if (existingScript) {
-            existingScript.addEventListener('load', () => resolve(), { once: true });
-            existingScript.addEventListener('error', () => reject(new Error('No pudimos cargar la verificación de seguridad.')), { once: true });
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.id = RECAPTCHA_ENTERPRISE_SCRIPT_ID;
-        script.src = `https://www.google.com/recaptcha/enterprise.js?render=${encodeURIComponent(siteKey)}`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => resolve();
-        script.onerror = () => {
-            recaptchaScriptPromise = null;
-            reject(new Error('No pudimos cargar la verificación de seguridad.'));
-        };
-        document.head.appendChild(script);
-    });
-
-    return recaptchaScriptPromise;
-}
-
-async function getRecaptchaToken(action: RecaptchaAction): Promise<string> {
-    const siteKey = getConfiguredRecaptchaSiteKey();
-    if (!siteKey) return RECAPTCHA_SIM_TOKEN;
-
-    await loadRecaptchaEnterprise(siteKey);
-    const enterprise = window.grecaptcha?.enterprise;
-    if (!enterprise) {
-        throw new Error('No pudimos cargar la verificación de seguridad.');
-    }
-
-    await new Promise<void>((resolve) => enterprise.ready(resolve));
-    return enterprise.execute(siteKey, { action });
 }
 
 async function readApiJson(response: Response): Promise<ApiJson | null> {

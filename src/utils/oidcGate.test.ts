@@ -30,11 +30,47 @@ describe('oidcGate', () => {
 
   it('parseOidcFromContinueUrl extracts nested OIDC params', () => {
     const nested =
-      'https://idp.example/?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback&state=s1';
+      'https://idp.example/?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback&state=s1&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229';
     const result = parseOidcFromContinueUrl(nested);
     expect(result?.client_id).toBe('app');
     expect(result?.redirect_uri).toBe('https://pedrocasas.pau.solutions/callback');
     expect(result?.state).toBe('s1');
+    expect(result?.nonce).toBe('n1');
+    expect(result?.passthroughParams.trace).toBe('PAU14:56373:ew2h6q6y2u229');
+  });
+
+  it('resolveAccessGate preserves OIDC nonce and safe PAU trace from the launcher URL', () => {
+    window.location.search =
+      '?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback&state=s1&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229&flow_id=ABC-123&channel=web';
+
+    const gate = resolveAccessGate();
+    expect(gate.oidcError).toBeNull();
+    expect(gate.oidcParams.nonce).toBe('n1');
+    expect(gate.oidcParams.passthroughParams.trace).toBe('PAU14:56373:ew2h6q6y2u229');
+    expect(gate.oidcParams.passthroughParams.flow_id).toBe('ABC-123');
+    expect(gate.oidcParams.passthroughParams.channel).toBe('web');
+    expect(gate.oidcParams.passthroughParams.scope).toBeUndefined();
+  });
+
+  it('blocks invalid passthrough params instead of reflecting them', () => {
+    window.location.search =
+      '?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback&trace=%3Cscript%3Ealert(1)%3C%2Fscript%3E';
+
+    const gate = resolveAccessGate();
+    expect(gate.oidcError).toMatch(/parámetros de retorno no válidos/i);
+    expect(gate.oidcParams.redirect_uri).toBeNull();
+  });
+
+  it('does not forward reserved protocol params as launcher passthrough', () => {
+    window.location.search =
+      '?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback&scope=openid&nonce=n1&id_token=fake&trace=PAU14%3A56373%3Aew2h6q6y2u229';
+
+    const gate = resolveAccessGate();
+    expect(gate.oidcError).toBeNull();
+    expect(gate.oidcParams.nonce).toBe('n1');
+    expect(gate.oidcParams.passthroughParams).toEqual({
+      trace: 'PAU14:56373:ew2h6q6y2u229',
+    });
   });
 
   it('blocks direct access when requireOidcRedirect is true', () => {
