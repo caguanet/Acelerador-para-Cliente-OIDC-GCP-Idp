@@ -60,6 +60,7 @@ const FACEBOOK_ICON = (
 
 type LoginMode = 'SIGN_IN' | 'RECOVERY';
 type AuthTab = 'EMAIL_LINK' | 'OTP_CODE';
+const EMAIL_LINK_SIGN_IN_VISIBLE = false;
 
 interface PasswordlessLoginFormProps {
     onSignInSuccess: (user: User) => void;
@@ -121,7 +122,7 @@ export function PasswordlessLoginForm({
     hasValidOidcContext = true,
 }: PasswordlessLoginFormProps) {
     const [mode, setMode] = useState<LoginMode>('SIGN_IN');
-    const [authTab, setAuthTab] = useState<AuthTab>('EMAIL_LINK');
+    const [authTab, setAuthTab] = useState<AuthTab>(EMAIL_LINK_SIGN_IN_VISIBLE ? 'EMAIL_LINK' : 'OTP_CODE');
     const [email, setEmail] = useState('');
     const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -368,8 +369,10 @@ export function PasswordlessLoginForm({
                 ? 'Confirma tu correo'
                 : 'Inicia sesión en tu cuenta';
     const isEmailLinkSendLocked = mode === 'SIGN_IN' && !needsEmailConfirmation && emailLinkSent;
-    const showSignInTabs = mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink;
-    const showEmailLinkForm = !(showSignInTabs && authTab === 'OTP_CODE');
+    const showSignInOptions = mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink;
+    const showSignInTabs = showSignInOptions && EMAIL_LINK_SIGN_IN_VISIBLE;
+    const showOtpSignIn = showSignInOptions && authTab === 'OTP_CODE';
+    const showEmailLinkForm = mode === 'RECOVERY' || needsEmailConfirmation || waitingForEmailLink || (showSignInTabs && authTab === 'EMAIL_LINK');
 
     const switchAuthTab = (nextTab: AuthTab) => {
         setAuthTab(nextTab);
@@ -399,7 +402,7 @@ export function PasswordlessLoginForm({
     return (
         <div className="login-form">
             <h2 className="login-form-title">{title}</h2>
-            {showSignInTabs && (
+            {showSignInOptions && (
                 <p className="login-form-subtitle">
                     ¿No tienes cuenta en Mi ETB?{' '}
                     <button type="button" data-testid="go-register" onClick={onGoToRegister}>
@@ -452,8 +455,8 @@ export function PasswordlessLoginForm({
                 </div>
             )}
 
-            {showSignInTabs && authTab === 'OTP_CODE' && (
-                <div id="auth-panel-otp-code" role="tabpanel" aria-labelledby="auth-tab-otp-code">
+            {showOtpSignIn && (
+                <div id="auth-panel-otp-code" role={showSignInTabs ? 'tabpanel' : undefined} aria-labelledby={showSignInTabs ? 'auth-tab-otp-code' : undefined}>
                     <EmailOtpLoginForm
                         onSignInSuccess={onSignInSuccess}
                         oidcContextRequired={oidcContextRequired}
@@ -498,6 +501,14 @@ export function PasswordlessLoginForm({
                 </div>
             )}
 
+            {showSignInOptions && (
+                <div className="login-forgot">
+                    <button type="button" onClick={() => switchMode('RECOVERY')}>
+                        ¿Necesitas recuperar tu contraseña?
+                    </button>
+                </div>
+            )}
+
             {showSignInTabs && authTab === 'EMAIL_LINK' && (
                 <>
                     <div className="otp-divider"><span>o continúa con</span></div>
@@ -517,11 +528,6 @@ export function PasswordlessLoginForm({
                         </button>
                     </div>
 
-                    <div className="login-forgot">
-                        <button type="button" onClick={() => switchMode('RECOVERY')}>
-                            ¿Necesitas recuperar tu contraseña?
-                        </button>
-                    </div>
                 </>
             )}
 

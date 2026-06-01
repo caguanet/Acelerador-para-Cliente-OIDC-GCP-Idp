@@ -38,8 +38,6 @@ const secretMappings = [
   'MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest',
   'MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest',
   'MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest',
-  'MULESOFT_OAUTH_CLIENT_ID=MULESOFT_OAUTH_CLIENT_ID:latest',
-  'MULESOFT_OAUTH_CLIENT_SECRET=MULESOFT_OAUTH_CLIENT_SECRET:latest',
   'MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest',
 ];
 
@@ -150,6 +148,9 @@ async function deployIdpInitial() {
       REQUIRE_OIDC_REDIRECT: config.requireOidcRedirect,
       VITE_ALLOWED_ORIGINS: 'pending_configuration',
       CORS_ALLOWED_ORIGINS: 'pending_configuration',
+      // QA token service requires these body fields to be present but empty.
+      MULESOFT_OAUTH_CLIENT_ID: '',
+      MULESOFT_OAUTH_CLIENT_SECRET: '',
     })}`,
     `--set-secrets=${secretMappings.join(',')}`,
   ]);

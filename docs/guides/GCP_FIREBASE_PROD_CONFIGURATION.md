@@ -155,7 +155,7 @@ Hallazgos a mitigar:
 | Hallazgo | Impacto | Mitigacion |
 | --- | --- | --- |
 | `MULESOFT_BASE_URL_MS1`, `MS2`, `MS3` y `MS4` apuntaban al mismo secreto `MULESOFT_BASE_URL`. | Riesgo de llamar endpoints MuleSoft incorrectos. MS-1/MS-2/MS-3/MS-4 tienen bases y paths distintos. | Mitigado para MS-1/MS-2/MS-3 con secretos separados. MS-4 queda pendiente y desactivado. |
-| Faltaba `MULESOFT_OAUTH_URL` o credenciales OAuth vigentes. | El backend no puede obtener el JWT dinamico requerido por MuleSoft. | Mitigado con `MULESOFT_OAUTH_URL` y credenciales OAuth separadas. No usar JWT ya emitidos copiados desde cURL. |
+| Faltaba `MULESOFT_OAUTH_URL` o contrato correcto del body OAuth. | El backend no puede obtener el JWT dinamico requerido por MuleSoft. | Mitigado con `MULESOFT_OAUTH_URL`; en QA actual `MULESOFT_OAUTH_CLIENT_ID` y `MULESOFT_OAUTH_CLIENT_SECRET` deben ser variables literales vacias, no secretos con valores no vacios. |
 | Solo existia `RECAPTCHA_SITE_KEY`; faltaban `RECAPTCHA_PROJECT_ID` y `RECAPTCHA_API_KEY`. | El backend entra en bypass/simulacion de reCAPTCHA. | Mitigado: `RECAPTCHA_PROJECT_ID` y `RECAPTCHA_API_KEY` creados. Montarlos en Cloud Run con la nueva revision. |
 | `idp-service-sa` no tenia rol Firebase/Auth admin. | Admin SDK puede fallar al crear usuarios, actualizar usuarios o setear custom claims. | Mitigado: `roles/firebaseauth.admin` otorgado el 2026-05-25. |
 | Existe `FIREBASE_SERVICE_ACCOUNT`, pero Cloud Run no lo monta. | Puede crear confusion. En Cloud Run se debe preferir la service account adjunta, no JSON descargado. | No descargar JSON para prod. Usar `idp-service-sa` con IAM correcto. |
@@ -290,9 +290,10 @@ Usar estos Secret IDs en este repo. Evitar la variante anterior en minusculas pa
 | `MULESOFT_CLIENT_ID` | `MULESOFT_CLIENT_ID` | Secreto | Ya existe; validar version. |
 | `MULESOFT_CLIENT_SECRET` | `MULESOFT_CLIENT_SECRET` | Secreto | Ya existe; validar version/rotacion. |
 | `MULESOFT_OAUTH_URL` | `MULESOFT_OAUTH_URL` | Configuracion sensible | Creado para OAuth client credentials. |
-| `MULESOFT_OAUTH_CLIENT_ID` | `MULESOFT_OAUTH_CLIENT_ID` | Secreto | Creado; se envia en el body del servicio token. |
-| `MULESOFT_OAUTH_CLIENT_SECRET` | `MULESOFT_OAUTH_CLIENT_SECRET` | Secreto | Creado; se envia en el body del servicio token. |
+| `MULESOFT_OAUTH_CLIENT_ID` | No montar en QA actual | Variable literal vacia | El token service QA exige el campo en body, pero vacio. |
+| `MULESOFT_OAUTH_CLIENT_SECRET` | No montar en QA actual | Variable literal vacia | El token service QA exige el campo en body, pero vacio. |
 | `MULESOFT_OAUTH_ACCOUNT_ID` | `MULESOFT_OAUTH_ACCOUNT_ID` | Configuracion sensible | Creado; se envia como `account_id`. |
+| `MULESOFT_OAUTH_AUTHORIZATION_BEARER` | `MULESOFT_OAUTH_AUTHORIZATION_BEARER` | Secreto opcional | No existe en el proyecto al 2026-06-01; crear y montar solo si MuleSoft confirma que el ambiente exige `Authorization` para pedir token. |
 | `RECAPTCHA_PROJECT_ID` | `RECAPTCHA_PROJECT_ID` | Configuracion | Crear; valor usual: `etb-identity-omnicanal`. |
 | `RECAPTCHA_SITE_KEY` | `RECAPTCHA_SITE_KEY` | Llave publica | Ya existe; validar dominio y ambiente. |
 | `RECAPTCHA_API_KEY` | `RECAPTCHA_API_KEY` | Secreto | Crear; restringir a reCAPTCHA Enterprise API. |
@@ -363,7 +364,7 @@ Validar versiones habilitadas sin leer valores:
 for s in FIREBASE_API_KEY FIREBASE_AUTH_DOMAIN FIREBASE_PROJECT_ID \
   MULESOFT_BASE_URL_MS1 MULESOFT_BASE_URL_MS2 MULESOFT_BASE_URL_MS3 \
   MULESOFT_CLIENT_ID MULESOFT_CLIENT_SECRET MULESOFT_OAUTH_URL \
-  MULESOFT_OAUTH_CLIENT_ID MULESOFT_OAUTH_CLIENT_SECRET MULESOFT_OAUTH_ACCOUNT_ID \
+  MULESOFT_OAUTH_ACCOUNT_ID \
   RECAPTCHA_PROJECT_ID RECAPTCHA_SITE_KEY RECAPTCHA_API_KEY; do
   printf "%s: " "$s"
   gcloud secrets versions list "$s" \
@@ -574,8 +575,6 @@ Pasos:
 | `MULESOFT_CLIENT_ID` | `MULESOFT_CLIENT_ID` |
 | `MULESOFT_CLIENT_SECRET` | `MULESOFT_CLIENT_SECRET` |
 | `MULESOFT_OAUTH_URL` | `MULESOFT_OAUTH_URL` |
-| `MULESOFT_OAUTH_CLIENT_ID` | `MULESOFT_OAUTH_CLIENT_ID` |
-| `MULESOFT_OAUTH_CLIENT_SECRET` | `MULESOFT_OAUTH_CLIENT_SECRET` |
 | `MULESOFT_OAUTH_ACCOUNT_ID` | `MULESOFT_OAUTH_ACCOUNT_ID` |
 | `RECAPTCHA_PROJECT_ID` | `RECAPTCHA_PROJECT_ID` |
 | `RECAPTCHA_SITE_KEY` | `RECAPTCHA_SITE_KEY` |
@@ -597,9 +596,9 @@ gcloud run services update idp-service \
   --project=etb-identity-omnicanal \
   --region=us-east1 \
   --service-account=idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com \
-  --update-env-vars='APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false,CSP_REPORT_ONLY=true,VITE_ALLOWED_ORIGINS=https://pedrocasas.pau.solutions|https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app,CORS_ALLOWED_ORIGINS=https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app' \
-  --remove-secrets=MULESOFT_BASE_URL_MS4 \
-  --update-secrets='VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest,VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest,VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_OAUTH_CLIENT_ID=MULESOFT_OAUTH_CLIENT_ID:latest,MULESOFT_OAUTH_CLIENT_SECRET=MULESOFT_OAUTH_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest,RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest,RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest,RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest'
+  --update-env-vars='APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false,CSP_REPORT_ONLY=true,MULESOFT_OAUTH_CLIENT_ID=,MULESOFT_OAUTH_CLIENT_SECRET=,VITE_ALLOWED_ORIGINS=https://pedrocasas.pau.solutions|https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app,CORS_ALLOWED_ORIGINS=https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app' \
+  --remove-secrets=MULESOFT_BASE_URL_MS4,MULESOFT_OAUTH_CLIENT_ID,MULESOFT_OAUTH_CLIENT_SECRET,MULESOFT_OAUTH_AUTHORIZATION_BEARER \
+  --update-secrets='VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest,VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest,VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest,RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest,RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest,RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest'
 ```
 
 Produccion endurecida con versiones numericas:
@@ -1013,8 +1012,6 @@ Para flujo real deben existir, como minimo:
 - `MULESOFT_CLIENT_ID`
 - `MULESOFT_CLIENT_SECRET`
 - `MULESOFT_OAUTH_URL`
-- `MULESOFT_OAUTH_CLIENT_ID`
-- `MULESOFT_OAUTH_CLIENT_SECRET`
 - `MULESOFT_OAUTH_ACCOUNT_ID`
 
 Cada invocacion a MS-1, MS-2, MS-3 y futuro MS-4 debe pedir un token nuevo al servicio `MULESOFT_OAUTH_URL`; no se cachea bearer en memoria.

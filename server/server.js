@@ -375,6 +375,14 @@ function getMulesoftHeaders(correlationId, extraHeaders = {}) {
     };
 }
 
+function getBearerAuthHeaderFromEnv(envName) {
+    const token = process.env[envName]?.trim();
+    if (!token) return {};
+    return {
+        Authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}`
+    };
+}
+
 function getMulesoftLogUrl(url) {
     try {
         const parsed = new URL(url);
@@ -597,7 +605,8 @@ async function getMuleSoftBearerToken(correlationId) {
         const headers = getMulesoftHeaders(correlationId || createCorrelationId(), {
             'Content-Type': 'application/json',
             'client_id': clientId,
-            'client_secret': clientSecret
+            'client_secret': clientSecret,
+            ...getBearerAuthHeaderFromEnv('MULESOFT_OAUTH_AUTHORIZATION_BEARER')
         });
 
         const response = await fetch(tokenUrl, {

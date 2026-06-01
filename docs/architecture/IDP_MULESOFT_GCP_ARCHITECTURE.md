@@ -183,6 +183,7 @@ No deben exponerse en `public/config.js` ni en el navegador.
 | `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` | Headers/credenciales hacia CloudHub |
 | `MULESOFT_OAUTH_URL` | OAuth `client_credentials` para bearer dinámico |
 | `MULESOFT_OAUTH_CLIENT_ID` / `MULESOFT_OAUTH_CLIENT_SECRET` / `MULESOFT_OAUTH_ACCOUNT_ID` | Credenciales del body para el servicio ETB OAuth 2.0 |
+| `MULESOFT_OAUTH_AUTHORIZATION_BEARER` | Bearer técnico opcional requerido por algunos ambientes QA para autorizar el token service. Puede guardarse con o sin prefijo `Bearer `. |
 | `GOOGLE_APPLICATION_CREDENTIALS` / `FIREBASE_CONFIG` | Firebase Admin SDK local; en Cloud Run se usan Application Default Credentials de la service account |
 | `RECAPTCHA_*` | Verificación antes de lookup y envío OTP |
 | `VITE_ALLOWED_ORIGINS` | Origenes permitidos para `redirect_uri` OIDC; se publica en `/config.js` |
@@ -193,6 +194,7 @@ Detalle operativo y valores QA: [IDP_GCP_MULESOFT_MANUAL.md](../guides/IDP_GCP_M
 Reglas transversales MuleSoft:
 
 - Cada llamada a MS-1/MS-2/MS-3 y futuro MS-4 solicita un token nuevo al servicio `MULESOFT_OAUTH_URL`.
+- Si el token service exige header `Authorization`, el BFF lo toma de `MULESOFT_OAUTH_AUTHORIZATION_BEARER` y no lo publica al navegador.
 - Si `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` existen con valor vacio, el BFF envia esos campos vacios en el body del token service. El fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` aplica solo cuando la variable OAuth no existe.
 - Los headers `name` y `source` viajan siempre con valor `IDP-MiETB`.
 - `X-CORRELATION-ID` se genera una sola vez al iniciar la sesion de registro y se conserva para token service, MS-1, MS-2, MS-3 y futuro MS-4.

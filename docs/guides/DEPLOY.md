@@ -165,12 +165,12 @@ MULESOFT_BASE_URL_MS2
 MULESOFT_BASE_URL_MS3
 MULESOFT_CLIENT_ID
 MULESOFT_CLIENT_SECRET
-MULESOFT_OAUTH_CLIENT_ID
-MULESOFT_OAUTH_CLIENT_SECRET
 MULESOFT_OAUTH_ACCOUNT_ID
 ```
 
-Nota QA: si MuleSoft define `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` como campos vacios en el body del token service, mantener el secreto/variable con valor vacio. El BFF respeta esos vacios explicitos y solo usa fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` cuando la variable OAuth no existe.
+Nota QA: el token service actual exige `client_id` y `client_secret` en el body, pero con valor vacio. Configurar `MULESOFT_OAUTH_CLIENT_ID` y `MULESOFT_OAUTH_CLIENT_SECRET` como variables literales vacias en Cloud Run; no montarlas desde secretos con valores no vacios. El BFF respeta esos vacios explicitos y solo usa fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` cuando la variable OAuth no existe.
+
+Si MuleSoft confirma que un ambiente exige un header `Authorization` adicional para pedir el token, crear el secreto `MULESOFT_OAUTH_AUTHORIZATION_BEARER` y montarlo en una revision separada. No incluirlo en el despliegue base si el secreto no existe.
 
 Endpoints QA esperados:
 
@@ -189,8 +189,9 @@ gcloud run services update "${SERVICE_NAME}" \
   --region="${REGION}" \
   --project="${PROJECT_ID}" \
   --service-account="${SERVICE_ACCOUNT}" \
-  --update-env-vars='APP_ENV=qa,APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false' \
-  --update-secrets='MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_CLIENT_ID=MULESOFT_OAUTH_CLIENT_ID:latest,MULESOFT_OAUTH_CLIENT_SECRET=MULESOFT_OAUTH_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest'
+  --remove-secrets='MULESOFT_OAUTH_CLIENT_ID,MULESOFT_OAUTH_CLIENT_SECRET,MULESOFT_OAUTH_AUTHORIZATION_BEARER' \
+  --update-env-vars='APP_ENV=qa,APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false,MULESOFT_OAUTH_CLIENT_ID=,MULESOFT_OAUTH_CLIENT_SECRET=' \
+  --update-secrets='MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest'
 ```
 
 Validar que el servicio no este usando simulacion:

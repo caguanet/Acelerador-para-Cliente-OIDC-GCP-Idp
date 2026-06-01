@@ -96,7 +96,14 @@ describe('App OIDC Logic', () => {
     window.localStorage.clear();
   });
 
-  it('detects OIDC parameters and sends a passwordless email link on valid request', async () => {
+  it('detects OIDC parameters and starts OTP login from the visible method', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/customer/otp/start-login') {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ success: true, sessionId: 'sess-oidc', maskedEmail: 'cl****@etb.com.co' }) };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
     window.location.search =
       '?redirect_uri=http://localhost:3000&client_id=test-client&state=abc&trace=PAU14%3A56373%3Aew2h6q6y2u229&flow_id=ABC-123';
     render(<App />);
@@ -104,44 +111,30 @@ describe('App OIDC Logic', () => {
     expect(screen.getByPlaceholderText(/Correo electrónico/i)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Número celular/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Contraseña/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Google/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Apple/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Facebook/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Enlace seguro/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Enviar enlace de acceso/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enviar código de acceso/i })).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText(/Correo electrónico/i), {
       target: { value: 'cliente@etb.com.co' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar enlace de acceso/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar código de acceso/i }));
 
     await waitFor(() => {
-      expect(authMocks.sendSignInLinkToEmail).toHaveBeenCalledWith(
-        {},
-        'cliente@etb.com.co',
-        expect.objectContaining({ handleCodeInApp: true }),
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/customer/otp/start-login',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ email: 'cliente@etb.com.co', recaptchaToken: 'SIM_TOKEN' }),
+        }),
       );
     });
-    const actionSettings = (authMocks.sendSignInLinkToEmail as any).mock.calls[0][2] as {
-      url: string;
-    };
-    const actionUrl = new URL(actionSettings.url);
-    expect(actionUrl.searchParams.get('redirect_uri')).toBe('http://localhost:3000');
-    expect(actionUrl.searchParams.get('client_id')).toBe('test-client');
-    expect(actionUrl.searchParams.get('state')).toBe('abc');
-    expect(actionUrl.searchParams.get('trace')).toBe('PAU14:56373:ew2h6q6y2u229');
-    expect(actionUrl.searchParams.get('flow_id')).toBe('ABC-123');
-    expect(screen.getByText(/Te enviamos un enlace seguro/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Enlace enviado/i })).toBeDisabled();
-
-    const emailInput = screen.getByPlaceholderText(/Correo electrónico/i);
-    fireEvent.submit(emailInput.closest('form') as HTMLFormElement);
-    await waitFor(() => {
-      expect(authMocks.sendSignInLinkToEmail).toHaveBeenCalledTimes(1);
-    });
+    expect(authMocks.sendSignInLinkToEmail).not.toHaveBeenCalled();
     // Should show client info
     expect(screen.getByText('test-client')).toBeInTheDocument();
   });
 
-  it('does not redirect the primary tab before the email link is confirmed', async () => {
+  it('does not expose the email-link sign-in option on the login screen', () => {
     authMocks.onAuthStateChanged.mockImplementation((_auth, cb) => {
       if (typeof cb === 'function') {
         cb({ getIdToken: vi.fn(() => Promise.resolve('old-session-token')) });
@@ -152,15 +145,10 @@ describe('App OIDC Logic', () => {
 
     render(<App />);
 
-    fireEvent.change(screen.getByPlaceholderText(/Correo electrónico/i), {
-      target: { value: 'cliente@etb.com.co' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Enviar enlace de acceso/i }));
-
-    await waitFor(() => {
-      expect(authMocks.sendSignInLinkToEmail).toHaveBeenCalled();
-    });
-    expect(screen.getByText(/Te enviamos un enlace seguro/i)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Enlace seguro/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Enviar enlace de acceso/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enviar código de acceso/i })).toBeInTheDocument();
+    expect(authMocks.sendSignInLinkToEmail).not.toHaveBeenCalled();
     expect(window.location.href).not.toContain('id_token=old-session-token');
   });
 
@@ -212,7 +200,8 @@ describe('App OIDC Logic', () => {
     expect(screen.getByPlaceholderText(/Correo electrónico/i)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Número celular/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Contraseña/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Google/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Enlace seguro/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enviar código de acceso/i })).toBeInTheDocument();
     // Should NOT show client_id info (no params)
     expect(screen.queryByText(/Acceso solicitado por/i)).not.toBeInTheDocument();
   });

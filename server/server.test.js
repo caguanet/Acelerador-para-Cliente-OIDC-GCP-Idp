@@ -138,6 +138,7 @@ beforeAll(async () => {
         MULESOFT_CLIENT_ID: 'mulesoft-client-id',
         MULESOFT_CLIENT_SECRET: 'mulesoft-client-secret',
         MULESOFT_OAUTH_URL: 'https://oauth.test/token',
+        MULESOFT_OAUTH_AUTHORIZATION_BEARER: 'oauth-bootstrap-token',
         MULESOFT_OAUTH_ACCOUNT_ID: 'mulesoft-account',
         MULESOFT_BASE_URL_MS2: 'https://ms2.test',
         MULESOFT_BASE_URL_MS3: 'https://ms3.test/operations/v1',
@@ -231,6 +232,10 @@ describe('BFF browser-origin protections', () => {
 describe('BFF login OTP integration', () => {
     it('runs the eligible email OTP login path through MS-2, MS-3 and custom token issuance', async () => {
         const sessionId = await startEligibleLogin();
+
+        const oauthCall = findExternalCall('/token');
+        expect(oauthCall).toBeTruthy();
+        expect(getHeader(oauthCall.init, 'Authorization')).toBe('Bearer oauth-bootstrap-token');
 
         const ms2Call = findExternalCall('/customer/otp');
         expect(ms2Call).toBeTruthy();

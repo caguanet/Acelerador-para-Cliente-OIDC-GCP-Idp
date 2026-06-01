@@ -1127,8 +1127,8 @@ ul.firebaseui-idp-list {
     .login-tagline        { display: none; }
 
     /* ---- Left hero panel ----
-       The background image contains the campaign artwork. Store links are
-       rendered as real anchors over the baked badge area so they are clickable. */
+       The campaign image already contains the visible copy and store badges.
+       Desktop anchors stay as invisible click targets over the baked badges. */
     .login-hero {
         display: flex;
         flex: 1;
@@ -1141,20 +1141,14 @@ ul.firebaseui-idp-list {
 
     .login-hero-inner {
         position: absolute;
-        left: clamp(7.5rem, 13.4vw, 16.75rem);
-        top: clamp(24.5rem, 61.5vh, 30rem);
-        width: min(34rem, calc(100vw - 670px));
+        left: clamp(8.5rem, 13.2vw, 16rem);
+        top: clamp(26.25rem, 29.2vw, 35rem);
+        width: min(32rem, calc(100vw - 680px));
         pointer-events: auto;
     }
 
     .login-hero-inner::before {
-        content: '';
-        position: absolute;
-        inset: -0.25rem -0.3rem auto -0.3rem;
-        height: 3.65rem;
-        border-radius: 14px;
-        background: linear-gradient(90deg, #155994, #1472a3);
-        box-shadow: 0 8px 22px rgba(0, 36, 77, 0.16);
+        display: none;
     }
 
     .login-hero-title,
@@ -1172,14 +1166,40 @@ ul.firebaseui-idp-list {
 
     .login-hero .login-hero-badges {
         position: relative;
-        gap: 0.65rem;
+        gap: clamp(1.5rem, 2vw, 2.4rem);
+        flex-wrap: nowrap;
         max-width: 100%;
         z-index: 1;
     }
 
     .login-hero .app-badge {
-        min-height: 2.75rem;
-        padding: 0.5rem 0.8rem;
+        min-width: clamp(7.6rem, 8.7vw, 10.2rem);
+        min-height: clamp(2.45rem, 2.35vw, 2.95rem);
+        padding: 0;
+        opacity: 0;
+        border-radius: 0.5rem;
+        box-shadow: none;
+        transform: none;
+        animation: none;
+    }
+
+    .login-hero .app-badge:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .login-hero .app-badge:focus-visible {
+        opacity: 0.08;
+        outline: 3px solid var(--brand-accent);
+        outline-offset: 4px;
+    }
+
+    .login-hero .app-badge:nth-child(2) {
+        min-width: clamp(8.5rem, 9.7vw, 11.6rem);
+    }
+
+    .login-hero .app-badge:nth-child(3) {
+        min-width: clamp(8.3rem, 9.45vw, 11.3rem);
     }
 
     /* ---- Right card panel — floats over hero image ---- */
