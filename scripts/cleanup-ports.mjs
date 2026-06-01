@@ -5,7 +5,7 @@
  * Cross-platform: Windows, macOS, Linux.
  *
  * Responsibilities:
- *   1. Kill zombie processes holding dev ports (3000, 5173).
+ *   1. Kill zombie processes holding dev ports (3000, 5173, 8080).
  *   2. Validate Vite dependency cache integrity against pnpm-lock.yaml hash.
  *      If the lockfile changed since the last run, the cache is wiped so Vite
  *      re-optimises dependencies cleanly — preventing the blank-screen / 504 bug.
@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
 const ROOT       = resolve(__dirname, '..');          // scripts/ → project root
 
-const PORTS      = [3000, 5173];
+const PORTS      = [3000, 5173, 8080];
 const LOCKFILE   = join(ROOT, 'pnpm-lock.yaml');
 const VITE_CACHE = join(ROOT, 'node_modules', '.vite');
 const HASH_STORE = join(ROOT, 'node_modules', '.vite-lockfile-hash');

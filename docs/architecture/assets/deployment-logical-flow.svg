@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="980" viewBox="0 0 1200 980">
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#214780"/>
+</marker>
+</defs>
+<rect width="100%" height="100%" fill="white"/>
+<text x="600.0" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">Despliegue logico</text>
+<rect x="350" y="105" width="500" height="82" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="139.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Build SPA</text>
+<text x="600.0" y="169.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Genera assets estaticos</text>
+<line x1="600" y1="187" x2="600" y2="223" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="350" y="223" width="500" height="82" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="257.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Imagen aplicacion</text>
+<text x="600.0" y="287.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Empaqueta SPA + BFF</text>
+<line x1="600" y1="305" x2="600" y2="341" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="350" y="341" width="500" height="82" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
+<text x="600.0" y="375.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Cloud Run</text>
+<text x="600.0" y="405.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Ejecuta el servicio</text>
+<line x1="600" y1="423" x2="600" y2="459" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="350" y="459" width="500" height="82" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="493.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Assets + /config.js</text>
+<text x="600.0" y="523.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Entregan UI y configuracion</text>
+<line x1="600" y1="541" x2="600" y2="577" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="350" y="577" width="500" height="82" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
+<text x="600.0" y="611.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Navegador usuario</text>
+<text x="600.0" y="641.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Carga la aplicacion</text>
+<line x1="600" y1="659" x2="600" y2="695" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="350" y="695" width="500" height="82" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="729.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">APIs BFF</text>
+<text x="600.0" y="759.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Registro ETB seguro</text>
+<line x1="600" y1="777" x2="600" y2="813" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="350" y="813" width="500" height="82" rx="16" fill="#f8fbff" stroke="#214780" stroke-width="3"/>
+<text x="600.0" y="847.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">MuleSoft / Identity Platform</text>
+<text x="600.0" y="877.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Servicios externos server-side</text>
+</svg>

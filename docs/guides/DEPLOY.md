@@ -165,12 +165,12 @@ MULESOFT_BASE_URL_MS2
 MULESOFT_BASE_URL_MS3
 MULESOFT_CLIENT_ID
 MULESOFT_CLIENT_SECRET
-MULESOFT_OAUTH_CLIENT_ID
-MULESOFT_OAUTH_CLIENT_SECRET
 MULESOFT_OAUTH_ACCOUNT_ID
 ```
 
-Nota QA: si MuleSoft define `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` como campos vacios en el body del token service, mantener el secreto/variable con valor vacio. El BFF respeta esos vacios explicitos y solo usa fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` cuando la variable OAuth no existe.
+Nota QA: el token service actual exige `client_id` y `client_secret` en el body, pero con valor vacio. Configurar `MULESOFT_OAUTH_CLIENT_ID` y `MULESOFT_OAUTH_CLIENT_SECRET` como variables literales vacias en Cloud Run; no montarlas desde secretos con valores no vacios. El BFF respeta esos vacios explicitos y solo usa fallback a `MULESOFT_CLIENT_ID` / `MULESOFT_CLIENT_SECRET` cuando la variable OAuth no existe.
+
+Si MuleSoft confirma que un ambiente exige un header `Authorization` adicional para pedir el token, crear el secreto `MULESOFT_OAUTH_AUTHORIZATION_BEARER` y montarlo en una revision separada. No incluirlo en el despliegue base si el secreto no existe.
 
 Endpoints QA esperados:
 
@@ -189,8 +189,9 @@ gcloud run services update "${SERVICE_NAME}" \
   --region="${REGION}" \
   --project="${PROJECT_ID}" \
   --service-account="${SERVICE_ACCOUNT}" \
-  --update-env-vars='APP_ENV=qa,APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false' \
-  --update-secrets='MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_CLIENT_ID=MULESOFT_OAUTH_CLIENT_ID:latest,MULESOFT_OAUTH_CLIENT_SECRET=MULESOFT_OAUTH_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest'
+  --remove-secrets='MULESOFT_OAUTH_CLIENT_ID,MULESOFT_OAUTH_CLIENT_SECRET,MULESOFT_OAUTH_AUTHORIZATION_BEARER' \
+  --update-env-vars='APP_ENV=qa,APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false,MULESOFT_OAUTH_CLIENT_ID=,MULESOFT_OAUTH_CLIENT_SECRET=' \
+  --update-secrets='MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest'
 ```
 
 Validar que el servicio no este usando simulacion:
@@ -237,6 +238,54 @@ gcloud run deploy mock-client \
 ```
 
 Luego agregar la URL del mock a `VITE_ALLOWED_ORIGINS` solo en QA/dev. La forma canonica de editar esa variable esta en [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#62-editar-por-consola).
+
+## Preview aislado para login OTP
+
+Cuando se necesite probar el login `Codigo OTP` sin afectar el servicio publicado `idp-service`, usar servicios separados:
+
+| Servicio | Uso |
+| --- | --- |
+| `idp-service-otp-preview` | IdP preview con SPA+BFF, MuleSoft real y Firebase/Auth real. |
+| `mock-client-otp-preview` | Cliente OIDC de prueba que apunta al IdP preview. |
+
+El script automatizado vigente es:
+
+```bash
+node scripts/deploy-isolated-cloudrun.mjs
+```
+
+Comportamiento esperado:
+
+- Construye y despliega una imagen para `idp-service-otp-preview`.
+- Construye y despliega `mock-client-otp-preview` con `Dockerfile.mock`.
+- Configura el mock para redirigir al IdP preview.
+- Configura `VITE_ALLOWED_ORIGINS` y `CORS_ALLOWED_ORIGINS` del IdP preview para aceptar el mock preview y el propio origen del IdP.
+- No modifica el servicio `idp-service` ni su trafico.
+
+Validaciones obligatorias despues de desplegar:
+
+```bash
+curl -fsS https://idp-service-otp-preview-2tczqvffra-ue.a.run.app/api/health
+PUBLIC_BASE_URL=https://idp-service-otp-preview-2tczqvffra-ue.a.run.app pnpm run verify:public-config
+PUBLIC_BASE_URL=https://mock-client-otp-preview-2tczqvffra-ue.a.run.app pnpm run verify:public-config
+```
+
+Configuracion GCP adicional del preview:
+
+- Agregar dominios preview en Identity Platform `authorizedDomains`.
+- Agregar dominios preview en HTTP referrers de la API key web de Firebase, incluyendo variante exacta y `/*`.
+- Agregar dominios preview en la web key de reCAPTCHA.
+- Confirmar que `idp-service-sa` puede emitir custom tokens; si aparece `iam.serviceAccounts.signBlob denied`, ver [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#5-iam-para-la-service-account-de-cloud-run).
+- Si MuleSoft QA requiere `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` vacios, configurar esas variables como valor literal vacio en el preview en lugar de montar secretos con valores no esperados por el token service.
+
+Prueba funcional de cierre:
+
+1. Abrir `mock-client-otp-preview`.
+2. Iniciar OIDC hacia `idp-service-otp-preview`.
+3. En la pestaña `Codigo OTP`, solicitar codigo para un correo ETB habilitado.
+4. Ingresar el OTP mas reciente del correo.
+5. Confirmar retorno al mock con `id_token`.
+6. Revisar logs de `idp-service-otp-preview` y confirmar `mulesoft.ms2.response`, `mulesoft.ms3.response` y `login.otp.success`.
 
 ## Rollback
 

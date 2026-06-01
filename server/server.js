@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import crypto from 'crypto';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import admin from 'firebase-admin';
@@ -131,6 +132,33 @@ function getBooleanEnv(name, fallback = false) {
     return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+const PUBLIC_APP_CONFIG_FORBIDDEN_PATTERNS = [
+    /MULESOFT/i,
+    /CLIENT_SECRET/i,
+    /OAUTH_CLIENT_SECRET/i,
+    /RECAPTCHA_API_KEY/i,
+    /GOOGLE_APPLICATION_CREDENTIALS/i,
+    /FIREBASE_CONFIG/i,
+    /FIREBASE_SERVICE_ACCOUNT/i,
+    /PRIVATE_KEY/i,
+    /SERVICE_ACCOUNT/i,
+    /PASSWORD/i,
+    /ACCESS_TOKEN/i,
+    /REFRESH_TOKEN/i,
+    /BEARER/i,
+];
+
+function assertPublicAppConfigSafe(appConfig) {
+    const serializedConfig = JSON.stringify(appConfig);
+    const leakedPatterns = PUBLIC_APP_CONFIG_FORBIDDEN_PATTERNS
+        .filter(pattern => pattern.test(serializedConfig))
+        .map(pattern => pattern.source);
+
+    if (leakedPatterns.length > 0) {
+        throw new Error(`Public APP_CONFIG contains forbidden private fields: ${leakedPatterns.join(', ')}`);
+    }
+}
+
 const configuredCorsOrigins = parseOriginList(process.env.CORS_ALLOWED_ORIGINS || process.env.VITE_ALLOWED_ORIGINS || '');
 
 // Enable CORS. Production must be explicit; local simulation remains permissive.
@@ -160,22 +188,87 @@ const OTP_LOCK_MS = Number(process.env.OTP_LOCK_MS || 2 * 60 * 60 * 1000);
 const LOOKUP_RATE_LIMIT_MAX = Number(process.env.LOOKUP_RATE_LIMIT_MAX || 10);
 const OTP_SEND_RATE_LIMIT_MAX = Number(process.env.OTP_SEND_RATE_LIMIT_MAX || 5);
 const OTP_VALIDATE_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_RATE_LIMIT_MAX || 15);
+const OTP_VALIDATE_SESSION_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_SESSION_RATE_LIMIT_MAX || 5);
+const RECAPTCHA_MIN_SCORE = Number(process.env.RECAPTCHA_MIN_SCORE || 0.5);
 const ID_QUERY_MAX_PER_HOUR = Number(process.env.ID_QUERY_MAX_PER_HOUR || 5);
 const otpLockStore = new Map();
+const OTP_LOCK_STORE_FILE = getTrimmedEnv('OTP_LOCK_STORE_FILE') || path.join(__dirname, '..', 'tmp', 'otp-locks.json');
 const MULESOFT_APP_ID = 'IDP-MiETB';
+const MULESOFT_SERVICE_NAMES = {
+    ms1: 'Consulta de cliente y correo registrado',
+    ms2: 'Envio de codigo OTP por correo',
+    ms3: 'Validacion de codigo OTP',
+    ms4: 'Registro de identidad digital ETB'
+};
+
+function getOtpLockStoreKey(rawKey) {
+    if (!rawKey) return '';
+    const value = String(rawKey);
+    if (value.startsWith('OTP_LOCK:')) return value;
+    return `OTP_LOCK:${hashSecret(value)}`;
+}
+
+function persistOtpLocks() {
+    if (!OTP_LOCK_STORE_FILE || OTP_LOCK_STORE_FILE === 'off') return;
+    try {
+        const now = Date.now();
+        const locks = [];
+        for (const [key, lock] of otpLockStore.entries()) {
+            if (lock && Number(lock.lockedUntil) > now) {
+                locks.push({ key, lockedUntil: Number(lock.lockedUntil) });
+            }
+        }
+        fs.mkdirSync(path.dirname(OTP_LOCK_STORE_FILE), { recursive: true });
+        fs.writeFileSync(OTP_LOCK_STORE_FILE, JSON.stringify({ version: 1, locks }, null, 2), { mode: 0o600 });
+    } catch (err) {
+        console.warn('Could not persist OTP lock store:', err.message);
+    }
+}
+
+function loadPersistedOtpLocks() {
+    if (!OTP_LOCK_STORE_FILE || OTP_LOCK_STORE_FILE === 'off' || !fs.existsSync(OTP_LOCK_STORE_FILE)) return;
+    try {
+        const parsed = JSON.parse(fs.readFileSync(OTP_LOCK_STORE_FILE, 'utf8'));
+        const locks = Array.isArray(parsed?.locks) ? parsed.locks : [];
+        const now = Date.now();
+        for (const lock of locks) {
+            const key = typeof lock?.key === 'string' ? lock.key : '';
+            const lockedUntil = Number(lock?.lockedUntil || 0);
+            if (key.startsWith('OTP_LOCK:') && lockedUntil > now) {
+                otpLockStore.set(key, { lockedUntil });
+            }
+        }
+    } catch (err) {
+        console.warn('Could not load OTP lock store:', err.message);
+    }
+}
+
+function setOtpLock(rawKey, lockedUntil) {
+    const key = getOtpLockStoreKey(rawKey);
+    if (!key) return;
+    otpLockStore.set(key, { lockedUntil });
+}
+
+loadPersistedOtpLocks();
 
 // Periodic Session Cleanup to avoid memory leaks
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [sid, session] of sessionStore.entries()) {
         if (now > session.expiresAt || now - session.createdAt > SESSION_TTL_MS) {
             sessionStore.delete(sid);
         }
     }
+    let changedLocks = false;
     for (const [key, lock] of otpLockStore.entries()) {
-        if (now > lock.lockedUntil) otpLockStore.delete(key);
+        if (now > lock.lockedUntil) {
+            otpLockStore.delete(key);
+            changedLocks = true;
+        }
     }
+    if (changedLocks) persistOtpLocks();
 }, 5 * 60 * 1000); // Clean every 5 minutes
+cleanupInterval.unref?.();
 
 // --- Security: Rate Limiters by IP ---
 const lookupLimiter = rateLimit({
@@ -197,6 +290,15 @@ const otpSendLimiter = rateLimit({
 const otpValidateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 mins
     max: OTP_VALIDATE_RATE_LIMIT_MAX,
+    message: { error: 'Límite de intentos de validación excedido. Por favor intenta más tarde.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const otpValidateSessionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 mins
+    max: OTP_VALIDATE_SESSION_RATE_LIMIT_MAX,
+    keyGenerator: (req) => `OTP_VALIDATE_SESSION:${hashSecret(String(req.body?.sessionId || 'missing'))}`,
     message: { error: 'Límite de intentos de validación excedido. Por favor intenta más tarde.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -273,6 +375,14 @@ function getMulesoftHeaders(correlationId, extraHeaders = {}) {
     };
 }
 
+function getBearerAuthHeaderFromEnv(envName) {
+    const token = process.env[envName]?.trim();
+    if (!token) return {};
+    return {
+        Authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}`
+    };
+}
+
 function getMulesoftLogUrl(url) {
     try {
         const parsed = new URL(url);
@@ -283,9 +393,17 @@ function getMulesoftLogUrl(url) {
 }
 
 function logMulesoftEvent(event, details = {}, level = 'log') {
+    const serviceKey = event.match(/^mulesoft\.(ms\d)\./)?.[1];
+    const serviceDetails = serviceKey
+        ? {
+            serviceCode: serviceKey.toUpperCase(),
+            serviceName: MULESOFT_SERVICE_NAMES[serviceKey]
+        }
+        : {};
     const payload = {
         event,
         app: MULESOFT_APP_ID,
+        ...serviceDetails,
         ...details
     };
     console[level](JSON.stringify(payload));
@@ -337,13 +455,25 @@ function maskIdentityKey(identityKey) {
 }
 
 function isOtpLocked(identityKey) {
-    const lock = otpLockStore.get(identityKey);
+    const lockKey = getOtpLockStoreKey(identityKey);
+    const lock = otpLockStore.get(lockKey);
     if (!lock) return false;
     if (Date.now() > lock.lockedUntil) {
-        otpLockStore.delete(identityKey);
+        otpLockStore.delete(lockKey);
+        persistOtpLocks();
         return false;
     }
     return true;
+}
+
+function isSessionOtpLocked(session) {
+    if (!session) return false;
+    if (session.status === 'BLOCKED') return true;
+    if (session.identityKey && isOtpLocked(session.identityKey)) return true;
+    if (session.intent === 'login' && session.emailHash && isOtpLocked(getLoginEmailLockKeyFromHash(session.emailHash))) {
+        return true;
+    }
+    return false;
 }
 
 function getOtpLockMessage() {
@@ -355,6 +485,11 @@ function isValidRegisteredEmail(email) {
     const value = email.trim();
     if (value.length < 6 || value.length > 254 || /\s/.test(value)) return false;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function getLoginEmailLockKeyFromHash(emailHash) {
+    if (!emailHash) return '';
+    return `EMAIL_LOGIN:${emailHash}`;
 }
 
 function getMulesoftOtpValidationPath(baseUrl) {
@@ -392,9 +527,15 @@ function registerOtpFailure(session) {
         const lockedUntil = Date.now() + OTP_LOCK_MS;
         session.status = 'BLOCKED';
         session.lockedUntil = lockedUntil;
-        if (session.identityKey) {
-            otpLockStore.set(session.identityKey, { lockedUntil });
+        const lockKeys = new Set();
+        if (session.identityKey) lockKeys.add(session.identityKey);
+        if (session.intent === 'login' && session.emailHash) {
+            lockKeys.add(getLoginEmailLockKeyFromHash(session.emailHash));
         }
+        for (const lockKey of lockKeys) {
+            setOtpLock(lockKey, lockedUntil);
+        }
+        persistOtpLocks();
         return { blocked: true };
     }
 
@@ -464,7 +605,8 @@ async function getMuleSoftBearerToken(correlationId) {
         const headers = getMulesoftHeaders(correlationId || createCorrelationId(), {
             'Content-Type': 'application/json',
             'client_id': clientId,
-            'client_secret': clientSecret
+            'client_secret': clientSecret,
+            ...getBearerAuthHeaderFromEnv('MULESOFT_OAUTH_AUTHORIZATION_BEARER')
         });
 
         const response = await fetch(tokenUrl, {
@@ -542,10 +684,21 @@ async function verifyRecaptcha(token, action) {
     }
 }
 
+async function verifyRecaptchaOrReject(res, token, action) {
+    const captchaRes = await verifyRecaptcha(token, action);
+    if (!captchaRes.success || (captchaRes.score && captchaRes.score < RECAPTCHA_MIN_SCORE)) {
+        res.status(403).json({ error: 'Verificación de seguridad fallida.' });
+        return false;
+    }
+    return true;
+}
+
 // --- Config Injection Endpoint ---
 // Serve window.APP_CONFIG inside public / Cloud Run container
 app.get('/config.js', (req, res) => {
     res.type('application/javascript');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     const mode = getTrimmedEnv('APP_MODE') || 'IDP';
     
     const firebaseConfig = {
@@ -560,14 +713,92 @@ app.get('/config.js', (req, res) => {
         MODE: mode,
         IDP_URL: canonicalIdpOrigin,
         canonicalIdpOrigin,
+        CLIENT_ID: getTrimmedEnv('OIDC_CLIENT_ID', 'CLIENT_ID'),
+        REDIRECT_URI: getTrimmedEnv('OIDC_REDIRECT_URI', 'REDIRECT_URI'),
+        RESPONSE_TYPE: getTrimmedEnv('OIDC_RESPONSE_TYPE', 'RESPONSE_TYPE'),
+        SCOPE: getTrimmedEnv('OIDC_SCOPE', 'SCOPE'),
         allowedOrigins,
         firebase: firebaseConfig,
         recaptchaSiteKey: getTrimmedEnv('VITE_RECAPTCHA_SITE_KEY', 'RECAPTCHA_SITE_KEY'),
-        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT')
+        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT'),
+        emailLinkPrimaryTabRedirect: getBooleanEnv('EMAIL_LINK_PRIMARY_TAB_REDIRECT', false)
     };
+
+    try {
+        assertPublicAppConfigSafe(appConfig);
+    } catch (error) {
+        console.error('Unsafe public APP_CONFIG blocked:', error.message);
+        res.status(500).send('window.APP_CONFIG = {};');
+        return;
+    }
 
     res.send(`window.APP_CONFIG = ${JSON.stringify(appConfig)};`);
 });
+
+// --- Shared: send OTP via MuleSoft MS-2 (EMAIL channel) ---
+// Used by both the registration flow (/api/customer/otp/send) and the
+// email-OTP login flow (/api/customer/otp/start-login). The session must
+// already carry the resolved customer document (docNumber) and realEmail.
+async function sendOtpViaMs2(session) {
+    const mUrl = process.env.MULESOFT_BASE_URL_MS2 || process.env.MULESOFT_BASE_URL_MS3;
+    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const correlationId = getSessionCorrelationId(session);
+    const chosenChannel = 'EMAIL';
+    const channelValue = session.realEmail;
+
+    let transactionId = 'SIM_TX_' + crypto.randomBytes(4).toString('hex');
+
+    if (isMockMode) {
+        console.log(`[MOCK MS-2] OTP sent via ${chosenChannel} to ${maskEmail(channelValue)}. TxId: ${transactionId}`);
+        await new Promise(r => setTimeout(r, 500));
+    } else {
+        const bearerToken = await getMuleSoftBearerToken(correlationId);
+        const url = `${mUrl}/operations/v1/customer/otp`;
+        const ms2Start = Date.now();
+        logMulesoftEvent('mulesoft.ms2.request', {
+            correlationId,
+            method: 'POST',
+            url: getMulesoftLogUrl(url),
+            channel: chosenChannel,
+            identity: maskIdentityKey(session.identityKey)
+        });
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: getMulesoftHeaders(correlationId, {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${bearerToken}`
+            }),
+            body: JSON.stringify({
+                aplicacion: MULESOFT_APP_ID,
+                id_almacenamiento: "",
+                nombre_cliente: session.docNumber,
+                identificacion_cliente: session.docNumber,
+                tipo_canal: chosenChannel,
+                valor_canal: channelValue
+            })
+        });
+        const durationMs = Date.now() - ms2Start;
+
+        logMulesoftEvent(response.ok ? 'mulesoft.ms2.response' : 'mulesoft.ms2.error', {
+            correlationId,
+            status: response.status,
+            durationMs,
+            url: getMulesoftLogUrl(url)
+        }, response.ok ? 'log' : 'error');
+
+        if (!response.ok) {
+            throw new Error(`MuleSoft MS-2 Send OTP returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        transactionId = data.id_transaccion || data.transactionId;
+    }
+
+    session.otpTransactionId = transactionId;
+    session.status = 'OTP_SENT';
+    return transactionId;
+}
 
 // --- API Endpoints ---
 
@@ -616,10 +847,7 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
     trackIdQuery(identityKey);
 
     // Verify reCAPTCHA
-    const captchaRes = await verifyRecaptcha(recaptchaToken, 'lookup');
-    if (!captchaRes.success || (captchaRes.score && captchaRes.score < 0.5)) {
-        return res.status(403).json({ error: 'Verificación de seguridad fallida. Petición rechazada.' });
-    }
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'lookup'))) return;
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS1;
     const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
@@ -739,6 +967,123 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
     }
 });
 
+// 1b. Start email-OTP LOGIN (resolve existing user by email, then MS-2)
+// Only existing Identity Platform users that carry the documentType/documentNumber
+// custom claims (i.e. registered through the ETB/MuleSoft flow) are eligible.
+// Responds generically for any well-formed email to prevent account enumeration.
+app.post('/api/customer/otp/start-login', requireAllowedBrowserOrigin, otpSendLimiter, async (req, res) => {
+    const { email, recaptchaToken } = req.body;
+
+    if (!isValidRegisteredEmail(email)) {
+        return res.status(400).json({ error: 'Ingresa un correo electrónico válido.' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const emailHash = hashSecret(normalizedEmail);
+    const emailRateKey = getLoginEmailLockKeyFromHash(emailHash);
+
+    if (isOtpLocked(emailRateKey)) {
+        return res.status(423).json({ error: getOtpLockMessage() });
+    }
+
+    if (isIdBlocked(emailRateKey)) {
+        return res.status(429).json({ error: 'Se ha detectado actividad sospechosa con este correo. Intenta nuevamente más tarde.' });
+    }
+    trackIdQuery(emailRateKey);
+
+    // Verify reCAPTCHA (reuse the otp_send action assessment)
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'otp_send'))) return;
+
+    const sessionId = crypto.randomUUID();
+    const now = Date.now();
+    const correlationId = createCorrelationId();
+    const genericResponse = { success: true, sessionId, maskedEmail: maskEmail(normalizedEmail) };
+
+    // Resolve an eligible user via Admin SDK custom claims.
+    let eligibleUser = null;
+    if (isFirebaseAdminInitialized) {
+        try {
+            const userRecord = await admin.auth().getUserByEmail(normalizedEmail);
+            const claims = userRecord.customClaims || {};
+            if (!userRecord.disabled && claims.documentType && claims.documentNumber) {
+                eligibleUser = {
+                    uid: userRecord.uid,
+                    docType: normalizeDocType(claims.documentType),
+                    docNumber: normalizeDocNumber(claims.documentNumber)
+                };
+            }
+        } catch (err) {
+            // auth/user-not-found and any lookup error => ineligible (shadow session)
+            if (err.code && err.code !== 'auth/user-not-found') {
+                console.warn('start-login getUserByEmail error:', err.code);
+            }
+        }
+    }
+
+    if (!eligibleUser) {
+        // Shadow session: never calls MuleSoft, but keeps the flow indistinguishable.
+        sessionStore.set(sessionId, {
+            intent: 'login',
+            isShadow: true,
+            emailHash,
+            maskedEmail: maskEmail(normalizedEmail),
+            identityKey: emailRateKey,
+            isVerified: false,
+            otpTransactionId: null,
+            attempts: 0,
+            status: 'INITIATED',
+            correlationId,
+            createdAt: now,
+            expiresAt: now + SESSION_TTL_MS
+        });
+        logMulesoftEvent('login.otp.start', { correlationId, eligible: false });
+        return res.json(genericResponse);
+    }
+
+    const identityKey = getIdentityKey(eligibleUser.docType, eligibleUser.docNumber);
+    if (isOtpLocked(identityKey) || isOtpLocked(emailRateKey)) {
+        return res.status(423).json({ error: getOtpLockMessage() });
+    }
+
+    const session = {
+        intent: 'login',
+        isShadow: false,
+        uid: eligibleUser.uid,
+        realEmail: normalizedEmail,
+        maskedEmail: maskEmail(normalizedEmail),
+        emailHash,
+        docType: eligibleUser.docType,
+        docNumber: eligibleUser.docNumber,
+        identityKey,
+        eligibleForLogin: true,
+        isVerified: false,
+        otpTransactionId: null,
+        attempts: 0,
+        status: 'INITIATED',
+        verificationTokenHash: null,
+        verificationTokenUsed: false,
+        verificationTokenExpiresAt: 0,
+        correlationId,
+        createdAt: now,
+        expiresAt: now + SESSION_TTL_MS
+    };
+    sessionStore.set(sessionId, session);
+
+    try {
+        await sendOtpViaMs2(session);
+        logMulesoftEvent('login.otp.start', {
+            correlationId,
+            eligible: true,
+            identity: maskIdentityKey(identityKey)
+        });
+    } catch (err) {
+        // Do not leak the failure to the caller (anti-enumeration); the user can resend.
+        console.error('start-login MS-2 send failed:', err.message);
+    }
+
+    return res.json(genericResponse);
+});
+
 // 2. Generate and Send OTP (MS-2)
 app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, async (req, res) => {
     const { sessionId, recaptchaToken } = req.body;
@@ -757,78 +1102,22 @@ app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, 
         return res.status(404).json({ error: 'La sesión ha expirado. Por favor, inicia nuevamente el registro.' });
     }
 
-    if (session.status === 'BLOCKED' || isOtpLocked(session.identityKey)) {
+    if (isSessionOtpLocked(session)) {
         return res.status(423).json({ error: getOtpLockMessage() });
     }
 
     // Verify reCAPTCHA
-    const captchaRes = await verifyRecaptcha(recaptchaToken, 'otp_send');
-    if (!captchaRes.success || (captchaRes.score && captchaRes.score < 0.5)) {
-        return res.status(403).json({ error: 'Verificación de seguridad fallida.' });
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'otp_send'))) return;
+
+    // Shadow login sessions (non-eligible email) never reach MuleSoft, but they
+    // must respond identically to avoid account enumeration.
+    if (session.isShadow) {
+        return res.json({ success: true, message: 'OTP enviado correctamente.' });
     }
 
-    const mUrl = process.env.MULESOFT_BASE_URL_MS2 || process.env.MULESOFT_BASE_URL_MS3;
-    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
-    const correlationId = getSessionCorrelationId(session);
-
-    const chosenChannel = 'EMAIL';
-    const channelValue = session.realEmail;
-
     try {
-        let transactionId = 'SIM_TX_' + crypto.randomBytes(4).toString('hex');
-
-        if (isMockMode) {
-            console.log(`[MOCK MS-2] OTP sent via ${chosenChannel} to ${maskEmail(channelValue)}. TxId: ${transactionId}`);
-            await new Promise(r => setTimeout(r, 500));
-        } else {
-            const bearerToken = await getMuleSoftBearerToken(correlationId);
-            const url = `${mUrl}/operations/v1/customer/otp`;
-            const ms2Start = Date.now();
-            logMulesoftEvent('mulesoft.ms2.request', {
-                correlationId,
-                method: 'POST',
-                url: getMulesoftLogUrl(url),
-                channel: chosenChannel,
-                identity: maskIdentityKey(session.identityKey)
-            });
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: getMulesoftHeaders(correlationId, {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${bearerToken}`
-                }),
-                body: JSON.stringify({
-                    aplicacion: MULESOFT_APP_ID,
-                    id_almacenamiento: "",
-                    nombre_cliente: session.docNumber,
-                    identificacion_cliente: session.docNumber,
-                    tipo_canal: chosenChannel,
-                    valor_canal: channelValue
-                })
-            });
-            const durationMs = Date.now() - ms2Start;
-
-            logMulesoftEvent(response.ok ? 'mulesoft.ms2.response' : 'mulesoft.ms2.error', {
-                correlationId,
-                status: response.status,
-                durationMs,
-                url: getMulesoftLogUrl(url)
-            }, response.ok ? 'log' : 'error');
-
-            if (!response.ok) {
-                throw new Error(`MuleSoft MS-2 Send OTP returned status ${response.status}`);
-            }
-
-            const data = await response.json();
-            transactionId = data.id_transaccion || data.transactionId;
-        }
-
-        // Save transactionId in blind session
-        session.otpTransactionId = transactionId;
-        session.status = 'OTP_SENT';
+        await sendOtpViaMs2(session);
         return res.json({ success: true, message: 'OTP enviado correctamente.' });
-
     } catch (err) {
         console.error('Error during send OTP proxy:', err.message);
         return res.status(500).json({ error: 'No fue posible enviar el código OTP de seguridad.' });
@@ -836,8 +1125,8 @@ app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, 
 });
 
 // 3. Validate OTP (MS-3)
-app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateLimiter, async (req, res) => {
-    const { sessionId, code } = req.body;
+app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateLimiter, otpValidateSessionLimiter, async (req, res) => {
+    const { sessionId, code, recaptchaToken } = req.body;
 
     if (!sessionId || !/^\d{6}$/.test(String(code || ''))) {
         return res.status(400).json({ error: 'Faltan campos requeridos para la validación.' });
@@ -853,8 +1142,21 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
         return res.status(404).json({ error: 'La sesión ha expirado. Por favor, inicia nuevamente el registro.' });
     }
 
-    if (session.status === 'BLOCKED' || isOtpLocked(session.identityKey)) {
+    if (isSessionOtpLocked(session)) {
         return res.status(423).json({ error: getOtpLockMessage() });
+    }
+
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'otp_validate'))) return;
+
+    // Shadow login sessions have no real OTP transaction; treat every code as
+    // invalid (and count attempts) so they are indistinguishable from a wrong code.
+    if (session.isShadow) {
+        const failure = registerOtpFailure(session);
+        return res.status(failure.blocked ? 423 : 400).json({
+            error: failure.blocked
+                ? getOtpLockMessage()
+                : `Código OTP incorrecto. Te quedan ${failure.remainingAttempts} intento(s).`
+        });
     }
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS3;
@@ -1090,6 +1392,69 @@ app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res
     }
 });
 
+// 5. Complete email-OTP LOGIN: mint a custom token for the resolved user.
+// signInWithCustomToken on the client establishes a real Identity Platform
+// session and updates the user's lastSignInTime (Custom Auth login).
+app.post('/api/auth/login/complete', requireAllowedBrowserOrigin, otpValidateLimiter, async (req, res) => {
+    const { sessionId, verificationToken } = req.body;
+
+    if (!sessionId || !verificationToken) {
+        return res.status(400).json({ error: 'Faltan datos para completar el inicio de sesión.' });
+    }
+
+    const session = sessionStore.get(sessionId);
+    if (!session || Date.now() > session.expiresAt) {
+        if (session) sessionStore.delete(sessionId);
+        return res.status(404).json({ error: 'La sesión ha expirado. Vuelve a solicitar un código de acceso.' });
+    }
+
+    if (
+        session.intent !== 'login' ||
+        session.isShadow ||
+        !session.eligibleForLogin ||
+        !session.uid ||
+        session.status !== 'OTP_VERIFIED' ||
+        !session.isVerified ||
+        session.verificationTokenUsed ||
+        !session.verificationTokenHash ||
+        Date.now() > session.verificationTokenExpiresAt ||
+        hashSecret(verificationToken) !== session.verificationTokenHash
+    ) {
+        return res.status(403).json({ error: 'La validación de seguridad no está vigente. Solicita un nuevo código de acceso.' });
+    }
+
+    if (!isFirebaseAdminInitialized) {
+        return res.status(503).json({ error: 'El servicio de inicio de sesión no está disponible. Intenta más tarde.' });
+    }
+
+    try {
+        const customToken = await admin.auth().createCustomToken(session.uid, {
+            auth_level: 'otp_email_verified',
+            login_method: 'miuso_email_otp'
+        });
+
+        session.verificationTokenUsed = true;
+        session.status = 'LOGGED_IN';
+
+        // Functional login audit (no PII, no OTP, no token persisted).
+        logMulesoftEvent('login.otp.success', {
+            correlationId: getSessionCorrelationId(session),
+            uid: session.uid,
+            emailHash: session.emailHash,
+            identity: maskIdentityKey(session.identityKey),
+            ipHash: hashSecret(String(req.ip || '')).slice(0, 16),
+            userAgentHash: hashSecret(String(req.get('user-agent') || '')).slice(0, 16),
+            method: 'miuso_email_otp'
+        });
+
+        sessionStore.delete(sessionId);
+        return res.json({ success: true, customToken });
+    } catch (err) {
+        console.error('Error issuing login custom token:', err.message);
+        return res.status(500).json({ error: 'No fue posible completar el inicio de sesión.' });
+    }
+});
+
 // --- Serve Static Frontend (Vite Build) ---
 const DIST_PATH = path.join(__dirname, 'dist');
 app.use(express.static(DIST_PATH));
@@ -1104,6 +1469,18 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(DIST_PATH, 'index.html'));
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+function __resetForTests() {
+    sessionStore.clear();
+    otpLockStore.clear();
+    idQueryTracker.clear();
+}
+
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isMainModule) {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
+
+export { app, __resetForTests };

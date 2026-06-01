@@ -4,6 +4,7 @@ import {
   claimEmailLinkOidcRedirect,
   clearEmailLinkTabCoordination,
   getActiveEmailLinkIntentId,
+  isEmailLinkTabCoordinationEnabled,
   isPrimaryEmailLinkTabAlive,
   startPrimaryEmailLinkTab,
   stopPrimaryEmailLinkTab,
@@ -65,5 +66,10 @@ describe('emailLinkTabCoordination', () => {
     };
     startPrimaryEmailLinkTab();
     expect(isPrimaryEmailLinkTabAlive('intent-1')).toBe(false);
+  });
+
+  it('coordination is disabled by default when config is absent', () => {
+    window.APP_CONFIG = { MODE: 'IDP' };
+    expect(isEmailLinkTabCoordinationEnabled()).toBe(false);
   });
 });

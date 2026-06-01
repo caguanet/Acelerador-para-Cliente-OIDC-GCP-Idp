@@ -1,12 +1,12 @@
 # Checklist de auditoría: callback OIDC del partner (launcher)
 
 Usar esta lista al revisar integraciones como `callback.php` o páginas que reciben
-`redirect_uri#id_token=...&state=...` tras el IdP ETB.
+`redirect_uri#id_token=...&state=...&nonce=...` tras el IdP ETB.
 
 ## Al recibir el retorno
 
 - [ ] Leer **solo** `window.location.hash` (no query string).
-- [ ] Extraer `id_token` y `state` con `URLSearchParams` sobre el fragmento.
+- [ ] Extraer `id_token`, `state` y `nonce` con `URLSearchParams` sobre el fragmento.
 - [ ] **No** registrar en logs la URL completa, el hash ni el JWT.
 - [ ] Limpiar el fragmento de inmediato: `history.replaceState(null, '', pathname)`.
 
@@ -16,6 +16,13 @@ Usar esta lista al revisar integraciones como `callback.php` o páginas que reci
 - [ ] Guardarlo en `sessionStorage` (o cookie) antes de redirigir al IdP.
 - [ ] Al volver, comparar `state` del hash con el valor guardado.
 - [ ] Rechazar el token si `state` no coincide.
+
+## Validación de `nonce`
+
+- [ ] Generar `nonce` aleatorio al iniciar login hacia el IdP.
+- [ ] Guardarlo temporalmente antes de redirigir al IdP.
+- [ ] Al volver, comparar `nonce` del hash con el valor guardado.
+- [ ] Rechazar el token si `nonce` no coincide.
 
 ## Validación del JWT (servidor)
 

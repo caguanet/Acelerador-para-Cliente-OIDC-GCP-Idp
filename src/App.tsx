@@ -16,13 +16,32 @@ import {
   resolveAccessGate,
   type AccessGateResult,
 } from './utils/oidcGate';
-import { buildOidcFragment, redirectToOidcPartner } from './utils/oidcRedirect';
+import { buildOidcFragment, redirectToOidcPartner, redirectToOidcPartnerError } from './utils/oidcRedirect';
 
 type AuthView = 'login' | 'register';
+
+function isLikelyEmbeddedMobileWebView() {
+  const ua = window.navigator.userAgent;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+  if (!isMobile) return false;
+
+  const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua);
+  const isIosWebView = /AppleWebKit/i.test(ua) && !/Safari/i.test(ua);
+  const isStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  return isAndroidWebView || isIosWebView || isStandalone;
+}
+
+function shouldShowMobileStoreBadges() {
+  if (typeof window.APP_CONFIG?.showMobileStoreBadges === 'boolean') {
+    return window.APP_CONFIG.showMobileStoreBadges;
+  }
+  return !isLikelyEmbeddedMobileWebView();
+}
 
 function LoginApp({ gate }: { gate: AccessGateResult }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authView, setAuthView] = useState<AuthView>('login');
+  const showMobileStoreBadges = shouldShowMobileStoreBadges();
 
   const [{ oidcParams, oidcError }, setOidc] = useState(() => ({
     oidcParams: gate.oidcParams,
@@ -38,6 +57,8 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
 
     const redirectUri = oidcParams.redirect_uri;
     const state = oidcParams.state || '';
+    const nonce = oidcParams.nonce || '';
+    const passthroughParams = oidcParams.passthroughParams;
 
     const unsub = onAuthStateChanged(auth, async (user) => {
       unsub();
@@ -45,12 +66,14 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
       try {
         if (user) {
           const idToken = await user.getIdToken(true); // force refresh for new expiry
-          targetUrl.hash = buildOidcFragment({ id_token: idToken, state });
+          targetUrl.hash = buildOidcFragment({ id_token: idToken, state, nonce, ...passthroughParams });
         } else {
           targetUrl.hash = buildOidcFragment({
             error: 'login_required',
             error_description: 'Sesión no activa en el IdP',
             state,
+            nonce,
+            ...passthroughParams,
           });
         }
       } catch (err) {
@@ -59,13 +82,15 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
           error: 'server_error',
           error_description: 'No se pudo renovar el token',
           state,
+          nonce,
+          ...passthroughParams,
         });
       }
       window.location.href = targetUrl.toString();
     });
 
     return () => unsub();
-  }, [oidcParams.prompt, oidcParams.redirect_uri, oidcParams.state]);
+  }, [oidcParams.prompt, oidcParams.redirect_uri, oidcParams.state, oidcParams.nonce, oidcParams.passthroughParams]);
 
   const handleLoginSuccess = async (currentUser: User) => {
     try {
@@ -76,7 +101,13 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
           setOidcError(`Error de seguridad: El dominio no está autorizado para recibir credenciales.`);
           return;
         }
-        redirectToOidcPartner(oidcParams.redirect_uri, idToken, oidcParams.state || '');
+        redirectToOidcPartner(
+          oidcParams.redirect_uri,
+          idToken,
+          oidcParams.state || '',
+          oidcParams.passthroughParams,
+          oidcParams.nonce,
+        );
         return;
       }
 
@@ -84,6 +115,16 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
       setLoggedIn(true);
     } catch (err) {
       console.error("Error fetching token", err);
+      if (oidcParams.redirect_uri && isValidOrigin(oidcParams.redirect_uri)) {
+        redirectToOidcPartnerError(
+          oidcParams.redirect_uri,
+          'server_error',
+          'No se pudo emitir el token',
+          oidcParams.state || '',
+          oidcParams.passthroughParams,
+          oidcParams.nonce,
+        );
+      }
     }
   };
 
@@ -95,8 +136,8 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
         <img src={themeConfig.logoUrl} alt={themeConfig.brandName} className="login-mobile-logo" />
       </div>
 
-      {/* Desktop only: Left hero panel — visually hidden spacer, image baked into bg */}
-      <div className="login-hero" aria-hidden="true">
+      {/* Desktop only: left hero panel. Store badges are interactive HTML over the branded image. */}
+      <div className="login-hero">
         <div className="login-hero-inner">
           <h1 className="login-hero-title">Bienvenido<br/>a Mi ETB</h1>
           <p className="login-hero-accent">Autogestiona todos tus productos</p>
@@ -157,10 +198,12 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
       </div>
 
       {/* Móvil / tablet: mismas tiendas que en el hero desktop (paridad con PNG ≥1024px) */}
-      <div className="login-mobile-app-stores">
-        <p className="login-mobile-app-stores__title">Descarga y conoce la app Mi ETB</p>
-        <StoreBadges />
-      </div>
+      {showMobileStoreBadges && (
+        <div className="login-mobile-app-stores">
+          <p className="login-mobile-app-stores__title">Descarga y conoce la app Mi ETB</p>
+          <StoreBadges />
+        </div>
+      )}
 
       {/* Mobile only: brand tagline */}
       <div className="login-tagline">

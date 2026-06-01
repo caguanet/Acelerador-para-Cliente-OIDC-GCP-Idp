@@ -29,7 +29,9 @@ window.APP_CONFIG = {
   // Allowed Redirect Origins (for OIDC safety)
   allowedOrigins: [
     "http://localhost:3000",
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "https://mietb.etb.com",
+    "https://pedrocasas.pau.solutions"
   ],
 
   // Canonical IdP origin. When set, email links and direct visits through
@@ -39,6 +41,10 @@ window.APP_CONFIG = {
   // Set to false in production to hide the test dashboard/landing page
   enableLandingPage: true,
 
+  // Mobile promo visibility. If omitted, the IdP hides store badges only when
+  // it looks embedded inside a mobile app webview.
+  // showMobileStoreBadges: false,
+
   // Set to true in preview/production when the IdP must only be opened by
   // authorized OIDC clients with client_id + redirect_uri.
   requireOidcRedirect: false,
@@ -47,6 +53,6 @@ window.APP_CONFIG = {
   BACKEND_URL: "http://localhost:8080",
 
   // Public reCAPTCHA Enterprise site key for registration/OTP risk checks.
-  // Backend assessments still require RECAPTCHA_PROJECT_ID and RECAPTCHA_API_KEY.
-  recaptchaSiteKey: "6Lfak_0sAAAAAIMausKbKkGMKHe5W_RVxa4h3FGN"
+  // Private assessment credentials must stay only in the BFF runtime.
+  recaptchaSiteKey: ""
 };

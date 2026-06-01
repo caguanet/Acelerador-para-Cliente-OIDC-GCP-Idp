@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import {
     FacebookAuthProvider,
     GoogleAuthProvider,
@@ -14,6 +14,7 @@ import {
     signOut,
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { EmailOtpLoginForm } from './EmailOtpLoginForm';
 import { getFriendlyAuthErrorMessage } from '../utils/authErrors';
 import {
     claimEmailLinkOidcRedirect,
@@ -28,6 +29,7 @@ import { getCanonicalIdpOrigin } from '../utils/oidcGate';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_FOR_SIGN_IN_KEY = 'idp.emailForSignIn';
+const EMAIL_LINK_SEND_LOCK_KEY = 'idp.emailLinkSendLock';
 const PENDING_SOCIAL_PROVIDER_KEY = 'idp.pendingSocialProvider';
 const SAFE_RECOVERY_MESSAGE = 'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.';
 
@@ -57,6 +59,8 @@ const FACEBOOK_ICON = (
 );
 
 type LoginMode = 'SIGN_IN' | 'RECOVERY';
+type AuthTab = 'EMAIL_LINK' | 'OTP_CODE';
+const EMAIL_LINK_SIGN_IN_VISIBLE = false;
 
 interface PasswordlessLoginFormProps {
     onSignInSuccess: (user: User) => void;
@@ -77,6 +81,36 @@ function getActionUrl() {
     return `${canonicalOrigin}${window.location.pathname}${window.location.search}`;
 }
 
+function hasEmailLinkSendLock(actionUrl: string): boolean {
+    try {
+        const raw = window.localStorage.getItem(EMAIL_LINK_SEND_LOCK_KEY);
+        if (!raw) return false;
+        const lock = JSON.parse(raw) as { actionUrl?: string };
+        return lock.actionUrl === actionUrl;
+    } catch {
+        return false;
+    }
+}
+
+function setEmailLinkSendLock(actionUrl: string, email: string) {
+    try {
+        window.localStorage.setItem(
+            EMAIL_LINK_SEND_LOCK_KEY,
+            JSON.stringify({ actionUrl, email, sentAt: Date.now() }),
+        );
+    } catch {
+        /* storage bloqueado */
+    }
+}
+
+function clearEmailLinkSendLock() {
+    try {
+        window.localStorage.removeItem(EMAIL_LINK_SEND_LOCK_KEY);
+    } catch {
+        /* ignore */
+    }
+}
+
 function getPasswordResetContinueUrl() {
     return `${window.location.origin}/`;
 }
@@ -88,6 +122,7 @@ export function PasswordlessLoginForm({
     hasValidOidcContext = true,
 }: PasswordlessLoginFormProps) {
     const [mode, setMode] = useState<LoginMode>('SIGN_IN');
+    const [authTab, setAuthTab] = useState<AuthTab>(EMAIL_LINK_SIGN_IN_VISIBLE ? 'EMAIL_LINK' : 'OTP_CODE');
     const [email, setEmail] = useState('');
     const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -95,12 +130,19 @@ export function PasswordlessLoginForm({
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [waitingForEmailLink, setWaitingForEmailLink] = useState(false);
+    const [emailLinkSent, setEmailLinkSent] = useState(() => hasEmailLinkSendLock(getActionUrl()));
     const waitingForEmailLinkRef = useRef(false);
+    const emailLinkSentRef = useRef(emailLinkSent);
     const completedEmailLinkIntentRef = useRef<string | null>(null);
+    const latestAuthUserRef = useRef<User | null>(null);
 
     useEffect(() => {
         waitingForEmailLinkRef.current = waitingForEmailLink;
     }, [waitingForEmailLink]);
+
+    useEffect(() => {
+        emailLinkSentRef.current = emailLinkSent;
+    }, [emailLinkSent]);
 
     // Pestaña original: cuando el enlace del correo autentica en otra pestaña, redirigir desde aquí al partner.
     useEffect(() => {
@@ -123,10 +165,12 @@ export function PasswordlessLoginForm({
             completedEmailLinkIntentRef.current = null;
             setWaitingForEmailLink(false);
             window.localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY);
+            clearEmailLinkSendLock();
             onSignInSuccess(user);
         };
 
         const unsubAuth = onAuthStateChanged(auth, (user) => {
+            latestAuthUserRef.current = user;
             if (user) completeFromPrimaryTab(user);
         });
 
@@ -134,6 +178,9 @@ export function PasswordlessLoginForm({
             const activeIntentId = getActiveEmailLinkIntentId();
             if (intentId !== activeIntentId) return;
             completedEmailLinkIntentRef.current = intentId;
+            if (latestAuthUserRef.current) {
+                completeFromPrimaryTab(latestAuthUserRef.current);
+            }
         });
 
         return () => {
@@ -176,6 +223,7 @@ export function PasswordlessLoginForm({
                 return;
             }
             window.localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY);
+            clearEmailLinkSendLock();
             onSignInSuccess(credential.user);
         } catch (err: any) {
             setError(getFriendlyAuthErrorMessage(err, 'login'));
@@ -188,6 +236,13 @@ export function PasswordlessLoginForm({
         e.preventDefault();
         setError('');
         setSuccessMsg('');
+        const actionUrl = getActionUrl();
+
+        if (emailLinkSentRef.current || hasEmailLinkSendLock(actionUrl)) {
+            setEmailLinkSent(true);
+            setSuccessMsg('Ya enviamos un enlace seguro. Revisa tu correo para continuar.');
+            return;
+        }
 
         if (oidcContextRequired && !hasValidOidcContext) {
             setError('Acceso restringido: ingresa desde una aplicación autorizada para iniciar sesión.');
@@ -203,10 +258,13 @@ export function PasswordlessLoginForm({
         setIsLoading(true);
         try {
             await sendSignInLinkToEmail(auth, email, {
-                url: getActionUrl(),
+                url: actionUrl,
                 handleCodeInApp: true,
             });
             window.localStorage.setItem(EMAIL_FOR_SIGN_IN_KEY, email);
+            setEmailLinkSendLock(actionUrl, email);
+            emailLinkSentRef.current = true;
+            setEmailLinkSent(true);
 
             if (hasValidOidcContext && isEmailLinkTabCoordinationEnabled()) {
                 startPrimaryEmailLinkTab();
@@ -288,13 +346,16 @@ export function PasswordlessLoginForm({
     };
 
     const switchMode = (nextMode: LoginMode) => {
-        setMode(nextMode);
-        setError('');
-        setSuccessMsg('');
-        setNeedsEmailConfirmation(false);
-        if (waitingForEmailLink) {
-            stopPrimaryEmailLinkTab();
-            clearEmailLinkTabCoordination();
+            setMode(nextMode);
+            setError('');
+            setSuccessMsg('');
+            setNeedsEmailConfirmation(false);
+            if (nextMode === 'SIGN_IN') {
+                setEmailLinkSent(hasEmailLinkSendLock(getActionUrl()));
+            }
+            if (waitingForEmailLink) {
+                stopPrimaryEmailLinkTab();
+                clearEmailLinkTabCoordination();
             completedEmailLinkIntentRef.current = null;
             setWaitingForEmailLink(false);
         }
@@ -307,17 +368,77 @@ export function PasswordlessLoginForm({
             : needsEmailConfirmation
                 ? 'Confirma tu correo'
                 : 'Inicia sesión en tu cuenta';
+    const isEmailLinkSendLocked = mode === 'SIGN_IN' && !needsEmailConfirmation && emailLinkSent;
+    const showSignInOptions = mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink;
+    const showSignInTabs = showSignInOptions && EMAIL_LINK_SIGN_IN_VISIBLE;
+    const showOtpSignIn = showSignInOptions && authTab === 'OTP_CODE';
+    const showEmailLinkForm = mode === 'RECOVERY' || needsEmailConfirmation || waitingForEmailLink || (showSignInTabs && authTab === 'EMAIL_LINK');
+
+    const switchAuthTab = (nextTab: AuthTab) => {
+        setAuthTab(nextTab);
+        setError('');
+        setSuccessMsg('');
+    };
+
+    const handleAuthTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+        const tabOrder: AuthTab[] = ['EMAIL_LINK', 'OTP_CODE'];
+        const currentIndex = tabOrder.indexOf(authTab);
+        let nextIndex = currentIndex;
+
+        if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabOrder.length;
+        if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = tabOrder.length - 1;
+        if (nextIndex === currentIndex) return;
+
+        event.preventDefault();
+        switchAuthTab(tabOrder[nextIndex]);
+        requestAnimationFrame(() => {
+            const nextButtonId = tabOrder[nextIndex] === 'EMAIL_LINK' ? 'auth-tab-email-link' : 'auth-tab-otp-code';
+            document.getElementById(nextButtonId)?.focus();
+        });
+    };
 
     return (
         <div className="login-form">
             <h2 className="login-form-title">{title}</h2>
-            {mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink && (
+            {showSignInOptions && (
                 <p className="login-form-subtitle">
                     ¿No tienes cuenta en Mi ETB?{' '}
                     <button type="button" data-testid="go-register" onClick={onGoToRegister}>
                         Regístrate
                     </button>
                 </p>
+            )}
+            {showSignInTabs && (
+                <div className="auth-tabs" role="tablist" aria-label="Métodos de inicio de sesión">
+                    <button
+                        id="auth-tab-email-link"
+                        type="button"
+                        role="tab"
+                        data-testid="tab-email-link"
+                        aria-selected={authTab === 'EMAIL_LINK'}
+                        aria-controls="auth-panel-email-link"
+                        className={`auth-tab${authTab === 'EMAIL_LINK' ? ' is-active' : ''}`}
+                        onClick={() => switchAuthTab('EMAIL_LINK')}
+                        onKeyDown={handleAuthTabKeyDown}
+                    >
+                        Enlace seguro
+                    </button>
+                    <button
+                        id="auth-tab-otp-code"
+                        type="button"
+                        role="tab"
+                        data-testid="tab-otp-code"
+                        aria-selected={authTab === 'OTP_CODE'}
+                        aria-controls="auth-panel-otp-code"
+                        className={`auth-tab${authTab === 'OTP_CODE' ? ' is-active' : ''}`}
+                        onClick={() => switchAuthTab('OTP_CODE')}
+                        onKeyDown={handleAuthTabKeyDown}
+                    >
+                        Código OTP
+                    </button>
+                </div>
             )}
             {mode === 'RECOVERY' && (
                 <p className="login-form-subtitle">
@@ -334,37 +455,61 @@ export function PasswordlessLoginForm({
                 </div>
             )}
 
-            <form onSubmit={needsEmailConfirmation ? handleConfirmEmailForLink : mode === 'RECOVERY' ? handlePasswordRecovery : handleSendEmailLink} noValidate>
-                <div className="login-field">
-                    <label htmlFor="passwordless-email" className="sr-only">Correo electrónico</label>
-                    <input
-                        id="passwordless-email"
-                        name="email"
-                        type="email"
-                        autoComplete="username"
-                        enterKeyHint="done"
-                        required
-                        value={email}
-                        onChange={(e) => {
-                            setEmail(e.target.value);
-                            setError('');
-                        }}
-                        placeholder="Correo electrónico"
+            {showOtpSignIn && (
+                <div id="auth-panel-otp-code" role={showSignInTabs ? 'tabpanel' : undefined} aria-labelledby={showSignInTabs ? 'auth-tab-otp-code' : undefined}>
+                    <EmailOtpLoginForm
+                        onSignInSuccess={onSignInSuccess}
+                        oidcContextRequired={oidcContextRequired}
+                        hasValidOidcContext={hasValidOidcContext}
                     />
                 </div>
+            )}
 
-                <button type="submit" disabled={isLoading || waitingForEmailLink} className="login-btn-primary">
-                    {isLoading
-                        ? 'Procesando...'
-                        : needsEmailConfirmation
-                            ? 'Completar acceso'
-                            : mode === 'RECOVERY'
-                                ? 'Enviar enlace de recuperación'
-                                : 'Enviar enlace de acceso'}
-                </button>
-            </form>
+            {showEmailLinkForm && (
+                <div id="auth-panel-email-link" role={showSignInTabs ? 'tabpanel' : undefined} aria-labelledby={showSignInTabs ? 'auth-tab-email-link' : undefined}>
+                    <form onSubmit={needsEmailConfirmation ? handleConfirmEmailForLink : mode === 'RECOVERY' ? handlePasswordRecovery : handleSendEmailLink} noValidate>
+                        <div className="login-field">
+                            <label htmlFor="passwordless-email" className="sr-only">Correo electrónico</label>
+                            <input
+                                id="passwordless-email"
+                                name="email"
+                                type="email"
+                                autoComplete="username"
+                                enterKeyHint="done"
+                                required
+                                value={email}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    setError('');
+                                }}
+                                placeholder="Correo electrónico"
+                            />
+                        </div>
 
-            {mode === 'SIGN_IN' && !needsEmailConfirmation && !waitingForEmailLink && (
+                        <button type="submit" disabled={isLoading || waitingForEmailLink || isEmailLinkSendLocked} className="login-btn-primary">
+                            {isLoading
+                                ? 'Procesando...'
+                                : needsEmailConfirmation
+                                    ? 'Completar acceso'
+                                    : mode === 'RECOVERY'
+                                        ? 'Enviar enlace de recuperación'
+                                        : isEmailLinkSendLocked
+                                            ? 'Enlace enviado'
+                                            : 'Enviar enlace de acceso'}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            {showSignInOptions && (
+                <div className="login-forgot">
+                    <button type="button" onClick={() => switchMode('RECOVERY')}>
+                        ¿Necesitas recuperar tu contraseña?
+                    </button>
+                </div>
+            )}
+
+            {showSignInTabs && authTab === 'EMAIL_LINK' && (
                 <>
                     <div className="otp-divider"><span>o continúa con</span></div>
 
@@ -383,11 +528,6 @@ export function PasswordlessLoginForm({
                         </button>
                     </div>
 
-                    <div className="login-forgot">
-                        <button type="button" onClick={() => switchMode('RECOVERY')}>
-                            ¿Necesitas recuperar tu contraseña?
-                        </button>
-                    </div>
                 </>
             )}
 

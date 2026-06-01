@@ -155,7 +155,7 @@ Hallazgos a mitigar:
 | Hallazgo | Impacto | Mitigacion |
 | --- | --- | --- |
 | `MULESOFT_BASE_URL_MS1`, `MS2`, `MS3` y `MS4` apuntaban al mismo secreto `MULESOFT_BASE_URL`. | Riesgo de llamar endpoints MuleSoft incorrectos. MS-1/MS-2/MS-3/MS-4 tienen bases y paths distintos. | Mitigado para MS-1/MS-2/MS-3 con secretos separados. MS-4 queda pendiente y desactivado. |
-| Faltaba `MULESOFT_OAUTH_URL` o credenciales OAuth vigentes. | El backend no puede obtener el JWT dinamico requerido por MuleSoft. | Mitigado con `MULESOFT_OAUTH_URL` y credenciales OAuth separadas. No usar JWT ya emitidos copiados desde cURL. |
+| Faltaba `MULESOFT_OAUTH_URL` o contrato correcto del body OAuth. | El backend no puede obtener el JWT dinamico requerido por MuleSoft. | Mitigado con `MULESOFT_OAUTH_URL`; en QA actual `MULESOFT_OAUTH_CLIENT_ID` y `MULESOFT_OAUTH_CLIENT_SECRET` deben ser variables literales vacias, no secretos con valores no vacios. |
 | Solo existia `RECAPTCHA_SITE_KEY`; faltaban `RECAPTCHA_PROJECT_ID` y `RECAPTCHA_API_KEY`. | El backend entra en bypass/simulacion de reCAPTCHA. | Mitigado: `RECAPTCHA_PROJECT_ID` y `RECAPTCHA_API_KEY` creados. Montarlos en Cloud Run con la nueva revision. |
 | `idp-service-sa` no tenia rol Firebase/Auth admin. | Admin SDK puede fallar al crear usuarios, actualizar usuarios o setear custom claims. | Mitigado: `roles/firebaseauth.admin` otorgado el 2026-05-25. |
 | Existe `FIREBASE_SERVICE_ACCOUNT`, pero Cloud Run no lo monta. | Puede crear confusion. En Cloud Run se debe preferir la service account adjunta, no JSON descargado. | No descargar JSON para prod. Usar `idp-service-sa` con IAM correcto. |
@@ -290,9 +290,10 @@ Usar estos Secret IDs en este repo. Evitar la variante anterior en minusculas pa
 | `MULESOFT_CLIENT_ID` | `MULESOFT_CLIENT_ID` | Secreto | Ya existe; validar version. |
 | `MULESOFT_CLIENT_SECRET` | `MULESOFT_CLIENT_SECRET` | Secreto | Ya existe; validar version/rotacion. |
 | `MULESOFT_OAUTH_URL` | `MULESOFT_OAUTH_URL` | Configuracion sensible | Creado para OAuth client credentials. |
-| `MULESOFT_OAUTH_CLIENT_ID` | `MULESOFT_OAUTH_CLIENT_ID` | Secreto | Creado; se envia en el body del servicio token. |
-| `MULESOFT_OAUTH_CLIENT_SECRET` | `MULESOFT_OAUTH_CLIENT_SECRET` | Secreto | Creado; se envia en el body del servicio token. |
+| `MULESOFT_OAUTH_CLIENT_ID` | No montar en QA actual | Variable literal vacia | El token service QA exige el campo en body, pero vacio. |
+| `MULESOFT_OAUTH_CLIENT_SECRET` | No montar en QA actual | Variable literal vacia | El token service QA exige el campo en body, pero vacio. |
 | `MULESOFT_OAUTH_ACCOUNT_ID` | `MULESOFT_OAUTH_ACCOUNT_ID` | Configuracion sensible | Creado; se envia como `account_id`. |
+| `MULESOFT_OAUTH_AUTHORIZATION_BEARER` | `MULESOFT_OAUTH_AUTHORIZATION_BEARER` | Secreto opcional | No existe en el proyecto al 2026-06-01; crear y montar solo si MuleSoft confirma que el ambiente exige `Authorization` para pedir token. |
 | `RECAPTCHA_PROJECT_ID` | `RECAPTCHA_PROJECT_ID` | Configuracion | Crear; valor usual: `etb-identity-omnicanal`. |
 | `RECAPTCHA_SITE_KEY` | `RECAPTCHA_SITE_KEY` | Llave publica | Ya existe; validar dominio y ambiente. |
 | `RECAPTCHA_API_KEY` | `RECAPTCHA_API_KEY` | Secreto | Crear; restringir a reCAPTCHA Enterprise API. |
@@ -363,7 +364,7 @@ Validar versiones habilitadas sin leer valores:
 for s in FIREBASE_API_KEY FIREBASE_AUTH_DOMAIN FIREBASE_PROJECT_ID \
   MULESOFT_BASE_URL_MS1 MULESOFT_BASE_URL_MS2 MULESOFT_BASE_URL_MS3 \
   MULESOFT_CLIENT_ID MULESOFT_CLIENT_SECRET MULESOFT_OAUTH_URL \
-  MULESOFT_OAUTH_CLIENT_ID MULESOFT_OAUTH_CLIENT_SECRET MULESOFT_OAUTH_ACCOUNT_ID \
+  MULESOFT_OAUTH_ACCOUNT_ID \
   RECAPTCHA_PROJECT_ID RECAPTCHA_SITE_KEY RECAPTCHA_API_KEY; do
   printf "%s: " "$s"
   gcloud secrets versions list "$s" \
@@ -392,7 +393,10 @@ Roles observados actualmente:
 - `roles/secretmanager.secretAccessor`
 - `roles/storage.objectViewer`
 
-Falta un rol Firebase/Auth para operaciones Admin SDK.
+Para operaciones Admin SDK se requieren dos capacidades:
+
+- Administrar o consultar usuarios de Firebase/Auth / Identity Platform.
+- Firmar custom tokens. En Cloud Run con Application Default Credentials, `admin.auth().createCustomToken()` puede requerir `iam.serviceAccounts.signBlob` sobre la service account usada por el servicio.
 
 ### 5.1. Rol recomendado
 
@@ -403,6 +407,7 @@ Para crear/actualizar usuarios y custom claims, usar el menor privilegio aprobad
 | Recomendada inicial | `roles/firebaseauth.admin` | Cuando el BFF solo administra usuarios Firebase Auth / Identity Platform. |
 | Alternativa corporativa | `roles/identityplatform.admin` | Cuando la organizacion administra Identity Platform completo y exige este rol. |
 | Alternativa legacy | `roles/identitytoolkit.admin` | Solo si el esquema IAM interno lo usa para compatibilidad. |
+| Firma de custom tokens | `roles/iam.serviceAccountTokenCreator` sobre la propia service account | Necesario si aparece `Permission 'iam.serviceAccounts.signBlob' denied` al emitir `customToken`. |
 
 No otorgar roles de service agent a usuarios o service accounts normales.
 
@@ -436,12 +441,24 @@ Pasos:
 
 Si Seguridad pide `Identity Platform Admin`, repetir el flujo y seleccionar `Identity Platform Admin` en vez de, o ademas de, `Firebase Authentication Admin`.
 
+Para la firma de custom tokens, otorgar el rol sobre la service account, no sobre todo el proyecto si Seguridad exige minimo privilegio.
+
 ### 5.3. Asignar rol por CLI
 
 ```bash
 gcloud projects add-iam-policy-binding etb-identity-omnicanal \
   --member="serviceAccount:idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com" \
   --role="roles/firebaseauth.admin"
+```
+
+Si el login OTP falla despues de MS-3 con `Permission 'iam.serviceAccounts.signBlob' denied`, agregar permiso de firma a la service account usada por Cloud Run:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com \
+  --project=etb-identity-omnicanal \
+  --member="serviceAccount:idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
 ```
 
 Validar:
@@ -494,8 +511,10 @@ CSP_REPORT_ONLY=true
 `VITE_ALLOWED_ORIGINS` valida el `redirect_uri` OIDC y se expone en `/config.js`. `CORS_ALLOWED_ORIGINS` gobierna CORS y el guard server-side de endpoints sensibles. En produccion, los endpoints de registro bloquean solicitudes sin `Origin` o `Referer` autorizado:
 
 - `POST /api/customer/lookup`
+- `POST /api/customer/otp/start-login`
 - `POST /api/customer/otp/send`
 - `POST /api/customer/otp/validate`
+- `POST /api/auth/login/complete`
 - `POST /api/customers/register`
 
 CORS protege navegadores, pero no bloquea por si solo llamadas server-to-server. Por eso se mantiene ademas reCAPTCHA, rate limit, sesion BFF, validacion funcional y el guard de origen/referer.
@@ -556,8 +575,6 @@ Pasos:
 | `MULESOFT_CLIENT_ID` | `MULESOFT_CLIENT_ID` |
 | `MULESOFT_CLIENT_SECRET` | `MULESOFT_CLIENT_SECRET` |
 | `MULESOFT_OAUTH_URL` | `MULESOFT_OAUTH_URL` |
-| `MULESOFT_OAUTH_CLIENT_ID` | `MULESOFT_OAUTH_CLIENT_ID` |
-| `MULESOFT_OAUTH_CLIENT_SECRET` | `MULESOFT_OAUTH_CLIENT_SECRET` |
 | `MULESOFT_OAUTH_ACCOUNT_ID` | `MULESOFT_OAUTH_ACCOUNT_ID` |
 | `RECAPTCHA_PROJECT_ID` | `RECAPTCHA_PROJECT_ID` |
 | `RECAPTCHA_SITE_KEY` | `RECAPTCHA_SITE_KEY` |
@@ -579,9 +596,9 @@ gcloud run services update idp-service \
   --project=etb-identity-omnicanal \
   --region=us-east1 \
   --service-account=idp-service-sa@etb-identity-omnicanal.iam.gserviceaccount.com \
-  --update-env-vars='APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false,CSP_REPORT_ONLY=true,VITE_ALLOWED_ORIGINS=https://pedrocasas.pau.solutions|https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app,CORS_ALLOWED_ORIGINS=https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app' \
-  --remove-secrets=MULESOFT_BASE_URL_MS4 \
-  --update-secrets='VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest,VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest,VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_OAUTH_CLIENT_ID=MULESOFT_OAUTH_CLIENT_ID:latest,MULESOFT_OAUTH_CLIENT_SECRET=MULESOFT_OAUTH_CLIENT_SECRET:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest,RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest,RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest,RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest'
+  --update-env-vars='APP_MODE=IDP,NODE_ENV=production,MULESOFT_ENABLE_MS4=false,CSP_REPORT_ONLY=true,MULESOFT_OAUTH_CLIENT_ID=,MULESOFT_OAUTH_CLIENT_SECRET=,VITE_ALLOWED_ORIGINS=https://pedrocasas.pau.solutions|https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app,CORS_ALLOWED_ORIGINS=https://idp-service-296091754258.us-east1.run.app|https://idp-service-2tczqvffra-ue.a.run.app' \
+  --remove-secrets=MULESOFT_BASE_URL_MS4,MULESOFT_OAUTH_CLIENT_ID,MULESOFT_OAUTH_CLIENT_SECRET,MULESOFT_OAUTH_AUTHORIZATION_BEARER \
+  --update-secrets='VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest,VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest,VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest,MULESOFT_BASE_URL_MS1=MULESOFT_BASE_URL_MS1:latest,MULESOFT_BASE_URL_MS2=MULESOFT_BASE_URL_MS2:latest,MULESOFT_BASE_URL_MS3=MULESOFT_BASE_URL_MS3:latest,MULESOFT_CLIENT_ID=MULESOFT_CLIENT_ID:latest,MULESOFT_CLIENT_SECRET=MULESOFT_CLIENT_SECRET:latest,MULESOFT_OAUTH_URL=MULESOFT_OAUTH_URL:latest,MULESOFT_OAUTH_ACCOUNT_ID=MULESOFT_OAUTH_ACCOUNT_ID:latest,RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest,RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest,RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest'
 ```
 
 Produccion endurecida con versiones numericas:
@@ -624,7 +641,7 @@ Pasos base:
 3. Ir a `Providers`.
 4. Confirmar `Email / Password`:
    - `Enabled`: ON.
-   - `Email link passwordless`: ON para el login principal del IdP por correo.
+   - `Email link passwordless`: ON para la pestaña `Enlace seguro`.
 5. Ir a `Settings / Configuracion`.
 6. En `Security / Seguridad`, configurar `Authorized domains` segun la seccion siguiente.
 7. En `Password policy / Politica de contrasena`:
@@ -641,7 +658,10 @@ Pasos base:
    - Action URL QA: `https://<IDP_QA_DOMAIN>/auth/action`; si no hay DNS corporativo, usar la URL temporal de Cloud Run solo en QA.
    - Action URL PROD: `https://<IDP_PROD_DOMAIN>/auth/action`; no usar dominio tentativo en produccion.
 
-El OTP MuleSoft se mantiene para registro/alta digital ETB, no para el login principal por correo.
+El IdP tiene dos metodos de login por correo:
+
+- `Enlace seguro`: Firebase Email Link/passwordless.
+- `Codigo OTP`: MiUso/MuleSoft MS-2/MS-3 via BFF y `signInWithCustomToken`.
 
 ### 7.1. Authorized domains
 
@@ -650,6 +670,11 @@ Estado aplicado por CLI el 2026-05-25:
 - `idp-service-296091754258.us-east1.run.app`
 - `idp-service-2tczqvffra-ue.a.run.app`
 - `pedrocasas.pau.solutions`
+
+Estado adicional para preview OTP aislado validado el 2026-05-30:
+
+- `idp-service-otp-preview-2tczqvffra-ue.a.run.app`
+- `idp-service-otp-preview-296091754258.us-east1.run.app`
 
 Ruta Firebase Console:
 
@@ -686,6 +711,8 @@ Pasos:
 7. Agregar dominios sin `https://` y sin path:
    - `idp-service-2tczqvffra-ue.a.run.app`
    - `idp-service-296091754258.us-east1.run.app`
+   - `idp-service-otp-preview-2tczqvffra-ue.a.run.app` solo para preview OTP.
+   - `idp-service-otp-preview-296091754258.us-east1.run.app` solo para preview OTP.
    - `pedrocasas.pau.solutions`, si es cliente/IdP autorizado en el ambiente.
    - Dominio corporativo definitivo de QA.
    - Dominio corporativo definitivo de PROD.
@@ -693,13 +720,17 @@ Pasos:
 
 ### 7.2. API key - HTTP referrers y API restrictions
 
-Estado aplicado por CLI el 2026-05-26 en `Browser key (auto created by Firebase)`:
+Estado aplicado por CLI el 2026-05-26 y ampliado para preview OTP el 2026-05-30 en `Browser key (auto created by Firebase)`:
 
 - `http://localhost:5173/*`
 - `http://localhost:3000/*`
 - `http://localhost:8080/*`
 - `https://idp-service-296091754258.us-east1.run.app/*`
 - `https://idp-service-2tczqvffra-ue.a.run.app/*`
+- `https://idp-service-otp-preview-2tczqvffra-ue.a.run.app`
+- `https://idp-service-otp-preview-2tczqvffra-ue.a.run.app/*`
+- `https://idp-service-otp-preview-296091754258.us-east1.run.app`
+- `https://idp-service-otp-preview-296091754258.us-east1.run.app/*`
 - `https://pedrocasas.pau.solutions/*`
 - `https://etb-identity-omnicanal.firebaseapp.com/*`
 - `https://etb-identity-omnicanal.web.app/*`
@@ -733,6 +764,8 @@ Pasos:
 5. En `Website restrictions`, click en `Add` y agregar:
    - `https://idp-service-2tczqvffra-ue.a.run.app/*`
    - `https://idp-service-296091754258.us-east1.run.app/*`
+   - `https://idp-service-otp-preview-2tczqvffra-ue.a.run.app` y `https://idp-service-otp-preview-2tczqvffra-ue.a.run.app/*` solo para preview OTP.
+   - `https://idp-service-otp-preview-296091754258.us-east1.run.app` y `https://idp-service-otp-preview-296091754258.us-east1.run.app/*` solo para preview OTP.
    - `https://pedrocasas.pau.solutions/*`, si aplica.
    - `https://etb-identity-omnicanal.firebaseapp.com/*`
    - `https://<IDP_QA_DOMAIN>/*`
@@ -929,7 +962,15 @@ El backend debe crear un assessment para validar cada token reCAPTCHA. Los token
 
 ### 8.3. Comportamiento del frontend
 
-`RegisterForm.tsx` lee `window.APP_CONFIG.recaptchaSiteKey` desde `/config.js`. Si existe site key, carga `https://www.google.com/recaptcha/enterprise.js` y envia tokens reales por accion (`lookup` y `otp_send`) al BFF.
+`RegisterForm.tsx` y `EmailOtpLoginForm.tsx` leen `window.APP_CONFIG.recaptchaSiteKey` desde `/config.js`. Si existe site key, la SPA carga reCAPTCHA y envia tokens reales al BFF.
+
+Acciones vigentes:
+
+| Accion | Uso |
+| --- | --- |
+| `lookup` | Consulta cliente MS-1 en registro. |
+| `otp_send` | Envio y reenvio de OTP en registro y login. |
+| `otp_validate` | Validacion de OTP en registro y login. |
 
 Para desarrollo local y pruebas automatizadas sin site key se mantiene fallback controlado a `SIM_TOKEN`; en produccion ese fallback no debe ocurrir porque Cloud Run debe montar `RECAPTCHA_SITE_KEY`, `RECAPTCHA_PROJECT_ID` y `RECAPTCHA_API_KEY`.
 
@@ -971,8 +1012,6 @@ Para flujo real deben existir, como minimo:
 - `MULESOFT_CLIENT_ID`
 - `MULESOFT_CLIENT_SECRET`
 - `MULESOFT_OAUTH_URL`
-- `MULESOFT_OAUTH_CLIENT_ID`
-- `MULESOFT_OAUTH_CLIENT_SECRET`
 - `MULESOFT_OAUTH_ACCOUNT_ID`
 
 Cada invocacion a MS-1, MS-2, MS-3 y futuro MS-4 debe pedir un token nuevo al servicio `MULESOFT_OAUTH_URL`; no se cachea bearer en memoria.
@@ -1153,6 +1192,7 @@ La mitigacion queda completa cuando:
 - Admin SDK inicializa correctamente en Cloud Run.
 - Logs no muestran bypass de reCAPTCHA ni modo mock de MuleSoft durante pruebas reales.
 - Registro QA controlado completa MS-1, MS-2, MS-3 y crea/actualiza usuario GCP con Admin SDK. MS-4 no se invoca mientras `MULESOFT_ENABLE_MS4=false`.
+- Login `Codigo OTP` QA controlado completa MS-2, MS-3, `createCustomToken`, `signInWithCustomToken` y retorno OIDC con `id_token`.
 - Los dominios temporales quedan retirados de produccion si ya existe dominio corporativo definitivo.
 
 ## 14. Fuentes oficiales

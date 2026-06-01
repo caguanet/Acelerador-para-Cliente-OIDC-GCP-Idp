@@ -38,17 +38,18 @@ set REGION=us-east1
 :: Si necesita dominios adicionales, edite el paso de "Update" al final.
 :: set VITE_ALLOWED_ORIGINS= (Calculado automáticamente)
 
-:: Secretos de Firebase (Valores Reales)
-:: Déjelos en blanco si ya existen en Secret Manager.
-set VAL_FIREBASE_API_KEY=AIzaSyByRyUZPbLYH3-J3vj_gsKShz1M2qDTnoo
+:: Configuración pública de Firebase.
+:: No versionar valores reales aquí; cárguelos desde Secret Manager o variables locales.
+set VAL_FIREBASE_API_KEY=
 set VAL_FIREBASE_AUTH_DOMAIN=etb-identity-omnicanal.firebaseapp.com
 set VAL_FIREBASE_PROJECT_ID=etb-identity-omnicanal
 
 :: reCAPTCHA Enterprise
-:: VAL_RECAPTCHA_SITE_KEY es publica; VAL_RECAPTCHA_API_KEY es privada y debe ser
-:: una API key separada, restringida solo a recaptchaenterprise.googleapis.com.
+:: VAL_RECAPTCHA_SITE_KEY es publica, pero no debe quedar hardcodeada en el repositorio.
+:: VAL_RECAPTCHA_API_KEY es privada y debe ser una API key separada, restringida
+:: solo a recaptchaenterprise.googleapis.com.
 set VAL_RECAPTCHA_PROJECT_ID=etb-identity-omnicanal
-set VAL_RECAPTCHA_SITE_KEY=6Lfak_0sAAAAAIMausKbKkGMKHe5W_RVxa4h3FGN
+set VAL_RECAPTCHA_SITE_KEY=
 set VAL_RECAPTCHA_API_KEY=
 
 :: ==============================================================================================

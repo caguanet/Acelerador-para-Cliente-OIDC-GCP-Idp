@@ -21,7 +21,10 @@ Technical design, component diagrams, sequence flows, and security guidelines.
 Diseño técnico, diagramas de componentes, flujos de secuencia y guías de seguridad.
 
 - [**TECH_README.md**](architecture/TECH_README.md) — Architecture overview, class diagrams, OIDC sequence flows, cloud deployment diagrams, and security best practices.
+- [**APPLICATION_ARCHITECTURE_OVERVIEW.md**](architecture/APPLICATION_ARCHITECTURE_OVERVIEW.md) — Vista tecnica consolidada de capas, endpoints BFF, flujos OIDC/OTP, seguridad y operacion.
 - [**IDP_MULESOFT_GCP_ARCHITECTURE.md**](architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md) — Arquitectura objetivo e **implementación actual** (mapa código ↔ MS-1…MS-4, diagramas de flujo, brecha objetivo vs `server/server.js`).
+- [**LOGIN_OTP_EMAIL_FLOW.md**](architecture/LOGIN_OTP_EMAIL_FLOW.md) — Implementacion vigente del login `Codigo OTP`: MiUso/MS-2/MS-3, BFF, custom token, seguridad, preview Cloud Run y troubleshooting.
+- [**OTP_ARCHITECTURE_VALIDATION.md**](architecture/OTP_ARCHITECTURE_VALIDATION.md) — Validacion cruzada de documentacion vs codigo para OTP, BFF y MS-4, con diagramas Mermaid de la arquitectura actual.
 - [**ADR 0001**](architecture/decisions/0001-idp-spa-stateless-bff-stateful.md) — Formal decision: keep the IdP SPA stateless while adding a stateful BFF only for MuleSoft, OTP, MS-4, audit, and Admin SDK.
 
 ---

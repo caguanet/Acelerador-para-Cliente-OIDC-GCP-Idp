@@ -84,7 +84,6 @@ function extractDisplayMessage(error: FirebaseLikeError | unknown): string | und
   const looksTechnical =
     /auth\/[a-z-]+/i.test(message) ||
     /firebase:/i.test(message) ||
-    /mulesoft/i.test(message) ||
     /returned status/i.test(message) ||
     /stack trace/i.test(message);
 

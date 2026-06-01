@@ -311,8 +311,12 @@ const link = await getAuth().generatePasswordResetLink(email, {
 
 - Recuperacion de contrasena aplica solo a cuentas que tienen contrasena.
 - Cuentas que solo usan Google/Apple/Facebook deben iniciar por su proveedor, siempre que esten validadas/habilitadas como usuario ETB.
-- El OTP corto de MuleSoft se mantiene para registro/alta digital ETB, no como login principal del IdP.
+- El OTP corto de MuleSoft se usa en registro/alta digital ETB y tambien en la pestaña `Codigo OTP` para login de usuarios ETB existentes habilitados.
+- En login OTP, el BFF valida que el usuario exista en Identity Platform, no este deshabilitado y tenga claims ETB (`documentType` y `documentNumber`) antes de llamar MS-2.
+- Despues de MS-3 exitoso, el BFF emite un `customToken` con Admin SDK y la SPA ejecuta `signInWithCustomToken`; desde ahi el login queda como autenticacion real de Identity Platform.
 - Si el usuario existe con password y tambien con social vinculado, puede usar email link/passwordless o el proveedor social habilitado.
+
+Detalle tecnico del flujo OTP login: [LOGIN_OTP_EMAIL_FLOW.md](../architecture/LOGIN_OTP_EMAIL_FLOW.md).
 
 ## 10. Fuentes oficiales
 

@@ -7,7 +7,9 @@ export type OidcParams = {
   redirect_uri: string | null;
   client_id: string | null;
   state: string | null;
+  nonce: string | null;
   prompt: string | null;
+  passthroughParams: Record<string, string>;
 };
 
 export type AccessGateResult = {
@@ -21,7 +23,9 @@ const emptyOidc: OidcParams = {
   redirect_uri: null,
   client_id: null,
   state: null,
+  nonce: null,
   prompt: null,
+  passthroughParams: {},
 };
 
 const RESTRICTED_MSG =
@@ -32,6 +36,64 @@ const INCOMPLETE_OIDC_MSG =
 
 const UNAUTHORIZED_REDIRECT_MSG =
   'Error de Seguridad: El dominio de redirección no está autorizado.';
+
+const INVALID_PASSTHROUGH_MSG =
+  'Acceso restringido: la solicitud contiene parámetros de retorno no válidos.';
+
+const RESERVED_OIDC_PARAM_NAMES = new Set([
+  'access_token',
+  'api_key',
+  'apikey',
+  'client_id',
+  'code',
+  'continueurl',
+  'error',
+  'error_description',
+  'expires_in',
+  'id_token',
+  'mode',
+  'nonce',
+  'oobcode',
+  'prompt',
+  'redirect_uri',
+  'refresh_token',
+  'response_type',
+  'scope',
+  'state',
+  'token',
+  'token_type',
+]);
+
+const PASSTHROUGH_PARAM_NAME_REGEX = /^[A-Za-z][A-Za-z0-9_-]{0,39}$/;
+const PASSTHROUGH_PARAM_VALUE_REGEX = /^[A-Za-z0-9:._~@/+,-]{1,256}$/;
+
+function extractOidcPassthroughParams(params: URLSearchParams): {
+  passthroughParams: Record<string, string>;
+  error: string | null;
+} {
+  const passthroughParams: Record<string, string> = {};
+  const seenNames = new Set<string>();
+
+  for (const [name, value] of params.entries()) {
+    const normalizedName = name.toLowerCase();
+    if (RESERVED_OIDC_PARAM_NAMES.has(normalizedName)) continue;
+
+    if (seenNames.has(normalizedName)) {
+      return { passthroughParams: {}, error: INVALID_PASSTHROUGH_MSG };
+    }
+    seenNames.add(normalizedName);
+
+    if (
+      !PASSTHROUGH_PARAM_NAME_REGEX.test(name) ||
+      !PASSTHROUGH_PARAM_VALUE_REGEX.test(value)
+    ) {
+      return { passthroughParams: {}, error: INVALID_PASSTHROUGH_MSG };
+    }
+    passthroughParams[name] = value;
+  }
+
+  return { passthroughParams, error: null };
+}
 
 export function requiresOidcRedirect(): boolean {
   return window.APP_CONFIG?.requireOidcRedirect === true;
@@ -85,11 +147,15 @@ export function parseOidcFromContinueUrl(continueUrl: string | null): OidcParams
     const redirect_uri = nested.searchParams.get('redirect_uri');
     const client_id = nested.searchParams.get('client_id');
     if (!redirect_uri || !client_id) return null;
+    const { passthroughParams, error } = extractOidcPassthroughParams(nested.searchParams);
+    if (error) return null;
     return {
       redirect_uri,
       client_id,
       state: nested.searchParams.get('state'),
+      nonce: nested.searchParams.get('nonce'),
       prompt: nested.searchParams.get('prompt'),
+      passthroughParams,
     };
   } catch {
     return null;
@@ -101,7 +167,13 @@ function loadOidcFromSearchParams(params: URLSearchParams): AccessGateResult {
   const redirect_uri = params.get('redirect_uri');
   const client_id = params.get('client_id');
   const state = params.get('state');
+  const nonce = params.get('nonce');
   const prompt = params.get('prompt');
+  const { passthroughParams, error: passthroughError } = extractOidcPassthroughParams(params);
+
+  if (passthroughError) {
+    return { oidcParams: emptyOidc, oidcError: passthroughError, isEmailLinkSignInAction: false };
+  }
 
   if (redirect_uri || client_id) {
     if (!redirect_uri || !client_id) {
@@ -116,7 +188,7 @@ function loadOidcFromSearchParams(params: URLSearchParams): AccessGateResult {
       return { oidcParams: emptyOidc, oidcError: UNAUTHORIZED_REDIRECT_MSG, isEmailLinkSignInAction: false };
     }
     return {
-      oidcParams: { redirect_uri, client_id, state, prompt },
+      oidcParams: { redirect_uri, client_id, state, nonce, prompt, passthroughParams },
       oidcError: null,
       isEmailLinkSignInAction: false,
     };

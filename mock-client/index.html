@@ -372,7 +372,75 @@
       line-height: 1.4;
     }
 
+    .request-summary {
+      display: grid;
+      grid-template-columns: minmax(6.7rem, 0.38fr) 1fr;
+      gap: 0.45rem 0.75rem;
+      margin: 0 0 1rem;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0, 76, 143, 0.04);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      border-radius: var(--radius-md);
+    }
+
+    .request-summary dt {
+      margin: 0;
+      color: var(--etb-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .request-summary dd {
+      margin: 0;
+      color: var(--etb-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
     #token-section { display: none; }
+
+    .callback-panel {
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    .callback-title {
+      margin: 0 0 0.65rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--etb-deep);
+      font-weight: 700;
+    }
+
+    .callback-grid {
+      display: grid;
+      grid-template-columns: minmax(6rem, 0.28fr) 1fr;
+      gap: 0.45rem 0.75rem;
+      margin: 0;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0, 200, 232, 0.06);
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      border-radius: var(--radius-md);
+    }
+
+    .callback-grid dt {
+      color: var(--etb-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .callback-grid dd {
+      margin: 0;
+      color: var(--etb-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
 
     .success-icon {
       width: 52px;
@@ -592,6 +660,7 @@
         </div>
         <div class="card-body">
           <div id="login-section">
+            <dl id="request-summary" class="request-summary" aria-label="Parámetros de solicitud OIDC"></dl>
             <button type="button" id="login-btn" class="btn btn-primary">
               <span>Iniciar sesión con el proveedor de identidad</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
@@ -607,6 +676,10 @@
             <p style="margin:0; text-align:center; font-weight:600; color:var(--etb-deep);">Sesión simulada activa</p>
             <p style="margin:0.35rem 0 0; text-align:center; font-size:0.85rem; color:var(--etb-muted);">Token recibido (JWT):</p>
             <div id="token-display" class="token-box" role="region" aria-label="Contenido del token"></div>
+            <div class="callback-panel" aria-labelledby="callback-title">
+              <p id="callback-title" class="callback-title">Parámetros recibidos en el callback</p>
+              <dl id="callback-display" class="callback-grid"></dl>
+            </div>
             <div class="claims-panel" aria-labelledby="claims-title">
               <p id="claims-title" class="claims-title">Claims recibidos del IdP</p>
               <dl id="claims-display" class="claims-grid"></dl>
@@ -637,11 +710,22 @@
   <script src="/config.js"></script>
   <script>
     const CONFIG = window.APP_CONFIG || {};
+    const OIDC_CONFIG = CONFIG.oidc || {};
     const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
-    const CLIENT_ID = 'mock-client-app';
-    const REDIRECT_URI = CONFIG.MOCK_CLIENT_URL || window.location.origin;
+    const CLIENT_ID = OIDC_CONFIG.clientId || CONFIG.CLIENT_ID || 'etb-identity-omnicanal';
+    const REDIRECT_URI =
+      OIDC_CONFIG.redirectUri ||
+      CONFIG.REDIRECT_URI ||
+      CONFIG.MOCK_CLIENT_URL ||
+      window.location.origin;
+    const RESPONSE_TYPE = OIDC_CONFIG.responseType || CONFIG.RESPONSE_TYPE || 'token';
+    const SCOPE = OIDC_CONFIG.scope || CONFIG.SCOPE || 'openid profile email';
     const OIDC_STATE_KEY = 'mock_oidc_state';
+    const OIDC_NONCE_KEY = 'mock_oidc_nonce';
     const OIDC_REFRESH_STATE_KEY = 'mock_oidc_refresh_state';
+    const OIDC_REFRESH_NONCE_KEY = 'mock_oidc_refresh_nonce';
+    const CALLBACK_STATE_KEY = 'mock_callback_state';
+    const CALLBACK_NONCE_KEY = 'mock_callback_nonce';
     const CLAIM_ORDER = [
       'iss',
       'aud',
@@ -694,9 +778,11 @@
     const tokenSection = document.getElementById('token-section');
     const loginSection = document.getElementById('login-section');
     const tokenDisplay = document.getElementById('token-display');
+    const callbackDisplay = document.getElementById('callback-display');
     const claimsDisplay = document.getElementById('claims-display');
     const claimsRawDisplay = document.getElementById('claims-raw-display');
     const authError = document.getElementById('auth-error');
+    const requestSummary = document.getElementById('request-summary');
 
     function setAuthError(message) {
       if (!authError) return;
@@ -711,25 +797,105 @@
       return `${prefix}-${Date.now().toString(36)}-${random}`;
     }
 
-    function buildAuthUrl({ state, prompt }) {
+    function createOidcNonce() {
+      const randomBytes = new Uint8Array(12);
+      crypto.getRandomValues(randomBytes);
+      const random = Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      return `nonce-${Date.now().toString(36)}-${random}`;
+    }
+
+    function getAuthParams({ state, prompt, nonce }) {
       const params = new URLSearchParams({
         client_id: CLIENT_ID,
         redirect_uri: REDIRECT_URI,
-        response_type: 'id_token',
+        response_type: RESPONSE_TYPE,
+        scope: SCOPE,
         state
       });
+      if (nonce) params.set('nonce', nonce);
       if (prompt) params.set('prompt', prompt);
+      return params;
+    }
+
+    function buildAuthUrl({ state, prompt, nonce }) {
+      const params = getAuthParams({ state, prompt, nonce });
       return `${IDP_URL}/?${params.toString()}`;
     }
 
-    function validateReturnedState(returnedState, storageKey) {
-      const expectedState = sessionStorage.getItem(storageKey);
-      if (!expectedState) return true;
-      if (returnedState === expectedState) {
+    function renderRequestSummary() {
+      if (!requestSummary) return;
+      const entries = [
+        ['client_id', CLIENT_ID],
+        ['redirect_uri', REDIRECT_URI],
+        ['response_type', RESPONSE_TYPE],
+        ['scope', SCOPE],
+        ['state', '(aleatorio por intento; se valida al volver)'],
+        ['nonce', '(aleatorio por intento; se valida al volver)'],
+      ];
+
+      requestSummary.textContent = '';
+      for (const [name, value] of entries) {
+        const term = document.createElement('dt');
+        term.textContent = name;
+
+        const description = document.createElement('dd');
+        description.textContent = value;
+
+        requestSummary.append(term, description);
+      }
+    }
+
+    function validateStoredValue(returnedValue, storageKey) {
+      const expectedState = sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey);
+      if (!expectedState) return false;
+      if (returnedValue === expectedState) {
         sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
         return true;
       }
       return false;
+    }
+
+    function clearPendingOidcValidation() {
+      sessionStorage.removeItem(OIDC_STATE_KEY);
+      sessionStorage.removeItem(OIDC_NONCE_KEY);
+      sessionStorage.removeItem(OIDC_REFRESH_STATE_KEY);
+      sessionStorage.removeItem(OIDC_REFRESH_NONCE_KEY);
+      localStorage.removeItem(OIDC_STATE_KEY);
+      localStorage.removeItem(OIDC_NONCE_KEY);
+      localStorage.removeItem(OIDC_REFRESH_STATE_KEY);
+      localStorage.removeItem(OIDC_REFRESH_NONCE_KEY);
+    }
+
+    function clearCallbackParams() {
+      sessionStorage.removeItem(CALLBACK_STATE_KEY);
+      sessionStorage.removeItem(CALLBACK_NONCE_KEY);
+    }
+
+    function storeCallbackParams({ state, nonce }) {
+      sessionStorage.setItem(CALLBACK_STATE_KEY, state || '');
+      sessionStorage.setItem(CALLBACK_NONCE_KEY, nonce || '');
+    }
+
+    function renderCallbackParams(params = {}) {
+      if (!callbackDisplay) return;
+      const state = params.state ?? sessionStorage.getItem(CALLBACK_STATE_KEY) ?? '(sin valor)';
+      const nonce = params.nonce ?? sessionStorage.getItem(CALLBACK_NONCE_KEY) ?? '(sin valor)';
+      const entries = [
+        ['state', state],
+        ['nonce', nonce],
+      ];
+
+      callbackDisplay.textContent = '';
+      for (const [name, value] of entries) {
+        const term = document.createElement('dt');
+        term.textContent = name;
+
+        const description = document.createElement('dd');
+        description.textContent = value || '(sin valor)';
+
+        callbackDisplay.append(term, description);
+      }
     }
 
     function decodeBase64Url(value) {
@@ -816,24 +982,32 @@
       const token = fragment.get('id_token');
       const error = fragment.get('error');
       const returnedState = fragment.get('state') || '';
+      const returnedNonce = fragment.get('nonce') || '';
+      const isRefreshReturn = Boolean(sessionStorage.getItem(OIDC_REFRESH_STATE_KEY));
+      const stateKey = isRefreshReturn ? OIDC_REFRESH_STATE_KEY : OIDC_STATE_KEY;
+      const nonceKey = isRefreshReturn ? OIDC_REFRESH_NONCE_KEY : OIDC_NONCE_KEY;
+
+      const stateMatches = validateStoredValue(returnedState, stateKey);
+      const nonceMatches = validateStoredValue(returnedNonce, nonceKey);
+
+      if (!stateMatches || !nonceMatches) {
+        sessionStorage.removeItem('mock_token');
+        clearCallbackParams();
+        clearPendingOidcValidation();
+        setAuthError('No pudimos validar la respuesta del IdP. Inicia sesión nuevamente.');
+        window.history.replaceState(null, '', window.location.pathname);
+        return;
+      }
 
       if (token) {
-        const isRefreshReturn = Boolean(sessionStorage.getItem(OIDC_REFRESH_STATE_KEY));
-        const storageKey = isRefreshReturn ? OIDC_REFRESH_STATE_KEY : OIDC_STATE_KEY;
-        if (!validateReturnedState(returnedState, storageKey)) {
-          sessionStorage.removeItem('mock_token');
-          setAuthError('No pudimos validar la respuesta del IdP. Inicia sesión nuevamente.');
-          window.history.replaceState(null, '', window.location.pathname);
-          return;
-        }
-        showToken(token);
+        const callbackParams = { state: returnedState, nonce: returnedNonce };
+        storeCallbackParams(callbackParams);
+        showToken(token, callbackParams);
         scheduleSilentRefresh(token);
         window.history.replaceState(null, '', window.location.pathname);
       } else if (error === 'login_required') {
-        sessionStorage.removeItem('mock_token');
-        sessionStorage.removeItem(OIDC_REFRESH_STATE_KEY);
-        clearTimeout(window._refreshTimeout);
-        location.reload();
+        window.history.replaceState(null, '', window.location.pathname);
+        showInteractiveLogin('Tu sesión en el IdP expiró. Inicia sesión nuevamente para continuar.');
       } else if (error) {
         setAuthError(fragment.get('error_description') || 'El IdP no pudo completar el acceso.');
         window.history.replaceState(null, '', window.location.pathname);
@@ -849,25 +1023,41 @@
       const delay = Math.max(0, expMs - Date.now() - refreshBeforeMs);
       refreshTimeoutId = setTimeout(() => {
         const state = createOidcState('refresh');
+        const nonce = createOidcNonce();
         sessionStorage.setItem(OIDC_REFRESH_STATE_KEY, state);
-        window.location.href = buildAuthUrl({ state, prompt: 'none' });
+        sessionStorage.setItem(OIDC_REFRESH_NONCE_KEY, nonce);
+        localStorage.setItem(OIDC_REFRESH_STATE_KEY, state);
+        localStorage.setItem(OIDC_REFRESH_NONCE_KEY, nonce);
+        window.location.href = buildAuthUrl({ state, prompt: 'none', nonce });
       }, delay);
       window._refreshTimeout = refreshTimeoutId;
     }
 
-    function showToken(token) {
+    function showToken(token, callbackParams = {}) {
       setAuthError('');
       tokenDisplay.textContent = token;
+      renderCallbackParams(callbackParams);
       renderClaims(token);
       loginSection.style.display = 'none';
       tokenSection.style.display = 'block';
       sessionStorage.setItem('mock_token', token);
     }
 
+    function showInteractiveLogin(message) {
+      sessionStorage.removeItem('mock_token');
+      clearCallbackParams();
+      clearPendingOidcValidation();
+      clearTimeout(refreshTimeoutId);
+      clearTimeout(window._refreshTimeout);
+      tokenSection.style.display = 'none';
+      loginSection.style.display = 'block';
+      setAuthError(message);
+    }
+
     function logout() {
       sessionStorage.removeItem('mock_token');
-      sessionStorage.removeItem(OIDC_STATE_KEY);
-      sessionStorage.removeItem(OIDC_REFRESH_STATE_KEY);
+      clearCallbackParams();
+      clearPendingOidcValidation();
       location.reload();
     }
 
@@ -878,11 +1068,16 @@
     } else {
       checkHash();
     }
+    renderRequestSummary();
 
     loginBtn.addEventListener('click', () => {
       const state = createOidcState('login');
+      const nonce = createOidcNonce();
       sessionStorage.setItem(OIDC_STATE_KEY, state);
-      window.location.href = buildAuthUrl({ state });
+      sessionStorage.setItem(OIDC_NONCE_KEY, nonce);
+      localStorage.setItem(OIDC_STATE_KEY, state);
+      localStorage.setItem(OIDC_NONCE_KEY, nonce);
+      window.location.href = buildAuthUrl({ state, nonce });
     });
 
     logoutBtn.addEventListener('click', logout);

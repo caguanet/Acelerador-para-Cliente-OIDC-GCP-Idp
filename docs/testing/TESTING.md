@@ -8,6 +8,17 @@ Validates the core business logic in `src/App.tsx` and utility functions.
 *   **Whitelist Validation**: Verifies that invalid `redirect_uri`s are rejected.
 *   **Mode Switching**: Confirms the app enters "IDP Mode" when OIDC params are present.
 
+### 1.1. BFF unit/integration tests (`pnpm run test:bff`)
+`server/server.test.js` imports the Express app without opening the Cloud Run port and runs the BFF routes against an ephemeral local HTTP server. External systems are mocked at the process boundary, not inside the handlers:
+*   **Public config safety**: `/config.js` must expose only browser-safe Firebase/OIDC/reCAPTCHA site values and must not leak MuleSoft, Admin SDK or backend reCAPTCHA secrets.
+*   **Browser-origin protection**: protected `/api/...` routes reject unauthorized `Origin` values before calling Firebase Admin, MuleSoft or reCAPTCHA.
+*   **Email OTP login happy path**: `/api/customer/otp/start-login` -> MS-2, `/api/customer/otp/validate` -> MS-3 and `/api/auth/login/complete` -> Firebase Admin custom token.
+*   **Anti-enumeration**: non-eligible emails receive the same generic start response and never call MuleSoft.
+*   **Anti-abuse**: invalid OTP attempts lock the session and block resend with the two-hour lock message.
+*   **Security validation**: invalid reCAPTCHA Enterprise assessments fail before account lookup.
+
+These tests are included in `pnpm run test` and therefore in `pnpm run verify:regression`; use `pnpm run test:bff` when iterating only on `server/server.js`.
+
 ## 2. End-to-End Tests (`pnpm exec playwright test`)
 Simulates a real user logging in through the IDP using a **Deterministic Registration Pattern**.
 
@@ -22,7 +33,12 @@ Simulates a real user logging in through the IDP using a **Deterministic Registr
     *   **Strategy**: Use a registered test email and complete the Identity Platform email-link flow, then verify the mock client receives an auth token.
     *   **Opt-in**: el spec solo ejecuta este caso si defines `E2E_AUTH_LOGIN=1` (o `true`) al lanzar Playwright, porque requiere proyecto Firebase y plantilla de correo configurados.
 
-3.  **Security Rejection**:
+3.  **Happy Path (Codigo OTP Login)**:
+    *   **Goal**: Verificar que la pestaña `Codigo OTP` autentica al usuario real en Identity Platform y retorna `id_token` al mock cliente.
+    *   **Strategy**: Usar un correo ETB habilitado, solicitar OTP por MiUso/MS-2, leer el correo mas reciente, validar por MS-3, completar `signInWithCustomToken` y verificar retorno OIDC.
+    *   **Opt-in/manual**: requiere servicios MuleSoft reales, reCAPTCHA configurado, dominio Cloud Run autorizado en Firebase/Auth y acceso al buzon de prueba. No debe ejecutarse contra mocks cuando el objetivo sea validar integracion real.
+
+4.  **Security Rejection**:
     *   **Goal**: Verify that the IdP blocks unauthorized clients/redirects.
     *   **Strategy**: Navigate directly to IdP with a malicious `redirect_uri` (e.g., `evil.com`).
     *   **Expectation**: The "Portal de Acceso" (Login Form) **must not render**. An error message "Acceso No Autorizado" is displayed.
@@ -42,6 +58,10 @@ pnpm exec playwright test --ui
 ### 👻 Troubleshooting Errors
 
 *   **`auth/requests-from-referer-blocked` / `API_KEY_HTTP_REFERRER_BLOCKED`**: Inicia sesión en la consola de GCP y añade `http://localhost:5173/*`, `http://localhost:3000/*` y `https://<PROJECT_ID>.firebaseapp.com/*` (o la URL de tu entorno) a los **HTTP Referrers** de tu API Key. Para email link/passwordless, el action handler corre primero desde `firebaseapp.com`, no desde `localhost`.
+    * Para Cloud Run preview, agregar tambien el dominio exacto y con `/*`, por ejemplo `https://idp-service-otp-preview-2tczqvffra-ue.a.run.app` y `https://idp-service-otp-preview-2tczqvffra-ue.a.run.app/*`.
+*   **`UNAUTHORIZED_DOMAIN`**: Agrega el dominio del IdP en `Identity Platform > Settings > Authorized domains` sin protocolo ni path.
+*   **`Permission 'iam.serviceAccounts.signBlob' denied`**: La service account de Cloud Run no puede firmar `customToken`; otorgar permiso de firma como se documenta en `GCP_FIREBASE_PROD_CONFIGURATION.md`.
+*   **OTP correcto reportado como invalido**: confirmar que el codigo corresponde al correo mas reciente de la misma sesion. MS-3 valida contra `id_transaccion`; codigos antiguos o de otra sesion fallan aunque sean numericamente correctos.
 *   **`Error de API Restrictions`**: Verifica que tu API Key permita el acceso a `Identity Toolkit API` y `Token Service API`.
 
 ### 👻 Automated Cleanup (Safe Mode)
@@ -91,6 +111,31 @@ To test the flow manually without the mock client:
 3.  Verify:
     *   Login Modal appears.
     *   After login, browser redirects to `https://example.com/#id_token=...`
+
+### 3.3. Scenario C: Login Codigo OTP en Cloud Run preview
+
+1. Validar el preview aislado:
+    ```bash
+    curl -fsS https://idp-service-otp-preview-2tczqvffra-ue.a.run.app/api/health
+    PUBLIC_BASE_URL=https://idp-service-otp-preview-2tczqvffra-ue.a.run.app pnpm run verify:public-config
+    ```
+2. Abrir el mock preview:
+    ```text
+    https://mock-client-otp-preview-2tczqvffra-ue.a.run.app
+    ```
+3. Iniciar login hacia el IdP.
+4. Seleccionar `Codigo OTP`.
+5. Solicitar codigo para un correo ETB habilitado.
+6. Usar el OTP mas reciente del correo.
+7. Confirmar retorno al mock con `id_token`.
+8. Revisar logs:
+    ```bash
+    gcloud logging read \
+      'resource.type="cloud_run_revision" AND resource.labels.service_name="idp-service-otp-preview" AND ("mulesoft.ms2.response" OR "mulesoft.ms3.response" OR "login.otp.success" OR "Error issuing login custom token")' \
+      --project=etb-identity-omnicanal \
+      --limit=50 \
+      --format='table(timestamp,severity,textPayload,jsonPayload.event,jsonPayload.status)'
+    ```
 
 ## 4. Viewports responsive (checklist + automatización)
 

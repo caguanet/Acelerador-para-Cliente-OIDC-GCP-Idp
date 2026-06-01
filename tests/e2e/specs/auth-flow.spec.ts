@@ -9,6 +9,66 @@ import { MockClientPage } from '../pages/MockClientPage';
 const canRunLoginE2E =
   process.env.E2E_AUTH_LOGIN === '1' || process.env.E2E_AUTH_LOGIN === 'true';
 
+async function prepareMockCallbackValidation(page: import('@playwright/test').Page, state: string, nonce: string) {
+  await page.goto('/');
+  await page.evaluate(
+    ({ state, nonce }) => {
+      window.sessionStorage.setItem('mock_oidc_state', state);
+      window.sessionStorage.setItem('mock_oidc_nonce', nonce);
+      window.localStorage.setItem('mock_oidc_state', state);
+      window.localStorage.setItem('mock_oidc_nonce', nonce);
+    },
+    { state, nonce }
+  );
+}
+
+test.describe('Mock launcher OIDC request', () => {
+  test('builds the configured ETB implicit request parameters', async ({ page }) => {
+    const mockPage = new MockClientPage(page);
+
+    await mockPage.goto();
+    await mockPage.startLoginFlow();
+    await expect(page).toHaveURL(/localhost:5173/);
+
+    const url = new URL(page.url());
+    expect(url.searchParams.get('client_id')).toBe('etb-identity-omnicanal');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'https://pedrocasas.pau.solutions/firebase/callback.php'
+    );
+    expect(url.searchParams.get('response_type')).toBe('token');
+    expect(url.searchParams.get('scope')).toBe('openid profile email');
+    expect(url.searchParams.get('state')).toMatch(/^login-[a-z0-9]+-[a-f0-9]{32}$/);
+    expect(url.searchParams.get('state')).not.toBe('domn4');
+    expect(url.searchParams.get('nonce')).toMatch(/^nonce-[a-z0-9]+-[a-f0-9]{24}$/);
+    expect(url.searchParams.get('nonce')).not.toBe('mvbjqb');
+  });
+
+  test('rejects callback fragments when state and nonce do not match the stored request', async ({ page }) => {
+    await page.goto('/#id_token=fake-token&state=domn4&nonce=mvbjqb');
+
+    await expect(
+      page.getByText(/No pudimos validar la respuesta del IdP/i)
+    ).toBeVisible();
+  });
+
+  test('accepts callback fragments in a new tab when state and nonce exist in localStorage', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      window.localStorage.setItem('mock_oidc_state', 'login-cross-tab');
+      window.localStorage.setItem('mock_oidc_nonce', 'nonce-cross-tab');
+    });
+
+    const callbackPage = await page.context().newPage();
+    await callbackPage.goto('/#id_token=fake-token&state=login-cross-tab&nonce=nonce-cross-tab');
+
+    await expect(callbackPage.getByText(/Sesión simulada activa/i)).toBeVisible();
+    await expect(callbackPage.getByText(/Parámetros recibidos en el callback/i)).toBeVisible();
+    await expect(callbackPage.getByText('login-cross-tab')).toBeVisible();
+    await expect(callbackPage.getByText('nonce-cross-tab')).toBeVisible();
+    await expect(callbackPage.getByText(/No pudimos validar la respuesta del IdP/i)).not.toBeVisible();
+  });
+});
+
 test.describe('Authentication Flow (Happy Path)', () => {
   test.describe.configure({ mode: 'serial' });
   test.setTimeout(90_000);
@@ -26,7 +86,10 @@ test.describe('Authentication Flow (Happy Path)', () => {
     // DIRECT NAVIGATION STRATEGY
     // We bypass the Mock Client click to avoid flake/redirect issues.
     // We construct the URL exactly as a Client would.
-    const idpUrl = 'http://localhost:5173/?client_id=test-client&redirect_uri=http://localhost:3000&state=test-state';
+    const state = 'test-state';
+    const nonce = 'test-nonce';
+    await prepareMockCallbackValidation(page, state, nonce);
+    const idpUrl = `http://localhost:5173/?client_id=test-client&redirect_uri=http://localhost:3000&state=${state}&nonce=${nonce}`;
     
     console.log(`[TEST] Navigating directly to IdP: ${idpUrl}`);
     await page.goto(idpUrl, { waitUntil: 'domcontentloaded' });
