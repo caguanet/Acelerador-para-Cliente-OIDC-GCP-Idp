@@ -13,6 +13,9 @@ const VERIFY_ERROR = 'No pudimos validar el código. Revísalo o solicita uno nu
 const RESEND_ERROR = 'No pudimos reenviar el código. Inténtalo nuevamente en unos minutos.';
 const COMPLETE_ERROR = 'No pudimos completar el inicio de sesión. Solicita un nuevo código.';
 const NETWORK_ERROR = 'No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo.';
+const LOCKOUT_MESSAGE = 'Has superado los intentos permitidos. Por seguridad, intenta nuevamente en 2 horas.';
+const CLIENT_LOCK_MS = 2 * 60 * 60 * 1000;
+const CLIENT_LOCK_PREFIX = 'mi-etb:otp-login-lock:';
 
 type Phase = 'EMAIL' | 'CODE';
 type ApiJson = Record<string, unknown>;
@@ -48,7 +51,7 @@ function getApiString(data: ApiJson | null, key: string): string {
 
 function getSafeMessage(message: string, fallback: string): string {
     const clean = message.trim();
-    if (!clean || clean.length > 180 || /failed|json|firebase:|auth\/|mulesoft|status|servidor|interno/i.test(clean)) {
+    if (!clean || clean.length > 180 || /failed|json|firebase:|auth\/|status|servidor|interno/i.test(clean)) {
         return fallback;
     }
     return clean;
@@ -64,6 +67,50 @@ function getSafeErrorMessage(error: unknown, fallback: string): string {
     return fallback;
 }
 
+function isLockoutResponse(response: Response, message: string): boolean {
+    return response.status === 423 || /superado los intentos|intentos permitidos|intenta nuevamente en 2 horas/i.test(message);
+}
+
+async function hashForClientStorage(value: string): Promise<string> {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || !window.crypto?.subtle) return '';
+    const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function getClientLockKey(email: string): Promise<string> {
+    const hash = await hashForClientStorage(email);
+    return hash ? `${CLIENT_LOCK_PREFIX}${hash}` : '';
+}
+
+async function getClientLockedUntil(email: string): Promise<number> {
+    try {
+        const key = await getClientLockKey(email);
+        if (!key) return 0;
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return 0;
+        const parsed = JSON.parse(raw) as { lockedUntil?: number };
+        const lockedUntil = Number(parsed.lockedUntil || 0);
+        if (lockedUntil <= Date.now()) {
+            window.localStorage.removeItem(key);
+            return 0;
+        }
+        return lockedUntil;
+    } catch {
+        return 0;
+    }
+}
+
+async function rememberClientLock(email: string): Promise<void> {
+    try {
+        const key = await getClientLockKey(email);
+        if (!key) return;
+        window.localStorage.setItem(key, JSON.stringify({ lockedUntil: Date.now() + CLIENT_LOCK_MS }));
+    } catch {
+        // The server-side lock remains the source of truth.
+    }
+}
+
 export function EmailOtpLoginForm({
     onSignInSuccess,
     oidcContextRequired = false,
@@ -77,6 +124,7 @@ export function EmailOtpLoginForm({
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
+    const [isLocked, setIsLocked] = useState(false);
     const [resendCountdown, setResendCountdown] = useState(0);
     const codeInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,6 +156,12 @@ export function EmailOtpLoginForm({
             return;
         }
 
+        if (await getClientLockedUntil(email)) {
+            setIsLocked(true);
+            setError(LOCKOUT_MESSAGE);
+            return;
+        }
+
         setIsLoading(true);
         try {
             const recaptchaToken = await getRecaptchaToken('otp_send');
@@ -119,7 +173,13 @@ export function EmailOtpLoginForm({
 
             const data = await readApiJson(response);
             if (!response.ok) {
-                throw new Error(getApiErrorMessage(data, START_ERROR));
+                const message = getApiErrorMessage(data, START_ERROR);
+                if (isLockoutResponse(response, message)) {
+                    await rememberClientLock(email);
+                    setIsLocked(true);
+                    setResendCountdown(0);
+                }
+                throw new Error(message);
             }
 
             const nextSessionId = getApiString(data, 'sessionId');
@@ -130,6 +190,7 @@ export function EmailOtpLoginForm({
             setSessionId(nextSessionId);
             setMaskedEmail(getApiString(data, 'maskedEmail'));
             setCode('');
+            setIsLocked(false);
             setResendCountdown(RESEND_COOLDOWN);
             setInfo(GENERIC_START_MESSAGE);
             setPhase('CODE');
@@ -142,7 +203,7 @@ export function EmailOtpLoginForm({
     };
 
     const handleResend = async () => {
-        if (resendCountdown > 0 || isLoading || !sessionId) return;
+        if (isLocked || resendCountdown > 0 || isLoading || !sessionId) return;
         setError('');
         setIsLoading(true);
         try {
@@ -154,9 +215,16 @@ export function EmailOtpLoginForm({
             });
             const data = await readApiJson(response);
             if (!response.ok) {
-                throw new Error(getApiErrorMessage(data, RESEND_ERROR));
+                const message = getApiErrorMessage(data, RESEND_ERROR);
+                if (isLockoutResponse(response, message)) {
+                    await rememberClientLock(email);
+                    setIsLocked(true);
+                    setResendCountdown(0);
+                }
+                throw new Error(message);
             }
             setCode('');
+            setIsLocked(false);
             setResendCountdown(RESEND_COOLDOWN);
             setInfo(GENERIC_START_MESSAGE);
             requestAnimationFrame(() => codeInputRef.current?.focus());
@@ -171,21 +239,33 @@ export function EmailOtpLoginForm({
     const handleVerify = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setError('');
+        if (isLocked) {
+            setError(LOCKOUT_MESSAGE);
+            return;
+        }
         if (!/^\d{6}$/.test(code)) {
             setError('Ingresa el código de 6 dígitos que recibiste por correo.');
             return;
         }
 
         setIsLoading(true);
+        let failureFallback = VERIFY_ERROR;
         try {
+            const recaptchaToken = await getRecaptchaToken('otp_validate');
             const validateResponse = await fetch('/api/customer/otp/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId, code }),
+                body: JSON.stringify({ sessionId, code, recaptchaToken }),
             });
             const validateData = await readApiJson(validateResponse);
             if (!validateResponse.ok) {
-                throw new Error(getApiErrorMessage(validateData, VERIFY_ERROR));
+                const message = getApiErrorMessage(validateData, VERIFY_ERROR);
+                if (isLockoutResponse(validateResponse, message)) {
+                    await rememberClientLock(email);
+                    setIsLocked(true);
+                    setResendCountdown(0);
+                }
+                throw new Error(message);
             }
 
             const verificationToken = getApiString(validateData, 'verificationToken');
@@ -193,6 +273,7 @@ export function EmailOtpLoginForm({
                 throw new Error(VERIFY_ERROR);
             }
 
+            failureFallback = COMPLETE_ERROR;
             const completeResponse = await fetch('/api/auth/login/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -212,7 +293,7 @@ export function EmailOtpLoginForm({
             onSignInSuccess(credential.user);
         } catch (err: unknown) {
             console.warn('No fue posible completar el acceso por código.', err);
-            setError(getSafeErrorMessage(err, VERIFY_ERROR));
+            setError(getSafeErrorMessage(err, failureFallback));
         } finally {
             setIsLoading(false);
         }
@@ -224,6 +305,7 @@ export function EmailOtpLoginForm({
         setInfo('');
         setCode('');
         setSessionId('');
+        setIsLocked(false);
         setResendCountdown(0);
     };
 
@@ -282,20 +364,21 @@ export function EmailOtpLoginForm({
                         enterKeyHint="done"
                         maxLength={OTP_LENGTH}
                         required
+                        disabled={isLocked}
                         value={code}
-                        onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH)); setError(''); }}
+                        onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH)); if (!isLocked) setError(''); }}
                         placeholder="••••••"
                     />
                 </div>
 
-                <button type="submit" disabled={isLoading || code.length !== OTP_LENGTH} className="login-btn-primary">
+                <button type="submit" disabled={isLocked || isLoading || code.length !== OTP_LENGTH} className="login-btn-primary">
                     {isLoading ? 'Verificando...' : 'Ingresar'}
                 </button>
             </form>
 
             <div className="login-forgot">
-                <button type="button" onClick={handleResend} disabled={resendCountdown > 0 || isLoading}>
-                    {resendCountdown > 0 ? `Reenviar código en ${resendCountdown}s` : 'Reenviar código'}
+                <button type="button" onClick={handleResend} disabled={isLocked || resendCountdown > 0 || isLoading}>
+                    {isLocked ? 'Reenvío bloqueado' : resendCountdown > 0 ? `Reenviar código en ${resendCountdown}s` : 'Reenviar código'}
                 </button>
             </div>
 

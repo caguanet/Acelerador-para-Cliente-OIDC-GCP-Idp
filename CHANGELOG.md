@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - Login OTP por correo y documentacion alineada
+
+### ✨ Nuevas Características
+- **Login por Codigo OTP:** Nueva pestaña de login para usuarios ETB existentes usando MiUso/MuleSoft MS-2/MS-3, BFF, Firebase Admin SDK y `signInWithCustomToken`.
+- **Preview Cloud Run aislado:** Documentado el uso de `idp-service-otp-preview` y `mock-client-otp-preview` para validar integraciones reales sin afectar `idp-service`.
+
+### 🛡️ Seguridad
+- **Antiabuso OTP:** Documentados reCAPTCHA `otp_send`/`otp_validate`, rate limits, bloqueo por intentos, no enumeracion y proteccion de secretos en `/config.js`.
+- **GCP/Firebase:** Documentados requisitos de `authorizedDomains`, HTTP referrers, dominios reCAPTCHA y permiso `iam.serviceAccounts.signBlob` para custom tokens.
+
+### 📚 Documentación
+- **Nuevo documento canónico:** `docs/architecture/LOGIN_OTP_EMAIL_FLOW.md` describe el flujo implementado, diagramas, endpoints, troubleshooting y criterios de prueba.
+- **Alineación de arquitectura:** Actualizados `TECH_README.md`, `IDP_MULESOFT_GCP_ARCHITECTURE.md`, guías GCP, deploy y testing para reflejar el estado actual del código.
+
 ## [2026-05-25] - Servidor Proxy BFF Seguro, Mitigación de Abuso, Integración React e Infraestructura GCP
 
 ### ✨ Nuevas Características

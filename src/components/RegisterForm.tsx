@@ -142,7 +142,7 @@ function getSafeDisplayMessage(message: string, fallback: string): string {
 }
 
 function looksTechnical(message: string): boolean {
-    return /failed to execute|unexpected end of json|json input|syntaxerror|response\.json|firebase:|auth\/|mulesoft|returned status|stack trace|servidor|interno/i.test(message);
+    return /failed to execute|unexpected end of json|json input|syntaxerror|response\.json|firebase:|auth\/|returned status|stack trace|servidor|interno/i.test(message);
 }
 
 export interface RegisterFormProps {
@@ -449,12 +449,14 @@ export function RegisterForm({ onRegisterSuccess, onGoToLogin }: RegisterFormPro
         setVerifyError('');
         setIsVerifying(true);
         try {
+            const otpRecaptchaToken = await getRecaptchaToken('otp_validate');
             const response = await fetch('/api/customer/otp/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId,
-                    code: digits.join('')
+                    code: digits.join(''),
+                    recaptchaToken: otpRecaptchaToken
                 })
             });
 

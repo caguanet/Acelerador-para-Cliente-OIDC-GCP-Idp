@@ -13,6 +13,8 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 > *   [**IDP_LAUNCHER_IMPLEMENTATION.md**](docs/guides/IDP_LAUNCHER_IMPLEMENTATION.md): Guía técnica para integrar un sitio Launcher con el IdP y manejar retorno exitoso/fallido.
 > *   [**DEPLOY.md**](docs/guides/DEPLOY.md): Guía de despliegue en producción (Cloud Run + Infraestructura).
 > *   [**TECH_README.md**](docs/architecture/TECH_README.md): Arquitectura técnica, diagramas de secuencia y seguridad.
+> *   [**LOGIN_OTP_EMAIL_FLOW.md**](docs/architecture/LOGIN_OTP_EMAIL_FLOW.md): Flujo implementado de login por `Código OTP` con MiUso/MuleSoft, BFF, Firebase custom tokens y controles antiabuso.
+> *   [**OTP_ARCHITECTURE_VALIDATION.md**](docs/architecture/OTP_ARCHITECTURE_VALIDATION.md): Validación de documentación vs código para OTP, BFF y MS-4 con diagramas Mermaid.
 > *   [**DESIGN.md**](DESIGN.md): Guía corta de UI para agentes (el branding en runtime sigue en `APP_CONFIG`).
 > *   [**TESTING.md**](docs/testing/TESTING.md): Estrategia de pruebas (E2E, Unitarias) y control de calidad.
 > *   [**CHANGELOG.md**](CHANGELOG.md): Historial de versiones y cambios notables.
@@ -24,6 +26,7 @@ Una solución de proveedor de identidad ligera, segura y personalizable, diseña
 *   **Secure by Default:** Implementa validación estricta de orígenes (`redirect_uri`), saneamiento de inputs y headers de seguridad.
 *   **Serverless:** Optimizado para Cloud Run (Stateless).
 *   **OIDC Compliant:** Soporta flujo implícito para integración con aplicaciones SPA.
+*   **Login por Código OTP:** Autenticación de usuarios ETB existentes con OTP enviado por MiUso/MuleSoft y sesión real en Identity Platform mediante `signInWithCustomToken`.
 *   **Renovación silenciosa de token:** Soporta `prompt=none` para que las aplicaciones cliente renueven el token antes de que expire (1 h) sin volver a pedir credenciales al usuario.
 
 ## 🏗️ Arquitectura y Contexto de Despliegue

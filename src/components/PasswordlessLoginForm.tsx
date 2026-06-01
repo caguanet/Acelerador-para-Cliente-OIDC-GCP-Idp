@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import {
     FacebookAuthProvider,
     GoogleAuthProvider,
@@ -377,6 +377,25 @@ export function PasswordlessLoginForm({
         setSuccessMsg('');
     };
 
+    const handleAuthTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+        const tabOrder: AuthTab[] = ['EMAIL_LINK', 'OTP_CODE'];
+        const currentIndex = tabOrder.indexOf(authTab);
+        let nextIndex = currentIndex;
+
+        if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabOrder.length;
+        if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = tabOrder.length - 1;
+        if (nextIndex === currentIndex) return;
+
+        event.preventDefault();
+        switchAuthTab(tabOrder[nextIndex]);
+        requestAnimationFrame(() => {
+            const nextButtonId = tabOrder[nextIndex] === 'EMAIL_LINK' ? 'auth-tab-email-link' : 'auth-tab-otp-code';
+            document.getElementById(nextButtonId)?.focus();
+        });
+    };
+
     return (
         <div className="login-form">
             <h2 className="login-form-title">{title}</h2>
@@ -391,22 +410,28 @@ export function PasswordlessLoginForm({
             {showSignInTabs && (
                 <div className="auth-tabs" role="tablist" aria-label="Métodos de inicio de sesión">
                     <button
+                        id="auth-tab-email-link"
                         type="button"
                         role="tab"
                         data-testid="tab-email-link"
                         aria-selected={authTab === 'EMAIL_LINK'}
+                        aria-controls="auth-panel-email-link"
                         className={`auth-tab${authTab === 'EMAIL_LINK' ? ' is-active' : ''}`}
                         onClick={() => switchAuthTab('EMAIL_LINK')}
+                        onKeyDown={handleAuthTabKeyDown}
                     >
                         Enlace seguro
                     </button>
                     <button
+                        id="auth-tab-otp-code"
                         type="button"
                         role="tab"
                         data-testid="tab-otp-code"
                         aria-selected={authTab === 'OTP_CODE'}
+                        aria-controls="auth-panel-otp-code"
                         className={`auth-tab${authTab === 'OTP_CODE' ? ' is-active' : ''}`}
                         onClick={() => switchAuthTab('OTP_CODE')}
+                        onKeyDown={handleAuthTabKeyDown}
                     >
                         Código OTP
                     </button>
@@ -428,45 +453,49 @@ export function PasswordlessLoginForm({
             )}
 
             {showSignInTabs && authTab === 'OTP_CODE' && (
-                <EmailOtpLoginForm
-                    onSignInSuccess={onSignInSuccess}
-                    oidcContextRequired={oidcContextRequired}
-                    hasValidOidcContext={hasValidOidcContext}
-                />
+                <div id="auth-panel-otp-code" role="tabpanel" aria-labelledby="auth-tab-otp-code">
+                    <EmailOtpLoginForm
+                        onSignInSuccess={onSignInSuccess}
+                        oidcContextRequired={oidcContextRequired}
+                        hasValidOidcContext={hasValidOidcContext}
+                    />
+                </div>
             )}
 
             {showEmailLinkForm && (
-            <form onSubmit={needsEmailConfirmation ? handleConfirmEmailForLink : mode === 'RECOVERY' ? handlePasswordRecovery : handleSendEmailLink} noValidate>
-                <div className="login-field">
-                    <label htmlFor="passwordless-email" className="sr-only">Correo electrónico</label>
-                    <input
-                        id="passwordless-email"
-                        name="email"
-                        type="email"
-                        autoComplete="username"
-                        enterKeyHint="done"
-                        required
-                        value={email}
-                        onChange={(e) => {
-                            setEmail(e.target.value);
-                            setError('');
-                        }}
-                        placeholder="Correo electrónico"
-                    />
-                </div>
+                <div id="auth-panel-email-link" role={showSignInTabs ? 'tabpanel' : undefined} aria-labelledby={showSignInTabs ? 'auth-tab-email-link' : undefined}>
+                    <form onSubmit={needsEmailConfirmation ? handleConfirmEmailForLink : mode === 'RECOVERY' ? handlePasswordRecovery : handleSendEmailLink} noValidate>
+                        <div className="login-field">
+                            <label htmlFor="passwordless-email" className="sr-only">Correo electrónico</label>
+                            <input
+                                id="passwordless-email"
+                                name="email"
+                                type="email"
+                                autoComplete="username"
+                                enterKeyHint="done"
+                                required
+                                value={email}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    setError('');
+                                }}
+                                placeholder="Correo electrónico"
+                            />
+                        </div>
 
-                <button type="submit" disabled={isLoading || waitingForEmailLink || isEmailLinkSendLocked} className="login-btn-primary">
-                    {isLoading
-                        ? 'Procesando...'
-                        : needsEmailConfirmation
-                            ? 'Completar acceso'
-                            : mode === 'RECOVERY'
-                                ? 'Enviar enlace de recuperación'
-                                : isEmailLinkSendLocked
-                                    ? 'Enlace enviado'
-                                    : 'Enviar enlace de acceso'}
-                </button>
-            </form>
+                        <button type="submit" disabled={isLoading || waitingForEmailLink || isEmailLinkSendLocked} className="login-btn-primary">
+                            {isLoading
+                                ? 'Procesando...'
+                                : needsEmailConfirmation
+                                    ? 'Completar acceso'
+                                    : mode === 'RECOVERY'
+                                        ? 'Enviar enlace de recuperación'
+                                        : isEmailLinkSendLocked
+                                            ? 'Enlace enviado'
+                                            : 'Enviar enlace de acceso'}
+                        </button>
+                    </form>
+                </div>
             )}
 
             {showSignInTabs && authTab === 'EMAIL_LINK' && (

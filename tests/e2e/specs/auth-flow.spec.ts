@@ -9,6 +9,19 @@ import { MockClientPage } from '../pages/MockClientPage';
 const canRunLoginE2E =
   process.env.E2E_AUTH_LOGIN === '1' || process.env.E2E_AUTH_LOGIN === 'true';
 
+async function prepareMockCallbackValidation(page: import('@playwright/test').Page, state: string, nonce: string) {
+  await page.goto('/');
+  await page.evaluate(
+    ({ state, nonce }) => {
+      window.sessionStorage.setItem('mock_oidc_state', state);
+      window.sessionStorage.setItem('mock_oidc_nonce', nonce);
+      window.localStorage.setItem('mock_oidc_state', state);
+      window.localStorage.setItem('mock_oidc_nonce', nonce);
+    },
+    { state, nonce }
+  );
+}
+
 test.describe('Mock launcher OIDC request', () => {
   test('builds the configured ETB implicit request parameters', async ({ page }) => {
     const mockPage = new MockClientPage(page);
@@ -73,7 +86,10 @@ test.describe('Authentication Flow (Happy Path)', () => {
     // DIRECT NAVIGATION STRATEGY
     // We bypass the Mock Client click to avoid flake/redirect issues.
     // We construct the URL exactly as a Client would.
-    const idpUrl = 'http://localhost:5173/?client_id=test-client&redirect_uri=http://localhost:3000&state=test-state';
+    const state = 'test-state';
+    const nonce = 'test-nonce';
+    await prepareMockCallbackValidation(page, state, nonce);
+    const idpUrl = `http://localhost:5173/?client_id=test-client&redirect_uri=http://localhost:3000&state=${state}&nonce=${nonce}`;
     
     console.log(`[TEST] Navigating directly to IdP: ${idpUrl}`);
     await page.goto(idpUrl, { waitUntil: 'domcontentloaded' });

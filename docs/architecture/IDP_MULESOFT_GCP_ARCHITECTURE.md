@@ -16,12 +16,12 @@ Esta sección describe **lo que está implementado hoy en código**, no solo el 
 
 | Capa | Ubicación | Rol |
 | --- | --- | --- |
-| IdP SPA (login OIDC) | `src/App.tsx`, `src/components/PasswordlessLoginForm.tsx` | OIDC Implicit, Firebase Auth; **no llama MuleSoft** |
+| IdP SPA (login OIDC) | `src/App.tsx`, `src/components/PasswordlessLoginForm.tsx`, `src/components/EmailOtpLoginForm.tsx` | OIDC Implicit, Firebase Auth, enlace seguro y login OTP por MiUso via BFF |
 | Registro ETB (OTP) | `src/components/RegisterForm.tsx` | Orquesta el flujo vía `fetch` al BFF |
-| BFF / proxy MuleSoft | `server/server.js` | MS-1…MS-4, sesión, rate limit, reCAPTCHA, Firebase Admin SDK |
+| BFF / proxy MuleSoft | `server/server.js` | MS-1…MS-4, login OTP, sesión, rate limit, reCAPTCHA, Firebase Admin SDK |
 | Config runtime | `GET /config.js` en `server/server.js` | Inyecta `window.APP_CONFIG` sin secretos MuleSoft |
 
-La sesión de registro (`sessionId`) se guarda en un **`Map` en memoria** con TTL de 15 minutos. El diseño objetivo prevé **Firestore** (`otp_sessions`); eso aún no está implementado.
+Las sesiones OTP de registro y login (`sessionId`) se guardan en un **`Map` en memoria** con TTL de 15 minutos. Los bloqueos OTP se guardan en memoria y se persisten en `tmp/otp-locks.json` para conservar el bloqueo operativo dentro del servicio actual. El diseño enterprise prevé **Firestore** (`otp_sessions`); eso no está implementado en este cambio.
 
 ### Arquitectura implementada (vista de componentes)
 
@@ -29,14 +29,17 @@ La sesión de registro (`sessionId`) se guarda en un **`Map` en memoria** con TT
 flowchart TB
     subgraph Cliente["Navegador"]
         SPA["IdP SPA — src/App.tsx<br/>Login OIDC + silent refresh"]
+        OTPLOGIN["EmailOtpLoginForm.tsx<br/>Login Codigo OTP"]
         REG["RegisterForm.tsx<br/>Hogares / MiPymes"]
     end
 
     subgraph BFF["BFF — server/server.js"]
         CFG["GET /config.js"]
         L1["POST /api/customer/lookup → MS-1"]
+        L0["POST /api/customer/otp/start-login<br/>Login OTP existing user"]
         L2["POST /api/customer/otp/send → MS-2"]
         L3["POST /api/customer/otp/validate → MS-3"]
+        L5["POST /api/auth/login/complete<br/>customToken login"]
         L4["POST /api/customers/register → MS-4 + Admin SDK"]
         SESS["sessionStore Map en memoria<br/>email enmascarado al cliente"]
         TOK["getMuleSoftBearerToken()"]
@@ -55,29 +58,35 @@ flowchart TB
     end
 
     SPA -->|"signIn / getIdToken"| FB
+    OTPLOGIN --> L0 & L2 & L3 & L5
     REG --> L1 & L2 & L3 & L4
-    L1 & L2 & L3 & L4 --> SESS
-    L1 & L2 & L3 & L4 --> TOK
+    L0 & L1 & L2 & L3 & L4 & L5 --> SESS
+    L0 & L1 & L2 & L3 & L4 --> TOK
     TOK --> SM
     L1 --> MS1
+    L0 --> MS2
     L2 --> MS2
     L3 --> MS3
     L4 --> MS4
     L4 -->|"createUser + customToken"| FB
+    L5 -->|"createCustomToken"| FB
 ```
 
 ### Mapa código ↔ servicio MuleSoft
 
 | Paso | Servicio | Endpoint BFF (implementado) | Archivo / función |
 | --- | --- | --- | --- |
-| 1 | MS-1 consulta cliente | `POST /api/customer/lookup` | `server/server.js` — handler ~línea 377 |
-| 2 | MS-2 envío OTP | `POST /api/customer/otp/send` | `server/server.js` — handler ~línea 530 |
-| 3 | MS-3 validación OTP | `POST /api/customer/otp/validate` | `server/server.js` — handler ~línea 610 |
-| 4 | MS-4 + Identity Platform | `POST /api/customers/register` | `server/server.js` — handler ~línea 703 |
+| Login OTP 0 | Admin SDK + MS-2 | `POST /api/customer/otp/start-login` | `server/server.js` — handler ~línea 965 |
+| 1 | MS-1 consulta cliente | `POST /api/customer/lookup` | `server/server.js` — handler ~línea 797 |
+| 2 | MS-2 envío OTP | `POST /api/customer/otp/send` | `server/server.js` — handler ~línea 1079 |
+| 3 | MS-3 validación OTP | `POST /api/customer/otp/validate` | `server/server.js` — handler ~línea 1119 |
+| Login OTP 4 | Admin SDK custom token | `POST /api/auth/login/complete` | `server/server.js` — handler ~línea 1389 |
+| 4 | MS-4 + Identity Platform | `POST /api/customers/register` | `server/server.js` — handler ~línea 1240 |
 | UI registro | — | `fetch('/api/...')` | `src/components/RegisterForm.tsx` |
-| Token OAuth MuleSoft | — | `getMuleSoftBearerToken()` | `server/server.js` — ~línea 269 |
-| Path MS-3 (normalización URL) | — | `getMulesoftOtpValidationPath()` | `server/server.js` — ~línea 178 |
-| Elegibilidad MS-1 | — | `getReliableRegistrationEligibility()` | `server/server.js` — ~línea 192 |
+| UI login OTP | — | `fetch('/api/customer/otp/start-login')` + `fetch('/api/auth/login/complete')` | `src/components/EmailOtpLoginForm.tsx` |
+| Token OAuth MuleSoft | — | `getMuleSoftBearerToken()` | `server/server.js` — ~línea 584 |
+| Path MS-3 (normalización URL) | — | `getMulesoftOtpValidationPath()` | `server/server.js` — ~línea 487 |
+| Elegibilidad MS-1 | — | `getReliableRegistrationEligibility()` | `server/server.js` — ~línea 501 |
 
 ### Secuencia de registro (implementación actual)
 
@@ -120,27 +129,45 @@ sequenceDiagram
     UI->>GCP: signInWithCustomToken → id_token OIDC
 ```
 
-### Login OIDC (sin MuleSoft)
+### Login OIDC (enlace seguro, Codigo OTP y silent refresh)
 
-El login principal y el silent refresh (`prompt=none`) usan solo Firebase desde la SPA. MuleSoft participa únicamente en **registro / alta digital ETB**.
+El contrato hacia el cliente OIDC sigue siendo el mismo: la SPA obtiene una sesion valida en Identity Platform y redirige al `redirect_uri` autorizado con `#id_token=...`.
+
+Hay dos entradas de correo implementadas:
+
+- `Enlace seguro`: usa Firebase Email Link/passwordless desde la SPA.
+- `Codigo OTP`: usa MiUso/MuleSoft MS-2/MS-3 via BFF, luego `createCustomToken` + `signInWithCustomToken`.
+
+El silent refresh (`prompt=none`) no llama MuleSoft; solo reutiliza la sesion Firebase activa.
 
 ```mermaid
 sequenceDiagram
     actor App as Cliente OIDC
     participant IdP as App.tsx
+    participant BFF as server/server.js
+    participant MS as MiUso/MuleSoft
     participant FB as Firebase Auth
 
     App->>IdP: ?client_id&redirect_uri&response_type=id_token
     IdP->>IdP: Valida redirect_uri (APP_CONFIG)
     alt prompt=none
         IdP->>FB: getIdToken(true) si hay sesión
-    else login normal
-        U->>IdP: Email link / contraseña / social
+    else Enlace seguro
+        U->>IdP: Email link / social
         IdP->>FB: signIn*
+    else Codigo OTP
+        U->>IdP: Correo + codigo OTP
+        IdP->>BFF: start-login / validate / complete
+        BFF->>MS: MS-2 envia OTP + MS-3 valida OTP
+        BFF->>FB: Admin SDK createCustomToken
+        BFF-->>IdP: customToken
+        IdP->>FB: signInWithCustomToken
     end
     FB-->>IdP: id_token
     IdP->>App: redirect_uri#id_token=...&state=...
 ```
+
+Detalle operativo completo: [LOGIN_OTP_EMAIL_FLOW.md](LOGIN_OTP_EMAIL_FLOW.md).
 
 ### Variables de entorno del BFF (servidor)
 
@@ -206,8 +233,9 @@ Claims tras registro (`setCustomUserClaims`): `customerType`, `documentHash`, `r
 | Tema | Objetivo (este doc / plan) | Implementado hoy |
 | --- | --- | --- |
 | Proyecto BFF | `idp-bff-service` TypeScript modular | Monolito `server/server.js` |
-| Sesión OTP | Firestore `otp_sessions` | `Map` en memoria |
+| Sesión OTP | Firestore `otp_sessions` para objetivo enterprise | `Map` en memoria con TTL; bloqueos en memoria y `tmp/otp-locks.json` |
 | Rutas BFF registro | `/api/customers/lookup`, `/api/otp/send`, `/api/otp/verify` | `/api/customer/lookup`, `/api/customer/otp/send`, `/api/customer/otp/validate` |
+| Rutas BFF login OTP | No estaba en el plan inicial | `/api/customer/otp/start-login`, `/api/customer/otp/send`, `/api/customer/otp/validate`, `/api/auth/login/complete` |
 | Headers MuleSoft `name`/`source`/`aplicacion` | `IDP-MiETB` | Implementado en `server/server.js` |
 | MS-4 | Contrato `POST /v1/digital-identity/registration` (recomendado) | `POST /operations/v1/customer/register` provisional |
 | Health check BFF | `GET /healthz` | `GET /api/health` |
@@ -550,8 +578,6 @@ sequenceDiagram
 
 ## Flujo Login Email Link
 
-El login principal de la pantalla IdP usa funcionalidades de GCP Identity Platform/Firebase Auth. MuleSoft MS-2/MS-3 queda para validacion ETB de registro/alta digital, no para autenticar usuarios existentes desde esta pantalla.
-
 ```mermaid
 sequenceDiagram
   autonumber
@@ -566,6 +592,38 @@ sequenceDiagram
   SPA->>IP: signInWithEmailLink(email, link)
   IP-->>SPA: Firebase user
   SPA->>SPA: getIdToken(true)
+  SPA-->>Partner: redirect_uri#id_token=...
+```
+
+## Flujo Login Codigo OTP
+
+La pantalla IdP tambien permite login por OTP para usuarios ETB existentes. Este flujo usa MiUso/MuleSoft MS-2/MS-3 por medio del BFF y termina en una autenticacion real de Identity Platform con `signInWithCustomToken`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Usuario
+  participant SPA as IdP SPA
+  participant BFF as BFF
+  participant MS as MiUso / MuleSoft
+  participant IP as Identity Platform
+  participant Partner as Cliente OIDC
+
+  U->>SPA: Selecciona Codigo OTP e ingresa correo
+  SPA->>BFF: POST /api/customer/otp/start-login + reCAPTCHA otp_send
+  BFF->>IP: Admin SDK getUserByEmail
+  BFF->>BFF: valida usuario habilitado + claims ETB
+  BFF->>MS: MS-2 envia OTP
+  BFF-->>SPA: sessionId + maskedEmail
+  U->>SPA: Ingresa codigo recibido
+  SPA->>BFF: POST /api/customer/otp/validate + reCAPTCHA otp_validate
+  BFF->>MS: MS-3 valida OTP
+  BFF-->>SPA: verificationToken
+  SPA->>BFF: POST /api/auth/login/complete
+  BFF->>IP: Admin SDK createCustomToken
+  BFF-->>SPA: customToken
+  SPA->>IP: signInWithCustomToken
+  IP-->>SPA: Firebase user + id_token
   SPA-->>Partner: redirect_uri#id_token=...
 ```
 
@@ -647,9 +705,9 @@ No incluir dirección, fecha de nacimiento, teléfono completo, correo completo 
 - BFF obligatorio para MuleSoft y Admin SDK.
 - Secret Manager para credenciales MuleSoft y JWT internos.
 - Rate limit por IP, documento, correo y sesión.
-- Firestore para `otp_sessions` con TTL lógico.
+- Implementacion actual: `Map` en memoria para sesiones OTP con TTL logico; objetivo enterprise: Firestore para `otp_sessions`.
 - `verificationToken` de BFF de un solo uso, TTL máximo 10 minutos.
-- reCAPTCHA Enterprise antes de `lookup`, `otp/send` y recuperación.
+- reCAPTCHA Enterprise antes de `lookup`, `otp/send`, `otp/start-login`, `otp/validate` y recuperación si se mueve a BFF.
 - Blocking Function `beforeCreate`/`beforeSignIn` para impedir altas sociales sin validación ETB.
 - Logs sin OTP, contraseñas, tokens, correo completo, dirección ni documento completo.
 

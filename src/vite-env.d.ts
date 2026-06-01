@@ -39,6 +39,8 @@ interface Window {
     recaptchaSiteKey?: string;
     enableLandingPage?: boolean;
     requireOidcRedirect?: boolean;
+    /** Controla la promocion de tiendas en movil. Default: visible en navegador, oculta en webview movil probable. */
+    showMobileStoreBadges?: boolean;
     /** Si true, la pestaña original intenta redirigir al partner. Default: false. */
     emailLinkPrimaryTabRedirect?: boolean;
     theme?: AppConfigTheme;

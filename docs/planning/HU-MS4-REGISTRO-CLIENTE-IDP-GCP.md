@@ -83,7 +83,8 @@ Sin este servicio, el BFF del IdP no tiene confirmación transaccional de que el
 Evidencia funcional y técnica:
 
 * El flujo IdP actual es SPA stateless OIDC y debe conservar el diseño documentado en [docs/architecture/TECH_README.md](../architecture/TECH_README.md).
-* El código actual de registro crea usuarios directamente desde frontend con `createUserWithEmailAndPassword`, lo cual debe reemplazarse por creación server-side después de MS-4. Evidencia: [src/components/RegisterForm.tsx](../../src/components/RegisterForm.tsx).
+* El código actual de registro ya delega la creación de usuario al BFF mediante `POST /api/customers/register` y la SPA completa sesión con `signInWithCustomToken`. Evidencia: [src/components/RegisterForm.tsx](../../src/components/RegisterForm.tsx) y [server/server.js](../../server/server.js).
+* La brecha vigente no es creación desde frontend, sino cerrar el contrato productivo de MS-4 y activarlo antes de crear o habilitar identidades cuando negocio exija alta digital previa.
 * El documento de arquitectura del IdP ubica MS-4 como paso obligatorio entre OTP válido y creación del usuario GCP. Evidencia: [docs/architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md](../architecture/IDP_MULESOFT_GCP_ARCHITECTURE.md).
 
 ### 1.4. Reglas de negocio relevantes

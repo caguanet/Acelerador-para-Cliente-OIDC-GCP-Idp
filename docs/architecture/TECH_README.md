@@ -36,6 +36,12 @@ classDiagram
         +signInWithPopup()
         +onGoToRegister()
     }
+    class EmailOtpLoginForm {
+        +startLogin()
+        +validateOtp()
+        +completeLogin()
+        +signInWithCustomToken()
+    }
     class ThemeConfig {
         +string brandName
         +string logoUrl
@@ -54,12 +60,14 @@ classDiagram
     }
 
     App *-- PasswordlessLoginForm : Renders email link login
+    App *-- EmailOtpLoginForm : Renders MiUso OTP login
     App *-- RegisterForm : Renders registration
     App ..> RuntimeConfig : Reads window.APP_CONFIG
     PasswordlessLoginForm ..> ThemeConfig : Styles
+    EmailOtpLoginForm ..> RuntimeConfig : Reads reCAPTCHA site key
 ```
 
-> **Login principal:** `App` muestra `PasswordlessLoginForm` con acceso por correo mediante Firebase Email Link/passwordless (`sendSignInLinkToEmail` y `signInWithEmailLink`). El mismo micrositio permite recuperación de contraseña con `sendPasswordResetEmail` para servicios externos que usan la contraseña creada durante el registro ETB. El OTP corto queda reservado para registro/alta digital ETB o una fase futura con BFF, no para el login principal del IdP.
+> **Login principal:** `App` muestra `PasswordlessLoginForm` con acceso por enlace seguro de Firebase Email Link/passwordless y `EmailOtpLoginForm` con acceso por `Codigo OTP` usando MiUso/MuleSoft MS-2/MS-3 a traves del BFF. En ambos casos, el resultado final es una sesion real de Firebase/Auth y la emision OIDC implicit al `redirect_uri` autorizado. El micrositio tambien permite recuperacion de contrasena con `sendPasswordResetEmail`.
 
 ### Mapa De Funcionalidades De Autenticación
 
@@ -72,6 +80,14 @@ flowchart TD
     EL1 --> EL2["Firebase envía enlace seguro"]
     EL2 --> EL3["signInWithEmailLink"]
     EL3 --> OIDC["Emisión OIDC implicit<br/>redirect_uri#id_token"]
+
+    IDP --> OTPLOGIN["Login Codigo OTP"]
+    OTPLOGIN --> OTP1["Ingresa correo"]
+    OTP1 --> OTP2["BFF valida usuario ETB<br/>y envia OTP MiUso MS-2"]
+    OTP2 --> OTP3["BFF valida OTP MiUso MS-3"]
+    OTP3 --> OTP4["Admin SDK emite customToken"]
+    OTP4 --> OTP5["signInWithCustomToken"]
+    OTP5 --> OIDC
 
     IDP --> REC["Recuperación de contraseña"]
     REC --> REC1["Ingresa correo"]
@@ -122,6 +138,40 @@ sequenceDiagram
     Client-->>User: Acceso Permitido
 ```
 
+### A.1. Flujo de Autenticación OIDC con Codigo OTP
+
+El usuario llega desde una App de un Socio y elige la pestaña `Codigo OTP`. MuleSoft/MiUso participa solo dentro del BFF; el cliente OIDC sigue recibiendo un `id_token` de Identity Platform en el fragmento del `redirect_uri`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as Usuario Final
+    participant Client as Partner App
+    participant IdP as IdP SPA
+    participant BFF as BFF Cloud Run
+    participant MS as MiUso / MuleSoft
+    participant Firebase as GCP Identity Platform
+
+    User->>Client: Clic en "Login con ETB"
+    Client->>IdP: Redirección OIDC (client_id, redirect_uri, state, nonce)
+    IdP->>IdP: Validar redirect_uri (Seguridad)
+    User->>IdP: Selecciona Codigo OTP e ingresa correo
+    IdP->>BFF: POST /api/customer/otp/start-login + reCAPTCHA
+    BFF->>Firebase: Admin SDK getUserByEmail
+    BFF->>MS: MS-2 envia OTP al correo ETB
+    BFF-->>IdP: sessionId + maskedEmail
+    User->>IdP: Ingresa OTP
+    IdP->>BFF: POST /api/customer/otp/validate + reCAPTCHA
+    BFF->>MS: MS-3 valida OTP
+    BFF-->>IdP: verificationToken
+    IdP->>BFF: POST /api/auth/login/complete
+    BFF->>Firebase: Admin SDK createCustomToken
+    BFF-->>IdP: customToken
+    IdP->>Firebase: signInWithCustomToken()
+    Firebase-->>IdP: ID Token (JWT)
+    IdP->>Client: Redirección con #id_token=...
+```
+
 ### B. Flujo Integral De Funcionalidades Del IdP
 
 ```mermaid
@@ -134,12 +184,20 @@ flowchart TD
 
     ENTRY --> CHOICE{"Acción del usuario"}
 
-    CHOICE --> EMAIL["Login por correo"]
+    CHOICE --> EMAIL["Login por enlace seguro"]
     EMAIL --> SENDLINK["Enviar email link Firebase"]
     SENDLINK --> OPENLINK["Usuario abre enlace"]
     OPENLINK --> VALIDLINK{"Enlace válido<br/>y usuario habilitado?"}
     VALIDLINK -- "Sí" --> TOKEN["Obtener id_token"]
     VALIDLINK -- "No" --> EMAILERR["Mostrar error amigable<br/>o pedir nuevo enlace"]
+
+    CHOICE --> OTPLOGIN["Login por Codigo OTP"]
+    OTPLOGIN --> STARTOTP["BFF inicia sesion OTP<br/>sin enumerar cuentas"]
+    STARTOTP --> SENDOTP["MiUso / MS-2 envia codigo"]
+    SENDOTP --> VERIFYOTP["MiUso / MS-3 valida codigo"]
+    VERIFYOTP --> CUSTOM["BFF emite customToken<br/>Firebase Admin SDK"]
+    CUSTOM --> SIGNCUSTOM["SPA ejecuta signInWithCustomToken"]
+    SIGNCUSTOM --> TOKEN
 
     CHOICE --> SOCIAL["Login con red social"]
     SOCIAL --> SOCIALOK{"Proveedor vinculado<br/>o usuario ETB validado?"}

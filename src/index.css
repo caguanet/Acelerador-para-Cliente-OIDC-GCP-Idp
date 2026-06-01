@@ -30,11 +30,20 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  min-width: 320px;
+  min-height: 100%;
+  scroll-padding-bottom: max(6rem, env(safe-area-inset-bottom, 0px));
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   display: block;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   /* Premium Light Gradient inspired by their clean site */
   background: linear-gradient(180deg, #ffffff 0%, #E6F4FF 100%);
   overflow-x: hidden;
@@ -706,6 +715,7 @@ ul.firebaseui-idp-list {
 
 .login-desktop {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -750,7 +760,7 @@ ul.firebaseui-idp-list {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 2.5rem 1.5rem 1rem;
+    padding: max(2.5rem, env(safe-area-inset-top, 0px)) 1.5rem 1rem;
     flex: none;
 }
 
@@ -805,6 +815,7 @@ ul.firebaseui-idp-list {
     gap: 0.55rem;
     flex-wrap: wrap;
     align-items: stretch;
+    container-type: inline-size;
 }
 
 /* Enlaces a tiendas: aspecto botón, elevación y brillo (marca ETB: acento cian sutil) */
@@ -862,6 +873,20 @@ ul.firebaseui-idp-list {
     z-index: 2;
 }
 
+.app-badge__icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: 0 0 auto;
+}
+
+.app-badge__icon--apple {
+    fill: #f7f8fb;
+}
+
+.app-badge__copy {
+    min-width: 0;
+}
+
 .app-badge:hover {
     transform: translateY(-4px) scale(1.03);
     border-color: rgba(0, 229, 255, 0.42);
@@ -888,6 +913,13 @@ ul.firebaseui-idp-list {
     font-size: 0.76rem;
     display: block;
     letter-spacing: 0.02em;
+}
+
+@container (max-width: 420px) {
+    .app-badge {
+        min-width: 9.5rem;
+        justify-content: center;
+    }
 }
 
 .app-badge--apple:hover {
@@ -1033,15 +1065,15 @@ ul.firebaseui-idp-list {
 }
 
 .login-field input {
-    height: 45px;
+    height: 48px;
     border-radius: 16px;
-    font-size: 0.875rem;
+    font-size: 1rem;
 }
 
 .login-btn-primary {
-    height: 45px;
+    min-height: 48px;
     border-radius: 38px;
-    font-size: 0.875rem;
+    font-size: 1rem;
 }
 
 /* Social buttons — mobile: full width pill with icon + label */
@@ -1053,7 +1085,7 @@ ul.firebaseui-idp-list {
 }
 
 .login-btn-social {
-    height: 44px; /* WCAG 2.5.5 mínimo */
+    min-height: 48px;
     border-radius: 38px;
     width: 100%;
     justify-content: center;
@@ -1061,7 +1093,7 @@ ul.firebaseui-idp-list {
 }
 
 .login-social-label {
-    font-size: 0.875rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--brand-secondary);
     font-family: 'Lexend Deca', sans-serif;
@@ -1094,15 +1126,60 @@ ul.firebaseui-idp-list {
     .login-mobile-app-stores { display: none; }
     .login-tagline        { display: none; }
 
-    /* ---- Left hero panel — invisible spacer on desktop ----
-       The background IMAGE already contains the text + badges + arc baked in.
-       This element just pushes the card to the right. Content is hidden. */
+    /* ---- Left hero panel ----
+       The background image contains the campaign artwork. Store links are
+       rendered as real anchors over the baked badge area so they are clickable. */
     .login-hero {
         display: flex;
         flex: 1;
         min-height: 100vh;
-        visibility: hidden;
+        min-height: 100dvh;
+        position: relative;
+        visibility: visible;
         pointer-events: none;
+    }
+
+    .login-hero-inner {
+        position: absolute;
+        left: clamp(7.5rem, 13.4vw, 16.75rem);
+        top: clamp(24.5rem, 61.5vh, 30rem);
+        width: min(34rem, calc(100vw - 670px));
+        pointer-events: auto;
+    }
+
+    .login-hero-inner::before {
+        content: '';
+        position: absolute;
+        inset: -0.25rem -0.3rem auto -0.3rem;
+        height: 3.65rem;
+        border-radius: 14px;
+        background: linear-gradient(90deg, #155994, #1472a3);
+        box-shadow: 0 8px 22px rgba(0, 36, 77, 0.16);
+    }
+
+    .login-hero-title,
+    .login-hero-accent,
+    .login-hero-desc,
+    .login-hero-app-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .login-hero .login-hero-badges {
+        position: relative;
+        gap: 0.65rem;
+        max-width: 100%;
+        z-index: 1;
+    }
+
+    .login-hero .app-badge {
+        min-height: 2.75rem;
+        padding: 0.5rem 0.8rem;
     }
 
     /* ---- Right card panel — floats over hero image ---- */
@@ -1111,6 +1188,7 @@ ul.firebaseui-idp-list {
         min-width: 480px;
         flex: none;
         min-height: 100vh;
+        min-height: 100dvh;
         align-items: center;
         justify-content: center;
         padding: 2rem 3.25rem 2rem 1.5rem;
@@ -1229,6 +1307,7 @@ ul.firebaseui-idp-list {
    ================================================ */
 .action-page {
     min-height: 100vh;
+    min-height: 100dvh;
     display: grid;
     grid-template-columns: 1fr;
     background: linear-gradient(180deg, var(--brand-hero-gradient-start) 0%, var(--brand-hero-gradient-end) 100%);
@@ -1265,6 +1344,7 @@ ul.firebaseui-idp-list {
 
 .action-card-panel {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1421,6 +1501,7 @@ ul.firebaseui-idp-list {
         display: flex;
         align-items: flex-end;
         min-height: 100vh;
+        min-height: 100dvh;
         padding: 4rem 6vw;
         box-sizing: border-box;
     }
@@ -1492,12 +1573,12 @@ ul.firebaseui-idp-list {
     width: 100%;
     box-sizing: border-box;
     /* Misma altura base que login por contraseña en móvil (ver .login-field input) */
-    height: 45px;
+    height: 48px;
     padding: 0.95rem 0.875rem 0.2rem;
     border: 1.5px solid var(--glass-border);
     border-radius: 16px;
     background: #fff;
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-family: 'Lexend Deca', sans-serif;
     color: var(--brand-text);
     outline: none;
@@ -1585,6 +1666,7 @@ ul.firebaseui-idp-list {
 
 .auth-tab {
     flex: 1;
+    min-height: 48px;
     padding: 0.5rem 0.75rem;
     border: none;
     border-radius: 0.5rem;
@@ -1594,7 +1676,16 @@ ul.firebaseui-idp-list {
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
     transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-tab:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
 }
 
 .auth-tab.is-active {
@@ -1699,7 +1790,7 @@ ul.firebaseui-idp-list {
 /* ── Secondary outlined button ── */
 .otp-btn-secondary {
     width: 100%;
-    height: 45px;
+    min-height: 48px;
     border: 1.5px solid var(--brand-secondary);
     border-radius: 38px;
     background: transparent;
@@ -1722,6 +1813,11 @@ ul.firebaseui-idp-list {
 
 /* ── Back link ── */
 .otp-back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
     background: none;
     border: none;
     color: var(--brand-text-secondary);
@@ -1729,11 +1825,17 @@ ul.firebaseui-idp-list {
     font-family: 'Lexend Deca', sans-serif;
     cursor: pointer;
     text-decoration: underline;
-    padding: 0;
+    padding: 0.25rem 0.75rem;
     text-align: center;
 }
 
 .otp-back-link:hover { color: var(--brand-primary); }
+
+.otp-back-link:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+    border-radius: 999px;
+}
 
 /* ── SUCCESS state ── */
 .otp-success {
@@ -1829,7 +1931,7 @@ ul.firebaseui-idp-list {
         font-size: 0.72rem;
     }
 
-    .otp-btn-secondary { height: 58px; border-radius: 20px; font-size: 0.9rem; }
+    .otp-btn-secondary { min-height: 58px; border-radius: 20px; font-size: 0.9rem; }
     .otp-box { font-size: 1.5rem; }
 }
 
@@ -1849,7 +1951,7 @@ ul.firebaseui-idp-list {
 
 .reg-customer-tab {
     flex: 1;
-    height: 38px;
+    min-height: 44px;
     border: none;
     border-radius: 9px;
     background: transparent;
@@ -1900,12 +2002,12 @@ ul.firebaseui-idp-list {
 .reg-floating-input {
     width: 100%;
     box-sizing: border-box;
-    height: 45px;
+    height: 48px;
     padding: 0 20px;
     border: 1.5px solid var(--brand-text-secondary);
     border-radius: 16px;
     background: var(--brand-card-bg);
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-family: inherit;
     color: var(--brand-text-secondary);
     outline: none;
@@ -1940,12 +2042,12 @@ ul.firebaseui-idp-list {
 .reg-floating-select {
     width: 100%;
     box-sizing: border-box;
-    height: 45px;
+    height: 48px;
     padding: 1rem 0.75rem 0.25rem;
     border: 1.5px solid var(--brand-text-secondary);
     border-radius: 16px;
     background: var(--brand-card-bg);
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-family: inherit;
     color: var(--brand-text-secondary);
     outline: none;
@@ -2060,12 +2162,13 @@ ul.firebaseui-idp-list {
     line-height: 1.5;
     margin-bottom: 0.625rem;
     cursor: pointer;
+    min-height: 44px;
 }
 
 .reg-checkbox-row input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    min-width: 18px;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
     margin-top: 1px;
     cursor: pointer;
     accent-color: var(--brand-secondary);
@@ -2077,6 +2180,9 @@ ul.firebaseui-idp-list {
 }
 
 .reg-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     background: none;
     border: none;
     color: var(--brand-secondary);
@@ -2084,11 +2190,17 @@ ul.firebaseui-idp-list {
     font-size: inherit;
     font-family: inherit;
     cursor: pointer;
-    padding: 0;
+    padding: 0 0.125rem;
     text-decoration: underline;
 }
 
 .reg-link:hover { color: var(--brand-primary); }
+
+.reg-link:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
 
 /* ── Password requirements list ── */
 .reg-pwd-requirements {
@@ -2227,7 +2339,7 @@ ul.firebaseui-idp-list {
 @media (min-width: 1024px) {
     .reg-floating-input  { height: 58px; border-radius: 20px; font-size: 0.95rem; }
     .reg-floating-select { height: 58px; border-radius: 20px; font-size: 0.95rem; }
-    .reg-customer-tab    { height: 42px; font-size: 0.875rem; }
+    .reg-customer-tab    { min-height: 44px; font-size: 0.875rem; }
     .reg-floating-input:focus ~ .reg-floating-label,
     .reg-floating-input--filled ~ .reg-floating-label { top: 8px; }
     .reg-floating-label--select { top: 8px; }

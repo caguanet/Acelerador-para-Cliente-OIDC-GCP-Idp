@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import crypto from 'crypto';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import admin from 'firebase-admin';
@@ -131,6 +132,33 @@ function getBooleanEnv(name, fallback = false) {
     return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+const PUBLIC_APP_CONFIG_FORBIDDEN_PATTERNS = [
+    /MULESOFT/i,
+    /CLIENT_SECRET/i,
+    /OAUTH_CLIENT_SECRET/i,
+    /RECAPTCHA_API_KEY/i,
+    /GOOGLE_APPLICATION_CREDENTIALS/i,
+    /FIREBASE_CONFIG/i,
+    /FIREBASE_SERVICE_ACCOUNT/i,
+    /PRIVATE_KEY/i,
+    /SERVICE_ACCOUNT/i,
+    /PASSWORD/i,
+    /ACCESS_TOKEN/i,
+    /REFRESH_TOKEN/i,
+    /BEARER/i,
+];
+
+function assertPublicAppConfigSafe(appConfig) {
+    const serializedConfig = JSON.stringify(appConfig);
+    const leakedPatterns = PUBLIC_APP_CONFIG_FORBIDDEN_PATTERNS
+        .filter(pattern => pattern.test(serializedConfig))
+        .map(pattern => pattern.source);
+
+    if (leakedPatterns.length > 0) {
+        throw new Error(`Public APP_CONFIG contains forbidden private fields: ${leakedPatterns.join(', ')}`);
+    }
+}
+
 const configuredCorsOrigins = parseOriginList(process.env.CORS_ALLOWED_ORIGINS || process.env.VITE_ALLOWED_ORIGINS || '');
 
 // Enable CORS. Production must be explicit; local simulation remains permissive.
@@ -160,22 +188,87 @@ const OTP_LOCK_MS = Number(process.env.OTP_LOCK_MS || 2 * 60 * 60 * 1000);
 const LOOKUP_RATE_LIMIT_MAX = Number(process.env.LOOKUP_RATE_LIMIT_MAX || 10);
 const OTP_SEND_RATE_LIMIT_MAX = Number(process.env.OTP_SEND_RATE_LIMIT_MAX || 5);
 const OTP_VALIDATE_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_RATE_LIMIT_MAX || 15);
+const OTP_VALIDATE_SESSION_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_SESSION_RATE_LIMIT_MAX || 5);
+const RECAPTCHA_MIN_SCORE = Number(process.env.RECAPTCHA_MIN_SCORE || 0.5);
 const ID_QUERY_MAX_PER_HOUR = Number(process.env.ID_QUERY_MAX_PER_HOUR || 5);
 const otpLockStore = new Map();
+const OTP_LOCK_STORE_FILE = getTrimmedEnv('OTP_LOCK_STORE_FILE') || path.join(__dirname, '..', 'tmp', 'otp-locks.json');
 const MULESOFT_APP_ID = 'IDP-MiETB';
+const MULESOFT_SERVICE_NAMES = {
+    ms1: 'Consulta de cliente y correo registrado',
+    ms2: 'Envio de codigo OTP por correo',
+    ms3: 'Validacion de codigo OTP',
+    ms4: 'Registro de identidad digital ETB'
+};
+
+function getOtpLockStoreKey(rawKey) {
+    if (!rawKey) return '';
+    const value = String(rawKey);
+    if (value.startsWith('OTP_LOCK:')) return value;
+    return `OTP_LOCK:${hashSecret(value)}`;
+}
+
+function persistOtpLocks() {
+    if (!OTP_LOCK_STORE_FILE || OTP_LOCK_STORE_FILE === 'off') return;
+    try {
+        const now = Date.now();
+        const locks = [];
+        for (const [key, lock] of otpLockStore.entries()) {
+            if (lock && Number(lock.lockedUntil) > now) {
+                locks.push({ key, lockedUntil: Number(lock.lockedUntil) });
+            }
+        }
+        fs.mkdirSync(path.dirname(OTP_LOCK_STORE_FILE), { recursive: true });
+        fs.writeFileSync(OTP_LOCK_STORE_FILE, JSON.stringify({ version: 1, locks }, null, 2), { mode: 0o600 });
+    } catch (err) {
+        console.warn('Could not persist OTP lock store:', err.message);
+    }
+}
+
+function loadPersistedOtpLocks() {
+    if (!OTP_LOCK_STORE_FILE || OTP_LOCK_STORE_FILE === 'off' || !fs.existsSync(OTP_LOCK_STORE_FILE)) return;
+    try {
+        const parsed = JSON.parse(fs.readFileSync(OTP_LOCK_STORE_FILE, 'utf8'));
+        const locks = Array.isArray(parsed?.locks) ? parsed.locks : [];
+        const now = Date.now();
+        for (const lock of locks) {
+            const key = typeof lock?.key === 'string' ? lock.key : '';
+            const lockedUntil = Number(lock?.lockedUntil || 0);
+            if (key.startsWith('OTP_LOCK:') && lockedUntil > now) {
+                otpLockStore.set(key, { lockedUntil });
+            }
+        }
+    } catch (err) {
+        console.warn('Could not load OTP lock store:', err.message);
+    }
+}
+
+function setOtpLock(rawKey, lockedUntil) {
+    const key = getOtpLockStoreKey(rawKey);
+    if (!key) return;
+    otpLockStore.set(key, { lockedUntil });
+}
+
+loadPersistedOtpLocks();
 
 // Periodic Session Cleanup to avoid memory leaks
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [sid, session] of sessionStore.entries()) {
         if (now > session.expiresAt || now - session.createdAt > SESSION_TTL_MS) {
             sessionStore.delete(sid);
         }
     }
+    let changedLocks = false;
     for (const [key, lock] of otpLockStore.entries()) {
-        if (now > lock.lockedUntil) otpLockStore.delete(key);
+        if (now > lock.lockedUntil) {
+            otpLockStore.delete(key);
+            changedLocks = true;
+        }
     }
+    if (changedLocks) persistOtpLocks();
 }, 5 * 60 * 1000); // Clean every 5 minutes
+cleanupInterval.unref?.();
 
 // --- Security: Rate Limiters by IP ---
 const lookupLimiter = rateLimit({
@@ -197,6 +290,15 @@ const otpSendLimiter = rateLimit({
 const otpValidateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 mins
     max: OTP_VALIDATE_RATE_LIMIT_MAX,
+    message: { error: 'Límite de intentos de validación excedido. Por favor intenta más tarde.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const otpValidateSessionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 mins
+    max: OTP_VALIDATE_SESSION_RATE_LIMIT_MAX,
+    keyGenerator: (req) => `OTP_VALIDATE_SESSION:${hashSecret(String(req.body?.sessionId || 'missing'))}`,
     message: { error: 'Límite de intentos de validación excedido. Por favor intenta más tarde.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -283,9 +385,17 @@ function getMulesoftLogUrl(url) {
 }
 
 function logMulesoftEvent(event, details = {}, level = 'log') {
+    const serviceKey = event.match(/^mulesoft\.(ms\d)\./)?.[1];
+    const serviceDetails = serviceKey
+        ? {
+            serviceCode: serviceKey.toUpperCase(),
+            serviceName: MULESOFT_SERVICE_NAMES[serviceKey]
+        }
+        : {};
     const payload = {
         event,
         app: MULESOFT_APP_ID,
+        ...serviceDetails,
         ...details
     };
     console[level](JSON.stringify(payload));
@@ -337,13 +447,25 @@ function maskIdentityKey(identityKey) {
 }
 
 function isOtpLocked(identityKey) {
-    const lock = otpLockStore.get(identityKey);
+    const lockKey = getOtpLockStoreKey(identityKey);
+    const lock = otpLockStore.get(lockKey);
     if (!lock) return false;
     if (Date.now() > lock.lockedUntil) {
-        otpLockStore.delete(identityKey);
+        otpLockStore.delete(lockKey);
+        persistOtpLocks();
         return false;
     }
     return true;
+}
+
+function isSessionOtpLocked(session) {
+    if (!session) return false;
+    if (session.status === 'BLOCKED') return true;
+    if (session.identityKey && isOtpLocked(session.identityKey)) return true;
+    if (session.intent === 'login' && session.emailHash && isOtpLocked(getLoginEmailLockKeyFromHash(session.emailHash))) {
+        return true;
+    }
+    return false;
 }
 
 function getOtpLockMessage() {
@@ -355,6 +477,11 @@ function isValidRegisteredEmail(email) {
     const value = email.trim();
     if (value.length < 6 || value.length > 254 || /\s/.test(value)) return false;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function getLoginEmailLockKeyFromHash(emailHash) {
+    if (!emailHash) return '';
+    return `EMAIL_LOGIN:${emailHash}`;
 }
 
 function getMulesoftOtpValidationPath(baseUrl) {
@@ -392,9 +519,15 @@ function registerOtpFailure(session) {
         const lockedUntil = Date.now() + OTP_LOCK_MS;
         session.status = 'BLOCKED';
         session.lockedUntil = lockedUntil;
-        if (session.identityKey) {
-            otpLockStore.set(session.identityKey, { lockedUntil });
+        const lockKeys = new Set();
+        if (session.identityKey) lockKeys.add(session.identityKey);
+        if (session.intent === 'login' && session.emailHash) {
+            lockKeys.add(getLoginEmailLockKeyFromHash(session.emailHash));
         }
+        for (const lockKey of lockKeys) {
+            setOtpLock(lockKey, lockedUntil);
+        }
+        persistOtpLocks();
         return { blocked: true };
     }
 
@@ -542,10 +675,21 @@ async function verifyRecaptcha(token, action) {
     }
 }
 
+async function verifyRecaptchaOrReject(res, token, action) {
+    const captchaRes = await verifyRecaptcha(token, action);
+    if (!captchaRes.success || (captchaRes.score && captchaRes.score < RECAPTCHA_MIN_SCORE)) {
+        res.status(403).json({ error: 'Verificación de seguridad fallida.' });
+        return false;
+    }
+    return true;
+}
+
 // --- Config Injection Endpoint ---
 // Serve window.APP_CONFIG inside public / Cloud Run container
 app.get('/config.js', (req, res) => {
     res.type('application/javascript');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     const mode = getTrimmedEnv('APP_MODE') || 'IDP';
     
     const firebaseConfig = {
@@ -570,6 +714,14 @@ app.get('/config.js', (req, res) => {
         requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT'),
         emailLinkPrimaryTabRedirect: getBooleanEnv('EMAIL_LINK_PRIMARY_TAB_REDIRECT', false)
     };
+
+    try {
+        assertPublicAppConfigSafe(appConfig);
+    } catch (error) {
+        console.error('Unsafe public APP_CONFIG blocked:', error.message);
+        res.status(500).send('window.APP_CONFIG = {};');
+        return;
+    }
 
     res.send(`window.APP_CONFIG = ${JSON.stringify(appConfig)};`);
 });
@@ -686,10 +838,7 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
     trackIdQuery(identityKey);
 
     // Verify reCAPTCHA
-    const captchaRes = await verifyRecaptcha(recaptchaToken, 'lookup');
-    if (!captchaRes.success || (captchaRes.score && captchaRes.score < 0.5)) {
-        return res.status(403).json({ error: 'Verificación de seguridad fallida. Petición rechazada.' });
-    }
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'lookup'))) return;
 
     const mUrl = process.env.MULESOFT_BASE_URL_MS1;
     const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
@@ -822,7 +971,11 @@ app.post('/api/customer/otp/start-login', requireAllowedBrowserOrigin, otpSendLi
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const emailHash = hashSecret(normalizedEmail);
-    const emailRateKey = `EMAIL_LOGIN:${emailHash}`;
+    const emailRateKey = getLoginEmailLockKeyFromHash(emailHash);
+
+    if (isOtpLocked(emailRateKey)) {
+        return res.status(423).json({ error: getOtpLockMessage() });
+    }
 
     if (isIdBlocked(emailRateKey)) {
         return res.status(429).json({ error: 'Se ha detectado actividad sospechosa con este correo. Intenta nuevamente más tarde.' });
@@ -830,10 +983,7 @@ app.post('/api/customer/otp/start-login', requireAllowedBrowserOrigin, otpSendLi
     trackIdQuery(emailRateKey);
 
     // Verify reCAPTCHA (reuse the otp_send action assessment)
-    const captchaRes = await verifyRecaptcha(recaptchaToken, 'otp_send');
-    if (!captchaRes.success || (captchaRes.score && captchaRes.score < 0.5)) {
-        return res.status(403).json({ error: 'Verificación de seguridad fallida.' });
-    }
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'otp_send'))) return;
 
     const sessionId = crypto.randomUUID();
     const now = Date.now();
@@ -882,7 +1032,7 @@ app.post('/api/customer/otp/start-login', requireAllowedBrowserOrigin, otpSendLi
     }
 
     const identityKey = getIdentityKey(eligibleUser.docType, eligibleUser.docNumber);
-    if (isOtpLocked(identityKey)) {
+    if (isOtpLocked(identityKey) || isOtpLocked(emailRateKey)) {
         return res.status(423).json({ error: getOtpLockMessage() });
     }
 
@@ -943,15 +1093,12 @@ app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, 
         return res.status(404).json({ error: 'La sesión ha expirado. Por favor, inicia nuevamente el registro.' });
     }
 
-    if (session.status === 'BLOCKED' || isOtpLocked(session.identityKey)) {
+    if (isSessionOtpLocked(session)) {
         return res.status(423).json({ error: getOtpLockMessage() });
     }
 
     // Verify reCAPTCHA
-    const captchaRes = await verifyRecaptcha(recaptchaToken, 'otp_send');
-    if (!captchaRes.success || (captchaRes.score && captchaRes.score < 0.5)) {
-        return res.status(403).json({ error: 'Verificación de seguridad fallida.' });
-    }
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'otp_send'))) return;
 
     // Shadow login sessions (non-eligible email) never reach MuleSoft, but they
     // must respond identically to avoid account enumeration.
@@ -969,8 +1116,8 @@ app.post('/api/customer/otp/send', requireAllowedBrowserOrigin, otpSendLimiter, 
 });
 
 // 3. Validate OTP (MS-3)
-app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateLimiter, async (req, res) => {
-    const { sessionId, code } = req.body;
+app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateLimiter, otpValidateSessionLimiter, async (req, res) => {
+    const { sessionId, code, recaptchaToken } = req.body;
 
     if (!sessionId || !/^\d{6}$/.test(String(code || ''))) {
         return res.status(400).json({ error: 'Faltan campos requeridos para la validación.' });
@@ -986,9 +1133,11 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
         return res.status(404).json({ error: 'La sesión ha expirado. Por favor, inicia nuevamente el registro.' });
     }
 
-    if (session.status === 'BLOCKED' || isOtpLocked(session.identityKey)) {
+    if (isSessionOtpLocked(session)) {
         return res.status(423).json({ error: getOtpLockMessage() });
     }
+
+    if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'otp_validate'))) return;
 
     // Shadow login sessions have no real OTP transaction; treat every code as
     // invalid (and count attempts) so they are indistinguishable from a wrong code.
@@ -1311,6 +1460,18 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(DIST_PATH, 'index.html'));
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+function __resetForTests() {
+    sessionStore.clear();
+    otpLockStore.clear();
+    idQueryTracker.clear();
+}
+
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isMainModule) {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
+
+export { app, __resetForTests };

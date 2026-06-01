@@ -29,11 +29,11 @@
 <line x1="600" y1="671" x2="600" y2="705" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
 <rect x="330" y="705" width="540" height="82" rx="16" fill="#fff7ed" stroke="#d86055" stroke-width="3"/>
 <text x="600.0" y="739.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">6. OTP por EMAIL</text>
-<text x="600.0" y="769.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Objetivo pendiente; mock en pruebas</text>
+<text x="600.0" y="769.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">MS-2 envia OTP por correo</text>
 <line x1="600" y1="787" x2="600" y2="821" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
 <rect x="330" y="821" width="540" height="82" rx="16" fill="#fff7ed" stroke="#d86055" stroke-width="3"/>
 <text x="600.0" y="855.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">7. /otp/validate</text>
-<text x="600.0" y="885.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Canal real pendiente o mock</text>
+<text x="600.0" y="885.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">MS-3 valida OTP por correo</text>
 <line x1="600" y1="903" x2="600" y2="937" stroke="#214780" stroke-width="4" marker-end="url(#arrow)"/>
 <rect x="330" y="937" width="540" height="82" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
 <text x="600.0" y="971.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">8. /customers/register</text>
@@ -54,5 +54,5 @@
 <rect x="330" y="1401" width="540" height="82" rx="16" fill="#eef7f9" stroke="#0092bc" stroke-width="3"/>
 <text x="600.0" y="1435.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">12. Cliente OIDC</text>
 <text x="600.0" y="1465.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111827">Retorno redirect_uri#id_token</text>
-<text x="600.0" y="1527" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="400" fill="#d86055">Nota: OTP por correo es deseable, pero pendiente de confirmar e integrar.</text>
+<text x="600.0" y="1527" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="400" fill="#d86055">Nota: modo mock solo para desarrollo; pruebas reales usan MiUso/MuleSoft.</text>
 </svg>

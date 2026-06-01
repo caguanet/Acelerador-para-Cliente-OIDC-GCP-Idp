@@ -106,6 +106,65 @@ describe('EmailOtpLoginForm', () => {
     expect(onSignInSuccess).not.toHaveBeenCalled();
   });
 
+  it('distingue un fallo de Firebase después de validar el OTP', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/customer/otp/start-login') {
+        return jsonResponse(true, { success: true, sessionId: 'sess-firebase', maskedEmail: 'cl****@etb.com.co' });
+      }
+      if (url === '/api/customer/otp/validate') {
+        return jsonResponse(true, { success: true, verificationToken: 'vt-firebase' });
+      }
+      if (url === '/api/auth/login/complete') {
+        return jsonResponse(true, { success: true, customToken: 'custom-token-firebase' });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    (signInWithCustomToken as any).mockRejectedValue(new Error('Firebase: Error (auth/requests-from-referer-blocked).'));
+
+    render(<EmailOtpLoginForm onSignInSuccess={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'cliente@etb.com.co' } });
+    fireEvent.click(screen.getByRole('button', { name: /Enviar código de acceso/i }));
+
+    const codeInput = await screen.findByLabelText('Código de acceso');
+    fireEvent.change(codeInput, { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /Ingresar/i }));
+
+    expect(await screen.findByText(/No pudimos completar el inicio de sesión/i)).toBeInTheDocument();
+  });
+
+  it('bloquea ingreso y reenvío cuando se superan los intentos permitidos', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/customer/otp/start-login') {
+        return jsonResponse(true, { success: true, sessionId: 'sess-locked', maskedEmail: 'cl****@etb.com.co' });
+      }
+      if (url === '/api/customer/otp/validate') {
+        return {
+          ok: false,
+          status: 423,
+          text: async () => JSON.stringify({ error: 'Has superado los intentos permitidos. Por seguridad, intenta nuevamente en 2 horas.' }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<EmailOtpLoginForm onSignInSuccess={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'cliente@etb.com.co' } });
+    fireEvent.click(screen.getByRole('button', { name: /Enviar código de acceso/i }));
+
+    const codeInput = await screen.findByLabelText('Código de acceso');
+    fireEvent.change(codeInput, { target: { value: '000000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Ingresar/i }));
+
+    expect(await screen.findByText(/superado los intentos permitidos/i)).toBeInTheDocument();
+    expect(codeInput).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Ingresar/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Reenvío bloqueado/i })).toBeDisabled();
+  });
+
   it('bloquea el acceso por código sin contexto OIDC cuando es requerido', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

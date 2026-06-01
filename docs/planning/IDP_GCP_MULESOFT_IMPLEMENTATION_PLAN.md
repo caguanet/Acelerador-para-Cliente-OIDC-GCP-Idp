@@ -165,7 +165,7 @@ Endpoints mínimos:
 - `POST /api/otp/verify`
 - `POST /api/customers/register`
 
-Nota: el login principal del IdP usa Firebase Email Link/passwordless desde la SPA. El OTP corto se conserva para registro/alta digital ETB; un OTP de login por correo requeriría una fase futura con BFF y proveedor de correo/OTP.
+Nota de estado 2026-05-31: el login por OTP de correo ya fue implementado en el monolito `server/server.js` con BFF, MiUso/MuleSoft MS-2/MS-3 y Firebase Admin SDK. El plan modular `idp-bff-service` sigue siendo objetivo de evolucion, pero la implementacion actual vive en el mismo Cloud Run que sirve la SPA.
 
 Criterio de aceptación:
 
@@ -304,17 +304,19 @@ Objetivo: quitar mocks y crear sesión real.
 
 Cambios:
 
-- `src/App.tsx`: usar Firebase Email Link/passwordless como login principal del IdP.
-- `src/components/RegisterForm.tsx`: reemplazar `setTimeout` y `createUserWithEmailAndPassword`.
-- Crear `src/services/etbAuthApi.ts`.
-- Crear `src/services/recaptcha.ts`.
+- `src/App.tsx`: mantener Firebase Email Link/passwordless y exponer la pestaña `Codigo OTP` como metodo adicional de login.
+- `src/components/RegisterForm.tsx`: usar el BFF (`/api/customers/register`) y completar sesion con `signInWithCustomToken`; estado actual ya implementado en el monolito Express.
+- `src/components/EmailOtpLoginForm.tsx`: iniciar login OTP, validar codigo y completar `signInWithCustomToken`; estado actual ya implementado.
+- Evolucion opcional: extraer llamadas BFF a un servicio cliente tipado si el codigo crece.
+- Mantener `src/utils/recaptcha.ts` como helper actual para reCAPTCHA Enterprise en navegador.
 - Agregar runtime config:
-  - `BACKEND_URL`
-  - `RECAPTCHA_SITE_KEY`
+  - `recaptchaSiteKey`
+  - origenes OIDC en `allowedOrigins`
 
 Criterio de aceptación:
 
 - Login por email link redirige al RP con `id_token`.
+- Login por `Codigo OTP` valida MS-2/MS-3 via BFF, autentica con `signInWithCustomToken` y redirige al RP con `id_token`.
 - Registro Hogares crea usuario en Identity Platform vía BFF.
 - Registro bloquea cuando MuleSoft responde no elegible o no entrega indicador fidedigno.
 

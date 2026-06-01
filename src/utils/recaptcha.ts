@@ -8,14 +8,13 @@
 const RECAPTCHA_ENTERPRISE_SCRIPT_ID = 'recaptcha-enterprise-script';
 const RECAPTCHA_SIM_TOKEN = 'SIM_TOKEN';
 
-export type RecaptchaAction = 'lookup' | 'otp_send';
+export type RecaptchaAction = 'lookup' | 'otp_send' | 'otp_validate';
 
 let recaptchaScriptPromise: Promise<void> | null = null;
 
 export function getConfiguredRecaptchaSiteKey(): string {
     const runtimeKey = window.APP_CONFIG?.recaptchaSiteKey;
-    const envKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
-    return (runtimeKey || envKey || '').trim();
+    return (runtimeKey || '').trim();
 }
 
 export function loadRecaptchaEnterprise(siteKey: string): Promise<void> {

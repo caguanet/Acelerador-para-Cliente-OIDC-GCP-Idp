@@ -238,6 +238,54 @@ gcloud run deploy mock-client \
 
 Luego agregar la URL del mock a `VITE_ALLOWED_ORIGINS` solo en QA/dev. La forma canonica de editar esa variable esta en [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#62-editar-por-consola).
 
+## Preview aislado para login OTP
+
+Cuando se necesite probar el login `Codigo OTP` sin afectar el servicio publicado `idp-service`, usar servicios separados:
+
+| Servicio | Uso |
+| --- | --- |
+| `idp-service-otp-preview` | IdP preview con SPA+BFF, MuleSoft real y Firebase/Auth real. |
+| `mock-client-otp-preview` | Cliente OIDC de prueba que apunta al IdP preview. |
+
+El script automatizado vigente es:
+
+```bash
+node scripts/deploy-isolated-cloudrun.mjs
+```
+
+Comportamiento esperado:
+
+- Construye y despliega una imagen para `idp-service-otp-preview`.
+- Construye y despliega `mock-client-otp-preview` con `Dockerfile.mock`.
+- Configura el mock para redirigir al IdP preview.
+- Configura `VITE_ALLOWED_ORIGINS` y `CORS_ALLOWED_ORIGINS` del IdP preview para aceptar el mock preview y el propio origen del IdP.
+- No modifica el servicio `idp-service` ni su trafico.
+
+Validaciones obligatorias despues de desplegar:
+
+```bash
+curl -fsS https://idp-service-otp-preview-2tczqvffra-ue.a.run.app/api/health
+PUBLIC_BASE_URL=https://idp-service-otp-preview-2tczqvffra-ue.a.run.app pnpm run verify:public-config
+PUBLIC_BASE_URL=https://mock-client-otp-preview-2tczqvffra-ue.a.run.app pnpm run verify:public-config
+```
+
+Configuracion GCP adicional del preview:
+
+- Agregar dominios preview en Identity Platform `authorizedDomains`.
+- Agregar dominios preview en HTTP referrers de la API key web de Firebase, incluyendo variante exacta y `/*`.
+- Agregar dominios preview en la web key de reCAPTCHA.
+- Confirmar que `idp-service-sa` puede emitir custom tokens; si aparece `iam.serviceAccounts.signBlob denied`, ver [GCP_FIREBASE_PROD_CONFIGURATION.md](GCP_FIREBASE_PROD_CONFIGURATION.md#5-iam-para-la-service-account-de-cloud-run).
+- Si MuleSoft QA requiere `MULESOFT_OAUTH_CLIENT_ID` o `MULESOFT_OAUTH_CLIENT_SECRET` vacios, configurar esas variables como valor literal vacio en el preview en lugar de montar secretos con valores no esperados por el token service.
+
+Prueba funcional de cierre:
+
+1. Abrir `mock-client-otp-preview`.
+2. Iniciar OIDC hacia `idp-service-otp-preview`.
+3. En la pestaña `Codigo OTP`, solicitar codigo para un correo ETB habilitado.
+4. Ingresar el OTP mas reciente del correo.
+5. Confirmar retorno al mock con `id_token`.
+6. Revisar logs de `idp-service-otp-preview` y confirmar `mulesoft.ms2.response`, `mulesoft.ms3.response` y `login.otp.success`.
+
 ## Rollback
 
 Listar revisiones:

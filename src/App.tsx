@@ -20,9 +20,28 @@ import { buildOidcFragment, redirectToOidcPartner, redirectToOidcPartnerError } 
 
 type AuthView = 'login' | 'register';
 
+function isLikelyEmbeddedMobileWebView() {
+  const ua = window.navigator.userAgent;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+  if (!isMobile) return false;
+
+  const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua);
+  const isIosWebView = /AppleWebKit/i.test(ua) && !/Safari/i.test(ua);
+  const isStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  return isAndroidWebView || isIosWebView || isStandalone;
+}
+
+function shouldShowMobileStoreBadges() {
+  if (typeof window.APP_CONFIG?.showMobileStoreBadges === 'boolean') {
+    return window.APP_CONFIG.showMobileStoreBadges;
+  }
+  return !isLikelyEmbeddedMobileWebView();
+}
+
 function LoginApp({ gate }: { gate: AccessGateResult }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authView, setAuthView] = useState<AuthView>('login');
+  const showMobileStoreBadges = shouldShowMobileStoreBadges();
 
   const [{ oidcParams, oidcError }, setOidc] = useState(() => ({
     oidcParams: gate.oidcParams,
@@ -117,8 +136,8 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
         <img src={themeConfig.logoUrl} alt={themeConfig.brandName} className="login-mobile-logo" />
       </div>
 
-      {/* Desktop only: Left hero panel — visually hidden spacer, image baked into bg */}
-      <div className="login-hero" aria-hidden="true">
+      {/* Desktop only: left hero panel. Store badges are interactive HTML over the branded image. */}
+      <div className="login-hero">
         <div className="login-hero-inner">
           <h1 className="login-hero-title">Bienvenido<br/>a Mi ETB</h1>
           <p className="login-hero-accent">Autogestiona todos tus productos</p>
@@ -179,10 +198,12 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
       </div>
 
       {/* Móvil / tablet: mismas tiendas que en el hero desktop (paridad con PNG ≥1024px) */}
-      <div className="login-mobile-app-stores">
-        <p className="login-mobile-app-stores__title">Descarga y conoce la app Mi ETB</p>
-        <StoreBadges />
-      </div>
+      {showMobileStoreBadges && (
+        <div className="login-mobile-app-stores">
+          <p className="login-mobile-app-stores__title">Descarga y conoce la app Mi ETB</p>
+          <StoreBadges />
+        </div>
+      )}
 
       {/* Mobile only: brand tagline */}
       <div className="login-tagline">
