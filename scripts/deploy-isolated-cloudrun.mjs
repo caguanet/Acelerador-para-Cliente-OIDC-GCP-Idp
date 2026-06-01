@@ -136,8 +136,11 @@ async function deployIdpInitial() {
     '--no-invoker-iam-check',
     '--memory=512Mi',
     '--cpu=1',
-    '--min-instances=0',
-    '--max-instances=3',
+    // IdP OTP sessions, attempt counters and lock store are in-memory (see
+    // server.js). Until they move to Firestore, pin to a single instance so the
+    // 3-attempt lockout and sessions stay consistent across requests.
+    '--min-instances=1',
+    '--max-instances=1',
     '--concurrency=40',
     '--cpu-boost',
     `--set-env-vars=${toEnvVars({
@@ -148,6 +151,10 @@ async function deployIdpInitial() {
       REQUIRE_OIDC_REDIRECT: config.requireOidcRedirect,
       VITE_ALLOWED_ORIGINS: 'pending_configuration',
       CORS_ALLOWED_ORIGINS: 'pending_configuration',
+      // CSP enforcing (blocks). Report-Only stays on in parallel so violations keep
+      // surfacing in /api/security/csp-report logs during the rollout.
+      CSP_ENFORCE: 'true',
+      CSP_REPORT_ONLY: 'true',
       // QA token service requires these body fields to be present but empty.
       MULESOFT_OAUTH_CLIENT_ID: '',
       MULESOFT_OAUTH_CLIENT_SECRET: '',

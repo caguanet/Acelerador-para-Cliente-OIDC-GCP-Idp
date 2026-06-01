@@ -8,9 +8,9 @@ import { StoreBadges } from './components/StoreBadges';
 import { themeConfig } from './config/theme';
 import { FirebaseActionForm, shouldRenderFirebaseAction } from './components/FirebaseActionForm';
 import { AccessDeniedScreen } from './components/AccessDeniedScreen';
-import { EmailLinkActionForm } from './components/EmailLinkActionForm';
 import {
   getCanonicalIdpUrlForCurrentLocation,
+  hasValidOidcContext,
   isValidOrigin,
   requiresOidcRedirect,
   resolveAccessGate,
@@ -183,7 +183,7 @@ function LoginApp({ gate }: { gate: AccessGateResult }) {
                   onSignInSuccess={handleLoginSuccess}
                   onGoToRegister={() => setAuthView('register')}
                   oidcContextRequired={requiresOidcRedirect()}
-                  hasValidOidcContext={Boolean(oidcParams.redirect_uri && oidcParams.client_id)}
+                  hasValidOidcContext={hasValidOidcContext(oidcParams)}
                 />
               )}
 
@@ -225,10 +225,6 @@ function App() {
 
   if (gate.oidcError) {
     return <AccessDeniedScreen message={gate.oidcError} />;
-  }
-
-  if (gate.isEmailLinkSignInAction) {
-    return <EmailLinkActionForm oidcParams={gate.oidcParams} />;
   }
 
   if (shouldRenderFirebaseAction()) {

@@ -2,8 +2,10 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { User, signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getRecaptchaToken } from '../utils/recaptcha';
+import { EMAIL_REGEX } from '../utils/email';
+import { getApiErrorMessage, getApiString, getSafeErrorMessage, readApiJson } from '../utils/apiJson';
+import { getClientLockedUntil, isLockoutResponse, rememberClientLock } from '../utils/otpClientLock';
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 30;
 
@@ -12,13 +14,9 @@ const START_ERROR = 'No pudimos iniciar el acceso por código. Inténtalo nuevam
 const VERIFY_ERROR = 'No pudimos validar el código. Revísalo o solicita uno nuevo.';
 const RESEND_ERROR = 'No pudimos reenviar el código. Inténtalo nuevamente en unos minutos.';
 const COMPLETE_ERROR = 'No pudimos completar el inicio de sesión. Solicita un nuevo código.';
-const NETWORK_ERROR = 'No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo.';
 const LOCKOUT_MESSAGE = 'Has superado los intentos permitidos. Por seguridad, intenta nuevamente en 2 horas.';
-const CLIENT_LOCK_MS = 2 * 60 * 60 * 1000;
-const CLIENT_LOCK_PREFIX = 'mi-etb:otp-login-lock:';
 
 type Phase = 'EMAIL' | 'CODE';
-type ApiJson = Record<string, unknown>;
 
 interface EmailOtpLoginFormProps {
     onSignInSuccess: (user: User) => void;
@@ -30,85 +28,6 @@ function validateEmail(email: string) {
     if (!email.trim()) return 'Ingresa tu correo electrónico.';
     if (!EMAIL_REGEX.test(email)) return 'Ingresa un correo electrónico válido.';
     return '';
-}
-
-async function readApiJson(response: Response): Promise<ApiJson | null> {
-    if (response.status === 204 || response.status === 205) return null;
-    try {
-        const text = await response.text();
-        if (!text.trim()) return null;
-        const parsed = JSON.parse(text);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as ApiJson) : null;
-    } catch {
-        return null;
-    }
-}
-
-function getApiString(data: ApiJson | null, key: string): string {
-    const value = data?.[key];
-    return typeof value === 'string' ? value : '';
-}
-
-function getSafeMessage(message: string, fallback: string): string {
-    const clean = message.trim();
-    if (!clean || clean.length > 180 || /failed|json|firebase:|auth\/|status|servidor|interno/i.test(clean)) {
-        return fallback;
-    }
-    return clean;
-}
-
-function getApiErrorMessage(data: ApiJson | null, fallback: string): string {
-    return getSafeMessage(getApiString(data, 'error'), fallback);
-}
-
-function getSafeErrorMessage(error: unknown, fallback: string): string {
-    if (error instanceof TypeError) return NETWORK_ERROR;
-    if (error instanceof Error) return getSafeMessage(error.message, fallback);
-    return fallback;
-}
-
-function isLockoutResponse(response: Response, message: string): boolean {
-    return response.status === 423 || /superado los intentos|intentos permitidos|intenta nuevamente en 2 horas/i.test(message);
-}
-
-async function hashForClientStorage(value: string): Promise<string> {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized || !window.crypto?.subtle) return '';
-    const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
-    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function getClientLockKey(email: string): Promise<string> {
-    const hash = await hashForClientStorage(email);
-    return hash ? `${CLIENT_LOCK_PREFIX}${hash}` : '';
-}
-
-async function getClientLockedUntil(email: string): Promise<number> {
-    try {
-        const key = await getClientLockKey(email);
-        if (!key) return 0;
-        const raw = window.localStorage.getItem(key);
-        if (!raw) return 0;
-        const parsed = JSON.parse(raw) as { lockedUntil?: number };
-        const lockedUntil = Number(parsed.lockedUntil || 0);
-        if (lockedUntil <= Date.now()) {
-            window.localStorage.removeItem(key);
-            return 0;
-        }
-        return lockedUntil;
-    } catch {
-        return 0;
-    }
-}
-
-async function rememberClientLock(email: string): Promise<void> {
-    try {
-        const key = await getClientLockKey(email);
-        if (!key) return;
-        window.localStorage.setItem(key, JSON.stringify({ lockedUntil: Date.now() + CLIENT_LOCK_MS }));
-    } catch {
-        // The server-side lock remains the source of truth.
-    }
 }
 
 export function EmailOtpLoginForm({

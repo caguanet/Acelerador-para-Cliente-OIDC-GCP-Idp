@@ -253,14 +253,19 @@ del cloudbuild.yaml
 
 :: 2. Desplegar Cloud Run (Inicial sin VITE_ALLOWED_ORIGINS correcta)
 echo [Step] Cloud Run Deploy (Inicial)...
+REM IdP sessions/OTP locks are in-memory (server.js); pin to one instance until Firestore-backed.
 call gcloud run deploy idp-service ^
   --image %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/idp-service ^
   --platform managed ^
   --region %REGION% ^
   --service-account idp-service-sa@%PROJECT_ID%.iam.gserviceaccount.com ^
   --allow-unauthenticated ^
+  --min-instances 1 ^
+  --max-instances 1 ^
   --set-env-vars APP_MODE=IDP ^
   --set-env-vars "VITE_ALLOWED_ORIGINS=pending_configuration" ^
+  --set-env-vars CSP_ENFORCE=true ^
+  --set-env-vars CSP_REPORT_ONLY=true ^
   --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest ^
   --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest ^
   --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest ^

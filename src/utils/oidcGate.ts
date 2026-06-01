@@ -15,8 +15,6 @@ export type OidcParams = {
 export type AccessGateResult = {
   oidcParams: OidcParams;
   oidcError: string | null;
-  /** Enlace de acceso por correo abierto en /auth/action?mode=signIn&oobCode=... */
-  isEmailLinkSignInAction: boolean;
 };
 
 const emptyOidc: OidcParams = {
@@ -129,36 +127,21 @@ export function isValidOrigin(urlStr: string): boolean {
   try {
     const targetUrl = new URL(urlStr);
     const validationOrigins = [...(window.APP_CONFIG?.allowedOrigins || [])];
-    if (import.meta.env.DEV && validationOrigins.length === 0) {
-      return targetUrl.hostname === 'localhost';
+    // Fallback de conveniencia SOLO en build de desarrollo y con opt-in explícito
+    // (allowDevLocalhostOrigins). Nunca aplica en producción ni por defecto.
+    if (
+      validationOrigins.length === 0 &&
+      import.meta.env.DEV &&
+      window.APP_CONFIG?.allowDevLocalhostOrigins === true
+    ) {
+      return (
+        (targetUrl.protocol === 'http:' || targetUrl.protocol === 'https:') &&
+        (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1')
+      );
     }
     return validationOrigins.some((origin) => targetUrl.origin === origin);
   } catch {
     return false;
-  }
-}
-
-/** Extrae OIDC anidado en continueUrl (enlaces de correo Firebase). */
-export function parseOidcFromContinueUrl(continueUrl: string | null): OidcParams | null {
-  if (!continueUrl) return null;
-  try {
-    const base = typeof window !== 'undefined' ? window.location.origin : 'https://localhost';
-    const nested = new URL(continueUrl, base);
-    const redirect_uri = nested.searchParams.get('redirect_uri');
-    const client_id = nested.searchParams.get('client_id');
-    if (!redirect_uri || !client_id) return null;
-    const { passthroughParams, error } = extractOidcPassthroughParams(nested.searchParams);
-    if (error) return null;
-    return {
-      redirect_uri,
-      client_id,
-      state: nested.searchParams.get('state'),
-      nonce: nested.searchParams.get('nonce'),
-      prompt: nested.searchParams.get('prompt'),
-      passthroughParams,
-    };
-  } catch {
-    return null;
   }
 }
 
@@ -172,33 +155,32 @@ function loadOidcFromSearchParams(params: URLSearchParams): AccessGateResult {
   const { passthroughParams, error: passthroughError } = extractOidcPassthroughParams(params);
 
   if (passthroughError) {
-    return { oidcParams: emptyOidc, oidcError: passthroughError, isEmailLinkSignInAction: false };
+    return { oidcParams: emptyOidc, oidcError: passthroughError };
   }
 
   if (redirect_uri || client_id) {
     if (!redirect_uri || !client_id) {
       if (requiresOidcRedirect()) {
-        return { oidcParams: emptyOidc, oidcError: INCOMPLETE_OIDC_MSG, isEmailLinkSignInAction: false };
+        return { oidcParams: emptyOidc, oidcError: INCOMPLETE_OIDC_MSG };
       }
     }
   }
 
   if (redirect_uri && client_id) {
     if (!isValidOrigin(redirect_uri)) {
-      return { oidcParams: emptyOidc, oidcError: UNAUTHORIZED_REDIRECT_MSG, isEmailLinkSignInAction: false };
+      return { oidcParams: emptyOidc, oidcError: UNAUTHORIZED_REDIRECT_MSG };
     }
     return {
       oidcParams: { redirect_uri, client_id, state, nonce, prompt, passthroughParams },
       oidcError: null,
-      isEmailLinkSignInAction: false,
     };
   }
 
   if (requiresOidcRedirect()) {
-    return { oidcParams: emptyOidc, oidcError: RESTRICTED_MSG, isEmailLinkSignInAction: false };
+    return { oidcParams: emptyOidc, oidcError: RESTRICTED_MSG };
   }
 
-  return { oidcParams: emptyOidc, oidcError: null, isEmailLinkSignInAction: false };
+  return { oidcParams: emptyOidc, oidcError: null };
 }
 
 /**
@@ -209,31 +191,13 @@ export function resolveAccessGate(): AccessGateResult {
   const mode = params.get('mode');
   const oobCode = params.get('oobCode');
 
-  const isEmailLinkSignInAction = mode === 'signIn' && Boolean(oobCode);
+  // Firebase action links manejados por FirebaseActionForm (recuperación/verificación).
   const isOtherFirebaseAction =
     Boolean(oobCode) &&
     (mode === 'resetPassword' || mode === 'verifyEmail' || mode === 'recoverEmail');
 
   if (isOtherFirebaseAction) {
-    return { oidcParams: emptyOidc, oidcError: null, isEmailLinkSignInAction: false };
-  }
-
-  if (isEmailLinkSignInAction) {
-    const fromContinue = parseOidcFromContinueUrl(params.get('continueUrl'));
-    if (fromContinue?.redirect_uri && fromContinue.client_id) {
-      if (!isValidOrigin(fromContinue.redirect_uri)) {
-        return {
-          oidcParams: emptyOidc,
-          oidcError: UNAUTHORIZED_REDIRECT_MSG,
-          isEmailLinkSignInAction: true,
-        };
-      }
-      return { oidcParams: fromContinue, oidcError: null, isEmailLinkSignInAction: true };
-    }
-    if (requiresOidcRedirect()) {
-      return { oidcParams: emptyOidc, oidcError: RESTRICTED_MSG, isEmailLinkSignInAction: true };
-    }
-    return { oidcParams: emptyOidc, oidcError: null, isEmailLinkSignInAction: true };
+    return { oidcParams: emptyOidc, oidcError: null };
   }
 
   return loadOidcFromSearchParams(params);

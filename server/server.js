@@ -64,6 +64,16 @@ function getCspReportOnlyPolicy() {
     return getDefaultCspReportOnlyPolicy();
 }
 
+// Enforcing CSP (blocks, not just reports). Activate only after reviewing the
+// Report-Only telemetry: CSP_ENFORCE=true, or an explicit CONTENT_SECURITY_POLICY
+// override. Reuses the same vetted directive set as the report-only policy.
+function getCspEnforcePolicy() {
+    const override = getTrimmedEnv('CONTENT_SECURITY_POLICY');
+    if (override) return override;
+    if (!getBooleanEnv('CSP_ENFORCE')) return '';
+    return getDefaultCspReportOnlyPolicy();
+}
+
 // Cloud Run terminates TLS/proxying at Google Frontend; trust the first proxy
 // so rate limiters use the real client IP from X-Forwarded-For.
 app.set('trust proxy', 1);
@@ -79,11 +89,26 @@ app.use((req, res, next) => {
     if (cspReportOnly) {
         res.setHeader('Content-Security-Policy-Report-Only', cspReportOnly);
     }
+    const cspEnforce = getCspEnforcePolicy();
+    if (cspEnforce) {
+        res.setHeader('Content-Security-Policy', cspEnforce);
+    }
     next();
+});
+
+// Throttle CSP report ingestion so a misbehaving/malicious client cannot flood logs.
+const cspReportLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.CSP_REPORT_RATE_LIMIT_MAX || 60),
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Drop excess silently (still 204) — never surface a JSON error to a report-only beacon.
+    handler: (req, res) => res.status(204).end(),
 });
 
 app.post(
     '/api/security/csp-report',
+    cspReportLimiter,
     express.text({
         type: ['application/csp-report', 'application/reports+json', 'application/json', 'text/plain'],
         limit: '16kb'
@@ -180,6 +205,10 @@ const __dirname = path.dirname(__filename);
 
 // --- In-Memory Session Store with TTL (Anti-Scraping/PII Protection) ---
 // Production must replace this with Firestore + TTL indexes, per architecture docs.
+// IMPORTANT: while these stores are in-memory, the Cloud Run IdP service MUST run
+// with --max-instances=1 (see scripts/deploy-*). Otherwise OTP sessions and the
+// 3-attempt lockout do not propagate across instances (sessions lost; lockout
+// bypassable by spreading guesses). Migrating to Firestore lifts this constraint.
 const sessionStore = new Map();
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const VERIFICATION_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -190,6 +219,52 @@ const OTP_SEND_RATE_LIMIT_MAX = Number(process.env.OTP_SEND_RATE_LIMIT_MAX || 5)
 const OTP_VALIDATE_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_RATE_LIMIT_MAX || 15);
 const OTP_VALIDATE_SESSION_RATE_LIMIT_MAX = Number(process.env.OTP_VALIDATE_SESSION_RATE_LIMIT_MAX || 5);
 const RECAPTCHA_MIN_SCORE = Number(process.env.RECAPTCHA_MIN_SCORE || 0.5);
+if (process.env.NODE_ENV === 'production'
+    && (!process.env.RECAPTCHA_PROJECT_ID || !process.env.RECAPTCHA_SITE_KEY || !process.env.RECAPTCHA_API_KEY)) {
+    console.error('[startup] reCAPTCHA env vars missing in production — anti-bot checks will reject all protected requests (fail-closed).');
+}
+
+// --- Security: MuleSoft mock mode must never activate in production (fail-closed) ---
+// In production, missing/mock MuleSoft config must NOT silently fabricate eligible
+// customers (MS-1) or accept the hardcoded OTPs (MS-3). Simulation is allowed only
+// outside production; misconfigured production fails closed (503) via isMuleSoftConfigMissing().
+// NODE_ENV is read at call time (not captured once) so behavior is correct even if the
+// runtime toggles it, and so the fail-closed path is testable.
+const REQUIRED_MULESOFT_ENV = [
+    'MULESOFT_CLIENT_ID',
+    'MULESOFT_OAUTH_URL',
+    'MULESOFT_OAUTH_ACCOUNT_ID',
+    'MULESOFT_BASE_URL_MS1',
+    'MULESOFT_BASE_URL_MS2',
+    'MULESOFT_BASE_URL_MS3',
+];
+
+function isSimulationAllowed() {
+    return process.env.NODE_ENV !== 'production';
+}
+
+function getMissingMulesoftEnv() {
+    return REQUIRED_MULESOFT_ENV.filter(name => !getTrimmedEnv(name));
+}
+
+// True only in production when required MuleSoft config is incomplete: callers must
+// fail closed (503) instead of falling back to the simulation/mock branch.
+function isMuleSoftConfigMissing() {
+    return !isSimulationAllowed() && getMissingMulesoftEnv().length > 0;
+}
+
+// Centralizes the mock-mode decision so it can never be true in production.
+function isMuleSoftMockMode(baseUrl) {
+    return isSimulationAllowed() &&
+        (!baseUrl || baseUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID);
+}
+
+if (!isSimulationAllowed()) {
+    const missingMulesoft = getMissingMulesoftEnv();
+    if (missingMulesoft.length > 0) {
+        console.error(`[startup] MuleSoft env vars missing in production (${missingMulesoft.join(', ')}) — customer/OTP endpoints will fail closed (503).`);
+    }
+}
 const ID_QUERY_MAX_PER_HOUR = Number(process.env.ID_QUERY_MAX_PER_HOUR || 5);
 const otpLockStore = new Map();
 const OTP_LOCK_STORE_FILE = getTrimmedEnv('OTP_LOCK_STORE_FILE') || path.join(__dirname, '..', 'tmp', 'otp-locks.json');
@@ -208,8 +283,21 @@ function getOtpLockStoreKey(rawKey) {
     return `OTP_LOCK:${hashSecret(value)}`;
 }
 
-function persistOtpLocks() {
+// Persist the lock store asynchronously and debounced: callers (registerOtpFailure,
+// lock cleanup) run on the request hot path, so we never block the event loop on
+// synchronous disk I/O — mutations within a short window coalesce into one write.
+const OTP_LOCK_PERSIST_DEBOUNCE_MS = 1000;
+let otpLockPersistTimer = null;
+let otpLockPersistInFlight = false;
+let otpLockPersistQueued = false;
+
+async function writeOtpLockStore() {
     if (!OTP_LOCK_STORE_FILE || OTP_LOCK_STORE_FILE === 'off') return;
+    if (otpLockPersistInFlight) {
+        otpLockPersistQueued = true;
+        return;
+    }
+    otpLockPersistInFlight = true;
     try {
         const now = Date.now();
         const locks = [];
@@ -218,11 +306,31 @@ function persistOtpLocks() {
                 locks.push({ key, lockedUntil: Number(lock.lockedUntil) });
             }
         }
-        fs.mkdirSync(path.dirname(OTP_LOCK_STORE_FILE), { recursive: true });
-        fs.writeFileSync(OTP_LOCK_STORE_FILE, JSON.stringify({ version: 1, locks }, null, 2), { mode: 0o600 });
+        await fs.promises.mkdir(path.dirname(OTP_LOCK_STORE_FILE), { recursive: true });
+        await fs.promises.writeFile(
+            OTP_LOCK_STORE_FILE,
+            JSON.stringify({ version: 1, locks }, null, 2),
+            { mode: 0o600 }
+        );
     } catch (err) {
         console.warn('Could not persist OTP lock store:', err.message);
+    } finally {
+        otpLockPersistInFlight = false;
+        if (otpLockPersistQueued) {
+            otpLockPersistQueued = false;
+            void writeOtpLockStore();
+        }
     }
+}
+
+function persistOtpLocks() {
+    if (!OTP_LOCK_STORE_FILE || OTP_LOCK_STORE_FILE === 'off') return;
+    if (otpLockPersistTimer) return;
+    otpLockPersistTimer = setTimeout(() => {
+        otpLockPersistTimer = null;
+        void writeOtpLockStore();
+    }, OTP_LOCK_PERSIST_DEBOUNCE_MS);
+    otpLockPersistTimer.unref?.();
 }
 
 function loadPersistedOtpLocks() {
@@ -267,6 +375,13 @@ const cleanupInterval = setInterval(() => {
         }
     }
     if (changedLocks) persistOtpLocks();
+    // Purge stale brute-force trackers (DoS: unbounded growth on distinct-key floods).
+    // Mirrors the per-key 1h reset window used by isIdBlocked().
+    for (const [key, track] of idQueryTracker.entries()) {
+        if (now - track.firstQueryTime > 60 * 60 * 1000) {
+            idQueryTracker.delete(key);
+        }
+    }
 }, 5 * 60 * 1000); // Clean every 5 minutes
 cleanupInterval.unref?.();
 
@@ -300,6 +415,16 @@ const otpValidateSessionLimiter = rateLimit({
     max: OTP_VALIDATE_SESSION_RATE_LIMIT_MAX,
     keyGenerator: (req) => `OTP_VALIDATE_SESSION:${hashSecret(String(req.body?.sessionId || 'missing'))}`,
     message: { error: 'Límite de intentos de validación excedido. Por favor intenta más tarde.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Defense-in-depth on registration: the single-use verificationToken is the real
+// gate, but a per-IP limiter blunts brute-forcing tokens / abusing account creation.
+const registerLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 mins
+    max: Number(process.env.REGISTER_RATE_LIMIT_MAX || 10),
+    message: { error: 'Límite de intentos de registro excedido. Por favor intenta más tarde.' },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -423,6 +548,11 @@ function getRequestBrowserOrigin(req) {
     }
 }
 
+// NOTE (security scope): this is an anti-CSRF layer for *browsers* only. The
+// Origin/Referer headers it inspects are trivially forged by non-browser clients
+// (curl/scripts), so it is NOT an authentication/authorization boundary. The real
+// anti-bot/abuse controls on these public endpoints are reCAPTCHA + rate limiting.
+// (Future hardening: evaluate Firebase App Check for these endpoints.)
 function requireAllowedBrowserOrigin(req, res, next) {
     if (configuredCorsOrigins.length === 0 && process.env.NODE_ENV !== 'production') {
         return next();
@@ -526,7 +656,20 @@ function getMulesoftCustomer(payload) {
 
 function getMulesoftRegisteredEmail(customer) {
     if (!customer || typeof customer !== 'object') return '';
-    return typeof customer.contactData?.email === 'string' ? customer.contactData.email.trim() : '';
+    // MS-1 may shape the email differently across environments; probe the known
+    // variants in order and return the first non-empty string.
+    const contactData = customer.contactData;
+    const candidates = [
+        contactData?.email,
+        Array.isArray(contactData) ? contactData.find(c => typeof c?.email === 'string')?.email : undefined,
+        customer.email,
+        customer.correo,
+        contactData?.correo,
+    ];
+    for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    }
+    return '';
 }
 
 function hashSecret(value) {
@@ -540,15 +683,20 @@ function registerOtpFailure(session) {
         const lockedUntil = Date.now() + OTP_LOCK_MS;
         session.status = 'BLOCKED';
         session.lockedUntil = lockedUntil;
-        const lockKeys = new Set();
-        if (session.identityKey) lockKeys.add(session.identityKey);
-        if (session.intent === 'login' && session.emailHash) {
-            lockKeys.add(getLoginEmailLockKeyFromHash(session.emailHash));
+        // Shadow sessions (non-eligible email, never sent a real OTP) must only block
+        // their own in-memory session — never write a persistent lock on the shared
+        // email/identity key, or an attacker could lock out any victim email pre-auth.
+        if (!session.isShadow) {
+            const lockKeys = new Set();
+            if (session.identityKey) lockKeys.add(session.identityKey);
+            if (session.intent === 'login' && session.emailHash) {
+                lockKeys.add(getLoginEmailLockKeyFromHash(session.emailHash));
+            }
+            for (const lockKey of lockKeys) {
+                setOtpLock(lockKey, lockedUntil);
+            }
+            persistOtpLocks();
         }
-        for (const lockKey of lockKeys) {
-            setOtpLock(lockKey, lockedUntil);
-        }
-        persistOtpLocks();
         return { blocked: true };
     }
 
@@ -602,6 +750,16 @@ function maskEmail(email) {
 }
 
 // --- Dynamic OAuth 2.0 MuleSoft Bearer JWT Generator ---
+// Module-level cache: the client_credentials token is reused across MS-1..MS-4
+// until it nears expiry, avoiding a redundant OAuth round-trip per service call.
+let muleSoftTokenCache = { token: null, expiresAt: 0 };
+const MULESOFT_TOKEN_SKEW_MS = 30 * 1000;
+const MULESOFT_TOKEN_DEFAULT_TTL_MS = 5 * 60 * 1000;
+
+function invalidateMuleSoftToken() {
+    muleSoftTokenCache = { token: null, expiresAt: 0 };
+}
+
 async function getMuleSoftBearerToken(correlationId) {
     const clientId = process.env.MULESOFT_CLIENT_ID;
     const clientSecret = process.env.MULESOFT_CLIENT_SECRET;
@@ -612,6 +770,10 @@ async function getMuleSoftBearerToken(correlationId) {
 
     if (!clientId || !clientSecret || !tokenUrl || !oauthAccountId) {
         throw new Error('MuleSoft OAuth configuration is incomplete.');
+    }
+
+    if (muleSoftTokenCache.token && Date.now() < muleSoftTokenCache.expiresAt - MULESOFT_TOKEN_SKEW_MS) {
+        return muleSoftTokenCache.token;
     }
 
     try {
@@ -642,11 +804,27 @@ async function getMuleSoftBearerToken(correlationId) {
         if (!accessToken) {
             throw new Error('MuleSoft Token Auth response did not include an access token.');
         }
+        const ttlMs = Number(data.expires_in) > 0 ? Number(data.expires_in) * 1000 : MULESOFT_TOKEN_DEFAULT_TTL_MS;
+        muleSoftTokenCache = { token: accessToken, expiresAt: Date.now() + ttlMs };
         return accessToken;
     } catch (error) {
         console.error('Error fetching dynamic MuleSoft bearer token:', error.message);
         throw error;
     }
+}
+
+// Runs a MuleSoft service call with the cached bearer token. If the service
+// rejects with 401 (stale/revoked token), the cache is invalidated and the
+// request is retried once with a freshly minted token.
+async function muleSoftFetchWithAuth(correlationId, makeRequest) {
+    let bearerToken = await getMuleSoftBearerToken(correlationId);
+    let response = await makeRequest(bearerToken);
+    if (response.status === 401) {
+        invalidateMuleSoftToken();
+        bearerToken = await getMuleSoftBearerToken(correlationId);
+        response = await makeRequest(bearerToken);
+    }
+    return response;
 }
 
 // --- Helper: Validate reCAPTCHA Enterprise ---
@@ -656,6 +834,12 @@ async function verifyRecaptcha(token, action) {
     const apiKey = process.env.RECAPTCHA_API_KEY;
 
     if (!projectId || !siteKey || !apiKey) {
+        // Fail-closed in production: missing reCAPTCHA config must not silently
+        // disable bot protection on the OTP/login endpoints.
+        if (process.env.NODE_ENV === 'production') {
+            console.error('[reCAPTCHA] Missing RECAPTCHA_PROJECT_ID/SITE_KEY/API_KEY in production — rejecting request.');
+            return { success: false, error: 'recaptcha_not_configured' };
+        }
         console.log(`[reCAPTCHA Bypass] Simulation mode active. Action: ${action}`);
         return { success: true, score: 0.9 };
     }
@@ -699,7 +883,8 @@ async function verifyRecaptcha(token, action) {
 
 async function verifyRecaptchaOrReject(res, token, action) {
     const captchaRes = await verifyRecaptcha(token, action);
-    if (!captchaRes.success || (captchaRes.score && captchaRes.score < RECAPTCHA_MIN_SCORE)) {
+    // Numeric check: score === 0 (max risk) is a real value, not "missing".
+    if (!captchaRes.success || (typeof captchaRes.score === 'number' && captchaRes.score < RECAPTCHA_MIN_SCORE)) {
         res.status(403).json({ error: 'Verificación de seguridad fallida.' });
         return false;
     }
@@ -733,8 +918,7 @@ app.get('/config.js', (req, res) => {
         allowedOrigins,
         firebase: firebaseConfig,
         recaptchaSiteKey: getTrimmedEnv('VITE_RECAPTCHA_SITE_KEY', 'RECAPTCHA_SITE_KEY'),
-        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT'),
-        emailLinkPrimaryTabRedirect: getBooleanEnv('EMAIL_LINK_PRIMARY_TAB_REDIRECT', false)
+        requireOidcRedirect: getBooleanEnv('REQUIRE_OIDC_REDIRECT')
     };
 
     try {
@@ -745,7 +929,15 @@ app.get('/config.js', (req, res) => {
         return;
     }
 
-    res.send(`window.APP_CONFIG = ${JSON.stringify(appConfig)};`);
+    // Escape characters that could break out of the inline <script> context or
+    // terminate the JS string parsing (e.g. a "</script>" or U+2028/U+2029 in an
+    // env value). Values are operator-controlled, but this is cheap hardening.
+    const safeJson = JSON.stringify(appConfig)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+    res.send(`window.APP_CONFIG = ${safeJson};`);
 });
 
 // --- Shared: send OTP via MuleSoft MS-2 (EMAIL channel) ---
@@ -753,8 +945,11 @@ app.get('/config.js', (req, res) => {
 // email-OTP login flow (/api/customer/otp/start-login). The session must
 // already carry the resolved customer document (docNumber) and realEmail.
 async function sendOtpViaMs2(session) {
+    if (isMuleSoftConfigMissing()) {
+        throw new Error('MuleSoft configuration is missing in production.');
+    }
     const mUrl = process.env.MULESOFT_BASE_URL_MS2 || process.env.MULESOFT_BASE_URL_MS3;
-    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const isMockMode = isMuleSoftMockMode(mUrl);
     const correlationId = getSessionCorrelationId(session);
     const chosenChannel = 'EMAIL';
     const channelValue = session.realEmail;
@@ -765,7 +960,6 @@ async function sendOtpViaMs2(session) {
         console.log(`[MOCK MS-2] OTP sent via ${chosenChannel} to ${maskEmail(channelValue)}. TxId: ${transactionId}`);
         await new Promise(r => setTimeout(r, 500));
     } else {
-        const bearerToken = await getMuleSoftBearerToken(correlationId);
         const url = `${mUrl}/operations/v1/customer/otp`;
         const ms2Start = Date.now();
         logMulesoftEvent('mulesoft.ms2.request', {
@@ -776,7 +970,7 @@ async function sendOtpViaMs2(session) {
             identity: maskIdentityKey(session.identityKey)
         });
 
-        const response = await fetch(url, {
+        const response = await muleSoftFetchWithAuth(correlationId, (bearerToken) => fetch(url, {
             method: 'POST',
             headers: getMulesoftHeaders(correlationId, {
                 'Content-Type': 'application/json',
@@ -790,7 +984,7 @@ async function sendOtpViaMs2(session) {
                 tipo_canal: chosenChannel,
                 valor_canal: channelValue
             })
-        });
+        }));
         const durationMs = Date.now() - ms2Start;
 
         logMulesoftEvent(response.ok ? 'mulesoft.ms2.response' : 'mulesoft.ms2.error', {
@@ -814,6 +1008,50 @@ async function sendOtpViaMs2(session) {
 }
 
 // --- API Endpoints ---
+
+// Anti-enumeration helpers for the registration lookup.
+// A determined attacker probing document numbers must not be able to tell
+// "registered + eligible customer" from "not found / ineligible". The primary
+// protection is HTTP-status + response-shape uniformity (always 200 with the same
+// JSON). The synthetic masked email below mimics the real format so the payload is
+// shaped identically. RESIDUAL LIMITATION: real masked emails expose the real domain
+// in cleartext (maskEmail keeps `@domain`), which a synthetic value cannot perfectly
+// reproduce; the status-code uniformity remains the dominant control.
+const SHADOW_EMAIL_DOMAINS = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.es', 'etb.com.co'];
+
+function makeSyntheticMaskedEmail(identityKey) {
+    const h = hashSecret(String(identityKey));
+    const prefix = h.slice(0, 2);
+    const domain = SHADOW_EMAIL_DOMAINS[parseInt(h.slice(2, 4), 16) % SHADOW_EMAIL_DOMAINS.length];
+    return `${prefix}${'*'.repeat(5)}@${domain}`;
+}
+
+// Indistinguishable shadow session for an ineligible/not-found registration lookup.
+// Never reaches MuleSoft and always fails OTP (handled in /otp/send and /otp/validate
+// via session.isShadow), so the flow is identical to an eligible customer up to the
+// point of entering the code.
+function createRegistrationShadowSession({ identityKey, correlationId, customerType, docType, docNumber }) {
+    const sessionId = crypto.randomUUID();
+    const now = Date.now();
+    const maskedEmail = makeSyntheticMaskedEmail(identityKey);
+    sessionStore.set(sessionId, {
+        isShadow: true,
+        customerType,
+        docType,
+        docNumber,
+        identityKey,
+        maskedEmail,
+        eligibleForRegistration: false,
+        isVerified: false,
+        otpTransactionId: null,
+        attempts: 0,
+        status: 'INITIATED',
+        correlationId,
+        createdAt: now,
+        expiresAt: now + SESSION_TTL_MS,
+    });
+    return { sessionId, maskedEmail };
+}
 
 // 1. Customer Lookup (MS-1)
 app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, async (req, res) => {
@@ -862,8 +1100,12 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
     // Verify reCAPTCHA
     if (!(await verifyRecaptchaOrReject(res, recaptchaToken, 'lookup'))) return;
 
+    if (isMuleSoftConfigMissing()) {
+        return res.status(503).json({ error: 'El servicio de consulta no está disponible temporalmente. Intenta más tarde.' });
+    }
+
     const mUrl = process.env.MULESOFT_BASE_URL_MS1;
-    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const isMockMode = isMuleSoftMockMode(mUrl);
     const correlationId = createCorrelationId();
 
     try {
@@ -877,8 +1119,6 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
             realEmail = `cliente${normalizedDocNumber.slice(-6) || 'test'}@etb.com.co`;
             eligibleForRegistration = true;
         } else {
-            // Get Dynamic Bearer Token for MuleSoft
-            const bearerToken = await getMuleSoftBearerToken(correlationId);
             const query = new URLSearchParams({
                 ORIGIN: 'TELECENTER',
                 CUSTOMER_ID: normalizedDocNumber,
@@ -900,7 +1140,7 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
                 identity: maskIdentityKey(identityKey)
             });
             
-            const response = await fetch(url, {
+            const response = await muleSoftFetchWithAuth(correlationId, (bearerToken) => fetch(url, {
                 method: 'GET',
                 headers: getMulesoftHeaders(correlationId, {
                     'systemId': 'MIGRACION',
@@ -908,7 +1148,7 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
                     'client_secret': process.env.MULESOFT_CLIENT_SECRET,
                     'Authorization': `Bearer ${bearerToken}`
                 })
-            });
+            }));
             const durationMs = Date.now() - ms1Start;
 
             logMulesoftEvent(response.ok ? 'mulesoft.ms1.response' : 'mulesoft.ms1.error', {
@@ -920,25 +1160,34 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
 
             if (!response.ok) {
                 if (response.status === 404) {
-                    return res.status(404).json({ error: 'No se encontró ningún cliente registrado con esa información.' });
+                    // Anti-enumeration: "not found" must be indistinguishable from
+                    // "ineligible". Fall through to the shadow-session path below.
+                    eligibleForRegistration = false;
+                } else {
+                    throw new Error(`MuleSoft MS-1 returned status ${response.status}`);
                 }
-                throw new Error(`MuleSoft MS-1 returned status ${response.status}`);
-            }
-
-            const data = await response.json();
-            const customer = getMulesoftCustomer(data);
-            realEmail = getMulesoftRegisteredEmail(customer);
-            eligibleForRegistration = getReliableRegistrationEligibility(customer);
-
-            if (!eligibleForRegistration) {
-                return res.status(403).json({ error: 'No fue posible validar que tengas un servicio vigente para completar el registro.' });
+            } else {
+                const data = await response.json();
+                const customer = getMulesoftCustomer(data);
+                realEmail = getMulesoftRegisteredEmail(customer);
+                eligibleForRegistration = getReliableRegistrationEligibility(customer);
             }
         }
 
-        if (!isValidRegisteredEmail(realEmail)) {
-            return res.status(422).json({
-                error: 'Encontramos una inconsistencia en tus datos de contacto. Comunícate con nuestras líneas de atención para actualizar tu información.'
+        // Anti-enumeration: any non-eligible outcome (not found, no active service,
+        // inconsistent/invalid contact email) returns the SAME 200 shape as success,
+        // backed by a shadow session that later fails the OTP step. Replaces the prior
+        // distinguishable 404/403/422 responses.
+        if (!eligibleForRegistration || !isValidRegisteredEmail(realEmail)) {
+            const shadow = createRegistrationShadowSession({
+                identityKey,
+                correlationId,
+                customerType: normalizedCustomerType,
+                docType: normalizedDocType,
+                docNumber: normalizedDocNumber,
             });
+            logMulesoftEvent('mulesoft.ms1.lookup', { correlationId, eligible: false });
+            return res.json(shadow);
         }
 
         // Generate dynamic blind sessionId
@@ -1171,8 +1420,12 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
         });
     }
 
+    if (isMuleSoftConfigMissing()) {
+        return res.status(503).json({ error: 'El servicio de validación no está disponible temporalmente. Intenta más tarde.' });
+    }
+
     const mUrl = process.env.MULESOFT_BASE_URL_MS3;
-    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const isMockMode = isMuleSoftMockMode(mUrl);
     const correlationId = getSessionCorrelationId(session);
 
     try {
@@ -1183,7 +1436,6 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
             await new Promise(r => setTimeout(r, 600));
             isOtpValid = code === '123456' || code === '654321';
         } else {
-            const bearerToken = await getMuleSoftBearerToken(correlationId);
             const url = getMulesoftOtpValidationPath(mUrl);
             const ms3Start = Date.now();
             logMulesoftEvent('mulesoft.ms3.request', {
@@ -1193,7 +1445,7 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
                 identity: maskIdentityKey(session.identityKey)
             });
 
-            const response = await fetch(url, {
+            const response = await muleSoftFetchWithAuth(correlationId, (bearerToken) => fetch(url, {
                 method: 'POST',
                 headers: getMulesoftHeaders(correlationId, {
                     'Content-Type': 'application/json',
@@ -1205,7 +1457,7 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
                     id_transaccion: session.otpTransactionId,
                     codigo: code
                 })
-            });
+            }));
             const durationMs = Date.now() - ms3Start;
 
             logMulesoftEvent(response.ok ? 'mulesoft.ms3.response' : 'mulesoft.ms3.error', {
@@ -1258,7 +1510,7 @@ app.post('/api/customer/otp/validate', requireAllowedBrowserOrigin, otpValidateL
 });
 
 // 4. Register customer after verified OTP (optional MS-4 + Identity Platform)
-app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res) => {
+app.post('/api/customers/register', requireAllowedBrowserOrigin, registerLimiter, async (req, res) => {
     const { sessionId, verificationToken, password, phoneNumber, acceptTerms, acceptDataPolicy } = req.body;
 
     if (!sessionId || !verificationToken || !isPasswordStrong(password) || !isValidPhoneNumber(phoneNumber)) {
@@ -1294,7 +1546,7 @@ app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res
 
     const isMs4Enabled = process.env.MULESOFT_ENABLE_MS4 === 'true';
     const mUrl = process.env.MULESOFT_BASE_URL_MS4;
-    const isMockMode = !mUrl || mUrl.includes('mock') || !process.env.MULESOFT_CLIENT_ID;
+    const isMockMode = isMuleSoftMockMode(mUrl);
     const correlationId = getSessionCorrelationId(session);
 
     // MS-4 is intentionally disabled until MuleSoft delivers the productive
@@ -1312,8 +1564,7 @@ app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res
 
     if (isMs4Enabled) {
         try {
-            const bearerToken = await getMuleSoftBearerToken(correlationId);
-            const ms4Response = await fetch(`${mUrl}/operations/v1/customer/register`, {
+            const ms4Response = await muleSoftFetchWithAuth(correlationId, (bearerToken) => fetch(`${mUrl}/operations/v1/customer/register`, {
                 method: 'POST',
                 headers: getMulesoftHeaders(correlationId, {
                     'Content-Type': 'application/json',
@@ -1331,7 +1582,7 @@ app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res
                     acepta_tratamiento_datos: true,
                     proveedor_identidad: 'GCP_IDENTITY_PLATFORM'
                 })
-            });
+            }));
 
             if (!ms4Response.ok) {
                 throw new Error(`Alta Digital MS-4 failed with status ${ms4Response.status}`);
@@ -1466,6 +1717,7 @@ function __resetForTests() {
     sessionStore.clear();
     otpLockStore.clear();
     idQueryTracker.clear();
+    invalidateMuleSoftToken();
 }
 
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __filename;

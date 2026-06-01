@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getCanonicalIdpUrlForCurrentLocation,
-  parseOidcFromContinueUrl,
   resolveAccessGate,
 } from './oidcGate';
 
@@ -26,17 +25,6 @@ describe('oidcGate', () => {
   afterEach(() => {
     (window as any).location = originalLocation;
     delete (window as any).APP_CONFIG;
-  });
-
-  it('parseOidcFromContinueUrl extracts nested OIDC params', () => {
-    const nested =
-      'https://idp.example/?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback&state=s1&nonce=n1&trace=PAU14%3A56373%3Aew2h6q6y2u229';
-    const result = parseOidcFromContinueUrl(nested);
-    expect(result?.client_id).toBe('app');
-    expect(result?.redirect_uri).toBe('https://pedrocasas.pau.solutions/callback');
-    expect(result?.state).toBe('s1');
-    expect(result?.nonce).toBe('n1');
-    expect(result?.passthroughParams.trace).toBe('PAU14:56373:ew2h6q6y2u229');
   });
 
   it('resolveAccessGate preserves OIDC nonce and safe PAU trace from the launcher URL', () => {
@@ -79,29 +67,14 @@ describe('oidcGate', () => {
 
     const gate = resolveAccessGate();
     expect(gate.oidcError).toMatch(/Acceso restringido/i);
-    expect(gate.isEmailLinkSignInAction).toBe(false);
   });
 
-  it('blocks email sign-in action without OIDC in continueUrl when required', () => {
+  it('blocks Firebase email sign-in links (feature removed) when redirect is required', () => {
     (window as any).APP_CONFIG.requireOidcRedirect = true;
     window.location.search = '?mode=signIn&oobCode=abc&continueUrl=%2F';
 
     const gate = resolveAccessGate();
     expect(gate.oidcError).toMatch(/Acceso restringido/i);
-    expect(gate.isEmailLinkSignInAction).toBe(true);
-  });
-
-  it('allows email sign-in action with valid continueUrl OIDC', () => {
-    (window as any).APP_CONFIG.requireOidcRedirect = true;
-    const continueUrl = encodeURIComponent(
-      'https://idp.example/?client_id=app&redirect_uri=https%3A%2F%2Fpedrocasas.pau.solutions%2Fcallback',
-    );
-    window.location.search = `?mode=signIn&oobCode=abc&continueUrl=${continueUrl}`;
-
-    const gate = resolveAccessGate();
-    expect(gate.oidcError).toBeNull();
-    expect(gate.isEmailLinkSignInAction).toBe(true);
-    expect(gate.oidcParams.redirect_uri).toBe('https://pedrocasas.pau.solutions/callback');
   });
 
   it('builds a canonical redirect URL preserving path and query', () => {

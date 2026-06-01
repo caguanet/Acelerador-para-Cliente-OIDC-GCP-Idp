@@ -3,6 +3,26 @@ import { applyActionCode, checkActionCode, confirmPasswordReset, verifyPasswordR
 import { auth } from '../firebase';
 import { themeConfig } from '../config/theme';
 import { getFriendlyAuthErrorMessage } from '../utils/authErrors';
+import { isValidOrigin } from '../utils/oidcGate';
+
+/**
+ * Evita open redirect: solo permite rutas relativas internas o URLs absolutas
+ * cuyo origen esté en la allowlist (isValidOrigin). Cualquier otra cosa cae a '/'.
+ */
+function getSafeReturnUrl(continueUrl: string): string {
+    const value = (continueUrl || '').trim();
+    if (!value) return '/';
+    // Ruta relativa interna (no protocol-relative '//host').
+    if (value.startsWith('/') && !value.startsWith('//')) return value;
+    try {
+        const target = new URL(value, window.location.origin);
+        if (target.origin === window.location.origin) return target.toString();
+        if (isValidOrigin(target.toString())) return target.toString();
+    } catch {
+        return '/';
+    }
+    return '/';
+}
 
 const EYE_ICON = (
     <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -47,7 +67,7 @@ export function FirebaseActionForm() {
     const params = useMemo(() => new URLSearchParams(window.location.search), []);
     const mode = getEmailActionMode();
     const oobCode = params.get('oobCode') || '';
-    const continueUrl = params.get('continueUrl') || '/';
+    const safeReturnUrl = useMemo(() => getSafeReturnUrl(params.get('continueUrl') || '/'), [params]);
 
     const [state, setState] = useState<ActionState>('checking');
     const [email, setEmail] = useState('');
@@ -117,7 +137,7 @@ export function FirebaseActionForm() {
     };
 
     const handleReturn = () => {
-        window.location.href = continueUrl;
+        window.location.href = safeReturnUrl;
     };
 
     const actionCopy = getActionCopy(mode);

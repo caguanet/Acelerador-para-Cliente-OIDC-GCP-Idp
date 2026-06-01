@@ -44,6 +44,7 @@ This is a **stateless, White-Label OIDC Identity Provider** that acts as an iden
 The ID token has a limited lifetime (e.g. 1 hour). To extend the session without asking the user to log in again, the client can use **silent refresh**:
 
 - **IdP support:** When the client sends `prompt=none` in the auth URL, the IdP does **not** show the login form. It checks whether Firebase has an active session on the IdP origin. If yes, it calls `getIdToken(true)` and redirects back with a fresh `id_token`. If no session, it redirects back with `#error=login_required&error_description=...&state=...`.
+  - **Exception (by design):** if `redirect_uri` is **not** in `allowedOrigins`, the IdP renders the full-screen "Acceso No Autorizado" page and does **not** emit any hash fragment (not even `#error=...`). It must never send data — including error params — to an unvalidated origin. So `prompt=none` only guarantees a hash callback for an *authorized* `redirect_uri`; a misconfigured/rotated origin will hang the silent refresh until it times out client-side. Keep partner `redirect_uri` values in sync with `allowedOrigins`.
 - **Client responsibility:** Decode the JWT to read `exp` (expiration time). Before expiry (e.g. 5–10 minutes), redirect the user to the IdP with the same `client_id`, `redirect_uri`, `state`, and `prompt=none`. The user stays on the client; if they had an IdP session (same browser), they get a new token in the hash and can replace the stored token. If `error=login_required` is returned, the client should prompt for full login again.
 
 Example IdP URL for silent refresh:  
@@ -87,6 +88,8 @@ TEST_USER_PASSWORD
 Production runs on **GCP Cloud Run** via a multi-stage Docker build (Node 18 Alpine builder → Express static server on port 8080).
 
 Automated deployment: `scripts/one-shot-deploy.cmd` handles API enablement, Artifact Registry, service account, Secret Manager secrets, Cloud Build, and Cloud Run deployment.
+
+**Single-instance constraint (interim):** the IdP backend keeps OTP sessions, attempt counters, and the OTP lock store **in memory** ([server/server.js](server/server.js)). The deploy scripts pin the IdP service to `--min-instances=1 --max-instances=1` so the 3-attempt lockout and sessions stay consistent. Do **not** raise `max-instances` until this state is migrated to Firestore (TTL indexes) — horizontal scaling would lose sessions and let an attacker bypass the lockout by spreading guesses across instances. Likewise, the reCAPTCHA check fails **closed** in production: if `RECAPTCHA_PROJECT_ID`/`SITE_KEY`/`API_KEY` are missing, protected endpoints reject all requests.
 
 ## Testing Structure
 

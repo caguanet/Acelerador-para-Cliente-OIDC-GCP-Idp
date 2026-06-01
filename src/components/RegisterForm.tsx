@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getConfiguredRecaptchaSiteKey, getRecaptchaToken, loadRecaptchaEnterprise } from '../utils/recaptcha';
+import { getApiErrorMessage, getApiString, getSafeErrorMessage, readApiJson } from '../utils/apiJson';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const EYE_ICON = (
@@ -42,11 +43,9 @@ const SEND_OTP_ERROR = 'No pudimos enviar el código de seguridad. Inténtalo nu
 const VERIFY_CODE_ERROR = 'No pudimos validar el código. Revísalo o solicita uno nuevo.';
 const RESEND_OTP_ERROR = 'No pudimos reenviar el código. Inténtalo nuevamente en unos minutos.';
 const COMPLETE_REGISTRATION_ERROR = 'No pudimos completar el registro. Inténtalo nuevamente en unos minutos.';
-const NETWORK_ERROR = 'No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo.';
 
 type CustomerType = 'HOGARES' | 'MIPYMES';
 type DocType = 'CC' | 'CE' | 'NIT' | 'TI' | 'PP';
-type ApiJson = Record<string, unknown>;
 
 /**
  * Hogares flow:  IDENTIFY → VERIFY → PASSWORD
@@ -83,66 +82,6 @@ function getPendingSocialProvider(providerId: string | null) {
         default:
             return null;
     }
-}
-
-async function readApiJson(response: Response): Promise<ApiJson | null> {
-    if (response.status === 204 || response.status === 205) return null;
-
-    try {
-        if (typeof response.text === 'function') {
-            const text = await response.text();
-            if (!text.trim()) return null;
-
-            try {
-                const parsed = JSON.parse(text);
-                return isApiJson(parsed) ? parsed : null;
-            } catch (err) {
-                console.warn('La API devolvió una respuesta que no es JSON válido.', {
-                    status: response.status,
-                    error: err,
-                });
-                return null;
-            }
-        }
-
-        const parsed = await response.json();
-        return isApiJson(parsed) ? parsed : null;
-    } catch (err) {
-        console.warn('No fue posible leer la respuesta JSON de la API.', {
-            status: response.status,
-            error: err,
-        });
-        return null;
-    }
-}
-
-function isApiJson(value: unknown): value is ApiJson {
-    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getApiString(data: ApiJson | null, key: string): string {
-    const value = data?.[key];
-    return typeof value === 'string' ? value : '';
-}
-
-function getApiErrorMessage(data: ApiJson | null, fallback: string): string {
-    return getSafeDisplayMessage(getApiString(data, 'error'), fallback);
-}
-
-function getSafeErrorMessage(error: unknown, fallback: string): string {
-    if (error instanceof TypeError) return NETWORK_ERROR;
-    if (error instanceof Error) return getSafeDisplayMessage(error.message, fallback);
-    return fallback;
-}
-
-function getSafeDisplayMessage(message: string, fallback: string): string {
-    const cleanMessage = message.trim();
-    if (!cleanMessage || cleanMessage.length > 180 || looksTechnical(cleanMessage)) return fallback;
-    return cleanMessage;
-}
-
-function looksTechnical(message: string): boolean {
-    return /failed to execute|unexpected end of json|json input|syntaxerror|response\.json|firebase:|auth\/|returned status|stack trace|servidor|interno/i.test(message);
 }
 
 export interface RegisterFormProps {

@@ -2,13 +2,6 @@ import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { MockClientPage } from '../pages/MockClientPage';
 
-/**
- * Login E2E: envío de email link con proyecto Firebase real + opt-in explícito.
- * Ej.: `E2E_AUTH_LOGIN=1 TEST_USER_EMAIL=cliente@dominio.com npx playwright test --project=chromium`
- */
-const canRunLoginE2E =
-  process.env.E2E_AUTH_LOGIN === '1' || process.env.E2E_AUTH_LOGIN === 'true';
-
 async function prepareMockCallbackValidation(page: import('@playwright/test').Page, state: string, nonce: string) {
   await page.goto('/');
   await page.evaluate(
@@ -123,34 +116,6 @@ test.describe('Authentication Flow (Happy Path)', () => {
     await mockPage.verifyTokenReceived();
   });
 
-  test('Positive Flow: Request Email Link Login', async ({ page }) => {
-    test.skip(
-      !canRunLoginE2E || !process.env.TEST_USER_EMAIL,
-      'Activa E2E_AUTH_LOGIN=1 y TEST_USER_EMAIL para ejecutar envío real de email link.'
-    );
-
-    const loginPage = new LoginPage(page);
-    
-    console.log('[TEST] Requesting Firebase email link');
-
-    // DIRECT NAVIGATION STRATEGY
-    const idpUrl = 'http://localhost:5173/?client_id=test-client&redirect_uri=http://localhost:3000&state=test-state';
-    
-    console.log(`[TEST] Navigating directly to IdP: ${idpUrl}`);
-    await page.goto(idpUrl, { waitUntil: 'domcontentloaded' });
-
-    // 4. Verify Redirection to IdP
-    await expect(page).toHaveURL(/localhost:5173/);
-    
-    // 5. Fail Fast: Check for Security Error
-    await expect(page.getByText('Acceso No Autorizado')).not.toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: /Inicia sesión en tu cuenta|Portal de Acceso/i })
-    ).toBeVisible({ timeout: 10000 });
-
-    // 6. Request email link. Completing the link requires mailbox access and is covered manually.
-    await loginPage.requestEmailLink(process.env.TEST_USER_EMAIL!);
-  });
 });
 
 test.describe('Security & Restrictions', () => {

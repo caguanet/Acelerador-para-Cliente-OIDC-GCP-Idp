@@ -41,8 +41,8 @@ interface Window {
     requireOidcRedirect?: boolean;
     /** Controla la promocion de tiendas en movil. Default: visible en navegador, oculta en webview movil probable. */
     showMobileStoreBadges?: boolean;
-    /** Si true, la pestaña original intenta redirigir al partner. Default: false. */
-    emailLinkPrimaryTabRedirect?: boolean;
+    /** Solo dev: opt-in explícito para aceptar redirect_uri en localhost cuando no hay allowedOrigins. Default: false. */
+    allowDevLocalhostOrigins?: boolean;
     theme?: AppConfigTheme;
   };
   grecaptcha?: {

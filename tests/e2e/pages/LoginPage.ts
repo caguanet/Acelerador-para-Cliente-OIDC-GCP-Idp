@@ -3,24 +3,16 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export class LoginPage {
   readonly page: Page;
   readonly emailInput: Locator;
-  readonly sendEmailLinkButton: Locator;
   readonly errorMessage: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.emailInput = page.locator('input[type="email"]');
-    this.sendEmailLinkButton = page.getByRole('button', { name: /enviar enlace de acceso/i });
     this.errorMessage = page.locator('.error-message'); // Adjust selector based on actual implementation
   }
 
   async goto() {
     await this.page.goto('/');
-  }
-
-  async requestEmailLink(email: string) {
-    await this.emailInput.fill(email);
-    await this.sendEmailLinkButton.click();
-    await expect(this.page.getByText(/Te enviamos un enlace seguro/i)).toBeVisible({ timeout: 12000 });
   }
 
   async switchToRegister() {

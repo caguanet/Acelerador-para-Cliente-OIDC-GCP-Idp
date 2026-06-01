@@ -276,7 +276,7 @@ describe('BFF customer lookup integration', () => {
         expect(ms1Call.url).toContain('CUSTOMER_ID_TYPE=CC');
     });
 
-    it('rejects MS-1 customers without contactData.email before creating a registration session', async () => {
+    it('anti-enumeration: MS-1 customer without contactData.email yields a generic 200 shadow session (no real OTP)', async () => {
         externalFetchMock.mockImplementation(async (input) => {
             const url = getRequestUrl(input);
             if (url === 'https://oauth.test/token') return jsonResponse({ access_token: 'bearer-token' });
@@ -301,8 +301,47 @@ describe('BFF customer lookup integration', () => {
             },
         });
 
-        expect(response.status).toBe(422);
-        expect(data.error).toBe('Encontramos una inconsistencia en tus datos de contacto. Comunícate con nuestras líneas de atención para actualizar tu información.');
+        // Same 200 shape as an eligible customer — no distinguishable 404/403/422.
+        expect(response.status).toBe(200);
+        expect(data.sessionId).toEqual(expect.any(String));
+        expect(data.maskedEmail).toMatch(/^[a-z0-9]{2}\*+@[\w.-]+$/i);
+
+        // Shadow session: /otp/send responds generically WITHOUT ever calling MS-2.
+        const send = await request('/api/customer/otp/send', {
+            body: { sessionId: data.sessionId, recaptchaToken: 'captcha-ok' },
+        });
+        expect(send.response.status).toBe(200);
+        expect(findExternalCall('/operations/v1/customer/otp')).toBeUndefined();
+
+        // And the OTP can never validate for a shadow session.
+        const validate = await request('/api/customer/otp/validate', {
+            body: { sessionId: data.sessionId, code: '123456', recaptchaToken: 'captcha-ok' },
+        });
+        expect([400, 423]).toContain(validate.response.status);
+    });
+
+    it('anti-enumeration: MS-1 404 (not found) yields a generic 200 shadow session', async () => {
+        externalFetchMock.mockImplementation(async (input) => {
+            const url = getRequestUrl(input);
+            if (url === 'https://oauth.test/token') return jsonResponse({ access_token: 'bearer-token' });
+            if (url.startsWith('https://ms1.test/v1/customer?')) {
+                return jsonResponse({ error: 'not found' }, 404);
+            }
+            return jsonResponse({ error: `Unexpected external request: ${url}` }, 500);
+        });
+
+        const { response, data } = await request('/api/customer/lookup', {
+            body: {
+                customerType: 'HOGARES',
+                docType: 'CC',
+                docNumber: '9999999999',
+                recaptchaToken: 'captcha-ok',
+            },
+        });
+
+        expect(response.status).toBe(200);
+        expect(data.sessionId).toEqual(expect.any(String));
+        expect(data.maskedEmail).toMatch(/^[a-z0-9]{2}\*+@[\w.-]+$/i);
     });
 });
 
@@ -385,6 +424,39 @@ describe('BFF customer registration claims', () => {
 });
 
 describe('BFF login OTP integration', () => {
+    it('invalidates the cached MuleSoft token and retries once on a 401 from a service call', async () => {
+        firebaseAdminMock.auth.getUserByEmail.mockResolvedValue({
+            uid: 'uid-otp-1',
+            disabled: false,
+            customClaims: { documentType: 'CC', documentNumber: '8739353211' },
+        });
+
+        let tokenFetches = 0;
+        let ms2Calls = 0;
+        externalFetchMock.mockImplementation(async (input) => {
+            const url = getRequestUrl(input);
+            if (url === 'https://oauth.test/token') {
+                tokenFetches += 1;
+                return jsonResponse({ access_token: `bearer-token-${tokenFetches}` });
+            }
+            if (url === 'https://ms2.test/operations/v1/customer/otp') {
+                ms2Calls += 1;
+                return ms2Calls === 1
+                    ? jsonResponse({ error: 'unauthorized' }, 401)
+                    : jsonResponse({ id_transaccion: 'tx-retry' });
+            }
+            return jsonResponse({ error: `Unexpected external request: ${url}` }, 500);
+        });
+
+        const result = await request('/api/customer/otp/start-login', {
+            body: { email: TEST_EMAIL, recaptchaToken: 'captcha-ok' },
+        });
+
+        expect(result.response.status).toBe(200);
+        expect(ms2Calls).toBe(2);     // service call retried once after 401
+        expect(tokenFetches).toBe(2); // cache invalidated → fresh token minted
+    });
+
     it('runs the eligible email OTP login path through MS-2, MS-3 and custom token issuance', async () => {
         const sessionId = await startEligibleLogin();
 
@@ -457,6 +529,30 @@ describe('BFF login OTP integration', () => {
         expect(validation.response.status).toBe(400);
         expect(validation.data.error).toContain('Código OTP incorrecto');
         expect(externalFetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not persist an email lock from a shadow session, so a victim email cannot be locked out pre-auth', async () => {
+        // Attacker drives a non-eligible (shadow) login for the victim email.
+        firebaseAdminMock.auth.getUserByEmail.mockRejectedValue({ code: 'auth/user-not-found' });
+
+        const started = await request('/api/customer/otp/start-login', {
+            body: { email: TEST_EMAIL, recaptchaToken: 'captcha-ok' },
+        });
+        expect(started.response.status).toBe(200);
+        const sessionId = started.data.sessionId;
+
+        // Exhaust the attempt budget on the shadow session.
+        await request('/api/customer/otp/validate', { body: { sessionId, code: '111111', recaptchaToken: 'captcha-ok' } });
+        await request('/api/customer/otp/validate', { body: { sessionId, code: '222222', recaptchaToken: 'captcha-ok' } });
+        const third = await request('/api/customer/otp/validate', { body: { sessionId, code: '333333', recaptchaToken: 'captcha-ok' } });
+        expect(third.response.status).toBe(423); // session-level block (indistinguishable)
+
+        // A fresh start-login for the same email must NOT be locked (no persistent email-key lock).
+        const reStart = await request('/api/customer/otp/start-login', {
+            body: { email: TEST_EMAIL, recaptchaToken: 'captcha-ok' },
+        });
+        expect(reStart.response.status).toBe(200);
+        expect(reStart.data.success).toBe(true);
     });
 
     it('locks the session and disables resend after the configured number of invalid OTP attempts', async () => {
@@ -533,5 +629,110 @@ describe('BFF reCAPTCHA enforcement', () => {
         expect(started.data.error).toBe('Verificación de seguridad fallida.');
         expect(firebaseAdminMock.auth.getUserByEmail).not.toHaveBeenCalled();
         expect(findExternalCall('recaptchaenterprise.googleapis.com')).toBeTruthy();
+    });
+});
+
+// H1: the MuleSoft mock/simulation path must never run in production. A misconfigured
+// production deploy (missing MULESOFT_* vars) must fail closed (503), not fabricate an
+// eligible customer or accept the hardcoded simulation OTP.
+describe('BFF MuleSoft fail-closed in production (H1)', () => {
+    const PROD_ENV_KEYS = ['NODE_ENV', 'MULESOFT_BASE_URL_MS1', 'RECAPTCHA_PROJECT_ID', 'RECAPTCHA_SITE_KEY', 'RECAPTCHA_API_KEY'];
+    let savedEnv;
+
+    beforeEach(() => {
+        savedEnv = Object.fromEntries(PROD_ENV_KEYS.map((k) => [k, process.env[k]]));
+    });
+
+    afterEach(() => {
+        for (const k of PROD_ENV_KEYS) {
+            if (savedEnv[k] === undefined) delete process.env[k];
+            else process.env[k] = savedEnv[k];
+        }
+    });
+
+    it('returns 503 on lookup when required MuleSoft config is missing in production', async () => {
+        process.env.NODE_ENV = 'production';
+        delete process.env.MULESOFT_BASE_URL_MS1; // required var missing
+        // Make reCAPTCHA pass so we reach the MuleSoft config gate (which is checked after).
+        process.env.RECAPTCHA_PROJECT_ID = 'identity-project';
+        process.env.RECAPTCHA_SITE_KEY = 'server-site-key';
+        process.env.RECAPTCHA_API_KEY = 'server-api-key';
+
+        const { response, data } = await request('/api/customer/lookup', {
+            body: { customerType: 'HOGARES', docType: 'CC', docNumber: '3626608491', recaptchaToken: 'captcha-ok' },
+        });
+
+        expect(response.status).toBe(503);
+        expect(data.error).toMatch(/no está disponible/i);
+        // Crucially: no fabricated customer / no MS-1 call leaked an eligible session.
+        expect(data.sessionId).toBeUndefined();
+        expect(findExternalCall('/v1/customer')).toBeUndefined();
+    });
+
+    it('still allows the simulation mock path outside production (no MuleSoft config)', async () => {
+        process.env.NODE_ENV = 'test';
+        delete process.env.MULESOFT_BASE_URL_MS1; // triggers mock mode in non-prod
+
+        const { response, data } = await request('/api/customer/lookup', {
+            body: { customerType: 'HOGARES', docType: 'CC', docNumber: '3626608491', recaptchaToken: 'captcha-ok' },
+        });
+
+        expect(response.status).toBe(200);
+        expect(data.sessionId).toEqual(expect.any(String));
+        expect(data.maskedEmail).toContain('@');
+    });
+});
+
+describe('BFF security headers and config hardening', () => {
+    // L1: values injected into /config.js must be escaped so they cannot break out
+    // of the inline <script> context.
+    it('escapes </script> and angle brackets in /config.js (L1)', async () => {
+        const original = process.env.OIDC_SCOPE;
+        process.env.OIDC_SCOPE = 'openid</script><script>alert(1)</script>';
+        try {
+            const { response, text } = await request('/config.js', { method: 'GET' });
+            expect(response.status).toBe(200);
+            expect(text).not.toContain('</script>');
+            expect(text).toContain('\\u003c');
+        } finally {
+            if (original === undefined) delete process.env.OIDC_SCOPE;
+            else process.env.OIDC_SCOPE = original;
+        }
+    });
+
+    // M2: enforcing CSP header is emitted only when CSP_ENFORCE is enabled.
+    it('emits Content-Security-Policy only when CSP_ENFORCE=true (M2)', async () => {
+        const original = process.env.CSP_ENFORCE;
+        try {
+            delete process.env.CSP_ENFORCE;
+            const off = await request('/api/health', { method: 'GET' });
+            expect(off.response.headers.get('content-security-policy')).toBeNull();
+
+            process.env.CSP_ENFORCE = 'true';
+            const on = await request('/api/health', { method: 'GET' });
+            const csp = on.response.headers.get('content-security-policy');
+            expect(csp).toBeTruthy();
+            expect(csp).toContain("default-src 'self'");
+            expect(csp).toContain('https://www.recaptcha.net');
+        } finally {
+            if (original === undefined) delete process.env.CSP_ENFORCE;
+            else process.env.CSP_ENFORCE = original;
+        }
+    });
+
+    // L3: registration endpoint is rate-limited (defense-in-depth). Isolated by a
+    // unique X-Forwarded-For so the limiter counter does not bleed into other tests.
+    it('rate-limits /api/customers/register after the configured max (L3)', async () => {
+        const ip = '203.0.113.77';
+        const max = Number(process.env.REGISTER_RATE_LIMIT_MAX || 10);
+        let lastStatus = 0;
+        for (let i = 0; i <= max; i++) {
+            const { response } = await request('/api/customers/register', {
+                headers: { 'x-forwarded-for': ip },
+                body: {},
+            });
+            lastStatus = response.status;
+        }
+        expect(lastStatus).toBe(429);
     });
 });
