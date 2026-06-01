@@ -17,6 +17,7 @@
  *     • Linux    (any distro with Node installed)
  */
 
+import { execSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'fs';
 import { join, resolve, dirname }                           from 'path';
 import { fileURLToPath }                                    from 'url';
@@ -25,7 +26,6 @@ import { fileURLToPath }                                    from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
 const ROOT       = resolve(__dirname, '..');   // scripts/ → project root
-const HOOKS_DIR  = join(ROOT, '.git', 'hooks');
 
 const c = {
   cyan:   s => `\x1b[36m${s}\x1b[0m`,
@@ -38,6 +38,22 @@ const c = {
 
 if (!existsSync(join(ROOT, '.git'))) {
   console.log(`[${c.yellow('HOOKS')}] Not a git repository — skipping hook installation.`);
+  process.exit(0);
+}
+
+let HOOKS_DIR;
+try {
+  HOOKS_DIR = execSync('git rev-parse --git-path hooks', {
+    cwd: ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+
+  if (!HOOKS_DIR) {
+    throw new Error('Git returned an empty hooks path.');
+  }
+} catch (err) {
+  console.log(`[${c.yellow('HOOKS')}] Could not resolve Git hooks path — skipping hook installation. ${err.message}`);
   process.exit(0);
 }
 
