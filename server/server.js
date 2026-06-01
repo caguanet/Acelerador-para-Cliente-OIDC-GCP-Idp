@@ -516,6 +516,19 @@ function getReliableRegistrationEligibility(customer) {
     );
 }
 
+function getMulesoftCustomer(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+    if (Array.isArray(payload)) return payload[0] || null;
+    if (Array.isArray(payload.customer)) return payload.customer[0] || null;
+    if (payload.customer && typeof payload.customer === 'object') return payload.customer;
+    return payload;
+}
+
+function getMulesoftRegisteredEmail(customer) {
+    if (!customer || typeof customer !== 'object') return '';
+    return typeof customer.contactData?.email === 'string' ? customer.contactData.email.trim() : '';
+}
+
 function hashSecret(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -913,9 +926,8 @@ app.post('/api/customer/lookup', requireAllowedBrowserOrigin, lookupLimiter, asy
             }
 
             const data = await response.json();
-            // Extrapolate registered email from MuleSoft response schema.
-            const customer = Array.isArray(data) ? data[0] : data;
-            realEmail = customer?.contactData?.email || customer?.email || '';
+            const customer = getMulesoftCustomer(data);
+            realEmail = getMulesoftRegisteredEmail(customer);
             eligibleForRegistration = getReliableRegistrationEligibility(customer);
 
             if (!eligibleForRegistration) {
@@ -1350,33 +1362,14 @@ app.post('/api/customers/register', requireAllowedBrowserOrigin, async (req, res
             }
         }
 
-        const customClaims = {
-            customerType: session.customerType,
+        const identityClaims = {
             documentType: session.docType,
-            documentNumber: session.docNumber,
-            documentHash: hashSecret(getIdentityKey(session.docType, session.docNumber)),
-            registration_source: 'mulesoft_otp',
-            auth_level: 'otp_verified'
+            documentNumber: session.docNumber
         };
 
-        if (session.customerType === 'MIPYMES') {
-            customClaims.companyDocumentType = session.companyDocType;
-            customClaims.companyDocumentNumber = session.companyDocNumber;
-            customClaims.companyDocumentHash = hashSecret(getIdentityKey(session.companyDocType, session.companyDocNumber));
-        }
+        await admin.auth().setCustomUserClaims(userRecord.uid, identityClaims);
 
-        await admin.auth().setCustomUserClaims(userRecord.uid, customClaims);
-
-        const customToken = await admin.auth().createCustomToken(userRecord.uid, {
-            customerType: session.customerType,
-            documentType: session.docType,
-            documentNumber: session.docNumber,
-            ...(session.customerType === 'MIPYMES' ? {
-                companyDocumentType: session.companyDocType,
-                companyDocumentNumber: session.companyDocNumber
-            } : {}),
-            auth_level: 'otp_verified'
-        });
+        const customToken = await admin.auth().createCustomToken(userRecord.uid, identityClaims);
 
         session.verificationTokenUsed = true;
         session.status = 'REGISTERED';
@@ -1429,8 +1422,8 @@ app.post('/api/auth/login/complete', requireAllowedBrowserOrigin, otpValidateLim
 
     try {
         const customToken = await admin.auth().createCustomToken(session.uid, {
-            auth_level: 'otp_email_verified',
-            login_method: 'miuso_email_otp'
+            documentType: session.docType,
+            documentNumber: session.docNumber
         });
 
         session.verificationTokenUsed = true;

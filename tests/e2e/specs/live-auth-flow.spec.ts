@@ -104,7 +104,10 @@ test.describe('Live QA registration against MuleSoft QA', () => {
       const claims = decodeJwtPayload(token!);
       expect(claims.documentType).toBe(user.docType);
       expect(claims.documentNumber).toBe(user.docNumber);
-      expect(claims.auth_level).toBe('otp_verified');
+      expect(claims.auth_level).toBeUndefined();
+      expect(claims.customerType).toBeUndefined();
+      expect(claims.documentHash).toBeUndefined();
+      expect(claims.registration_source).toBeUndefined();
     });
   }
 });

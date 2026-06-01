@@ -229,6 +229,161 @@ describe('BFF browser-origin protections', () => {
     });
 });
 
+describe('BFF customer lookup integration', () => {
+    beforeEach(() => {
+        process.env.MULESOFT_BASE_URL_MS1 = 'https://ms1.test';
+    });
+
+    it('uses customer[0].contactData.email from MS-1 as the registered OTP destination', async () => {
+        externalFetchMock.mockImplementation(async (input) => {
+            const url = getRequestUrl(input);
+            if (url === 'https://oauth.test/token') return jsonResponse({ access_token: 'bearer-token' });
+            if (url.startsWith('https://ms1.test/v1/customer?')) {
+                return jsonResponse({
+                    codeResponse: '200',
+                    responseMessage: 'La solicitud fue exitosa',
+                    customer: [{
+                        identityData: {
+                            documentType: 'CC',
+                            documentNumber: '3626608491',
+                        },
+                        contactData: {
+                            email: 'abelardocorreo@yopmail.com',
+                        },
+                        eligibleForDigitalRegistration: true,
+                    }],
+                });
+            }
+            return jsonResponse({ error: `Unexpected external request: ${url}` }, 500);
+        });
+
+        const { response, data } = await request('/api/customer/lookup', {
+            body: {
+                customerType: 'HOGARES',
+                docType: 'CC',
+                docNumber: '3626608491',
+                recaptchaToken: 'captcha-ok',
+            },
+        });
+
+        expect(response.status).toBe(200);
+        expect(data.sessionId).toEqual(expect.any(String));
+        expect(data.maskedEmail).toBe('ab************@yopmail.com');
+
+        const ms1Call = findExternalCall('/v1/customer');
+        expect(ms1Call).toBeTruthy();
+        expect(ms1Call.url).toContain('CUSTOMER_ID=3626608491');
+        expect(ms1Call.url).toContain('CUSTOMER_ID_TYPE=CC');
+    });
+
+    it('rejects MS-1 customers without contactData.email before creating a registration session', async () => {
+        externalFetchMock.mockImplementation(async (input) => {
+            const url = getRequestUrl(input);
+            if (url === 'https://oauth.test/token') return jsonResponse({ access_token: 'bearer-token' });
+            if (url.startsWith('https://ms1.test/v1/customer?')) {
+                return jsonResponse({
+                    codeResponse: '200',
+                    customer: [{
+                        contactData: {},
+                        eligibleForDigitalRegistration: true,
+                    }],
+                });
+            }
+            return jsonResponse({ error: `Unexpected external request: ${url}` }, 500);
+        });
+
+        const { response, data } = await request('/api/customer/lookup', {
+            body: {
+                customerType: 'HOGARES',
+                docType: 'CC',
+                docNumber: '3626608491',
+                recaptchaToken: 'captcha-ok',
+            },
+        });
+
+        expect(response.status).toBe(422);
+        expect(data.error).toBe('Encontramos una inconsistencia en tus datos de contacto. Comunícate con nuestras líneas de atención para actualizar tu información.');
+    });
+});
+
+describe('BFF customer registration claims', () => {
+    beforeEach(() => {
+        process.env.MULESOFT_BASE_URL_MS1 = 'https://ms1.test';
+        process.env.MULESOFT_ENABLE_MS4 = 'false';
+    });
+
+    it('stores and mints only documentType and documentNumber as Identity Platform claims', async () => {
+        externalFetchMock.mockImplementation(async (input) => {
+            const url = getRequestUrl(input);
+            if (url === 'https://oauth.test/token') return jsonResponse({ access_token: 'bearer-token' });
+            if (url.startsWith('https://ms1.test/v1/customer?')) {
+                return jsonResponse({
+                    codeResponse: '200',
+                    customer: [{
+                        contactData: { email: 'abelardocorreo@yopmail.com' },
+                        eligibleForDigitalRegistration: true,
+                    }],
+                });
+            }
+            if (url === 'https://ms2.test/operations/v1/customer/otp') {
+                return jsonResponse({ id_transaccion: 'tx-registration-otp-1' });
+            }
+            if (url === 'https://ms3.test/operations/v1/customer/otp/validation') {
+                return jsonResponse({ codigo: '200' });
+            }
+            return jsonResponse({ error: `Unexpected external request: ${url}` }, 500);
+        });
+
+        firebaseAdminMock.auth.getUserByEmail.mockRejectedValue({ code: 'auth/user-not-found' });
+        firebaseAdminMock.auth.createUser.mockResolvedValue({ uid: 'uid-registration-1' });
+
+        const lookup = await request('/api/customer/lookup', {
+            body: {
+                customerType: 'HOGARES',
+                docType: 'CC',
+                docNumber: '3626608491',
+                recaptchaToken: 'captcha-ok',
+            },
+        });
+        expect(lookup.response.status).toBe(200);
+
+        const send = await request('/api/customer/otp/send', {
+            body: { sessionId: lookup.data.sessionId, recaptchaToken: 'captcha-ok' },
+        });
+        expect(send.response.status).toBe(200);
+
+        const validation = await request('/api/customer/otp/validate', {
+            body: {
+                sessionId: lookup.data.sessionId,
+                code: '181292',
+                recaptchaToken: 'captcha-ok',
+            },
+        });
+        expect(validation.response.status).toBe(200);
+
+        const register = await request('/api/customers/register', {
+            body: {
+                sessionId: lookup.data.sessionId,
+                verificationToken: validation.data.verificationToken,
+                password: 'SecureQa123!',
+                phoneNumber: '3000000000',
+                acceptTerms: true,
+                acceptDataPolicy: true,
+            },
+        });
+
+        expect(register.response.status).toBe(200);
+        expect(firebaseAdminMock.auth.setCustomUserClaims).toHaveBeenCalledWith('uid-registration-1', {
+            documentType: 'CC',
+            documentNumber: '3626608491',
+        });
+        expect(firebaseAdminMock.auth.createCustomToken).toHaveBeenCalledWith('uid-registration-1', {
+            documentType: 'CC',
+            documentNumber: '3626608491',
+        });
+    });
+});
+
 describe('BFF login OTP integration', () => {
     it('runs the eligible email OTP login path through MS-2, MS-3 and custom token issuance', async () => {
         const sessionId = await startEligibleLogin();
@@ -275,8 +430,8 @@ describe('BFF login OTP integration', () => {
         expect(complete.response.status).toBe(200);
         expect(complete.data).toEqual({ success: true, customToken: 'custom-token-otp' });
         expect(firebaseAdminMock.auth.createCustomToken).toHaveBeenCalledWith('uid-otp-1', {
-            auth_level: 'otp_email_verified',
-            login_method: 'miuso_email_otp',
+            documentType: 'CC',
+            documentNumber: '8739353211',
         });
     });
 

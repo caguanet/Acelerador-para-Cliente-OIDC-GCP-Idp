@@ -122,12 +122,12 @@ sequenceDiagram
 
 El login OTP queda registrado como autenticacion real porque la SPA ejecuta `signInWithCustomToken` con un token emitido por Firebase Admin SDK para el `uid` existente.
 
-El `customToken` incluye claims adicionales de login:
+El `customToken` solo incluye los claims mínimos de identidad ETB:
 
 ```json
 {
-  "auth_level": "otp_email_verified",
-  "login_method": "miuso_email_otp"
+  "documentType": "CC",
+  "documentNumber": "8739353211"
 }
 ```
 

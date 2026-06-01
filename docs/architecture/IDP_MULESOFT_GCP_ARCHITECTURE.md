@@ -228,7 +228,7 @@ Condición en código: `isMockMode` cuando falta URL, la URL contiene `mock`, o 
 
 Elegibilidad en código (hasta indicador fidedigno de negocio): `eligibleForDigitalRegistration`, `hasActiveServices`, o `registrationEligibility.status === "ELIGIBLE"`.
 
-Claims tras registro (`setCustomUserClaims`): `customerType`, `documentHash`, `registration_source: mulesoft_otp`, `auth_level: otp_verified`; MiPymes añade `companyDocumentHash`.
+Claims tras registro (`setCustomUserClaims`) y en custom tokens emitidos por el BFF: solo `documentType` y `documentNumber`.
 
 ### Brecha: objetivo vs implementado
 
@@ -690,17 +690,12 @@ Los claims se establecen desde BFF con Admin SDK, nunca desde el navegador:
 
 ```json
 {
-  "customer_type": "Hogares",
-  "etb_customer_id": "9774689",
-  "doc_type": "CC",
-  "doc_number_hash": "sha256:<hash>",
-  "registration_eligible": true,
-  "registration_source": "mulesoft_otp",
-  "auth_level": "otp_verified"
+  "documentType": "CC",
+  "documentNumber": "9774689"
 }
 ```
 
-No incluir dirección, fecha de nacimiento, teléfono completo, correo completo ni datos de servicio detallados dentro del ID token.
+No incluir dirección, fecha de nacimiento, teléfono completo, correo completo, tipo de cliente, hashes, nivel de autenticación, fuente de registro ni datos de servicio detallados dentro del ID token.
 
 ## Controles De Seguridad
 

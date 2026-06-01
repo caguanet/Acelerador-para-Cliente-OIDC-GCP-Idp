@@ -196,7 +196,7 @@ Completa el login OTP despues de una validacion vigente.
 | Entrada | `sessionId`, `verificationToken`. |
 | Validaciones | Sesión vigente, estado `OTP_VERIFIED`, token de verificacion no usado, hash correcto, TTL vigente y origen permitido. |
 | Firebase Admin SDK | Emite `customToken` para el `uid` existente. |
-| Claims adicionales | `auth_level: otp_email_verified`, `login_method: miuso_email_otp`. |
+| Claims adicionales | Solo `documentType` y `documentNumber`; no viajan `auth_level`, `login_method`, hashes ni datos de servicio. |
 | Respuesta exitosa | `success: true` y `customToken`. La SPA usa ese token para `signInWithCustomToken` y luego emitir el `id_token` OIDC al cliente. |
 | Limpieza | Marca token como usado, registra evento funcional y elimina la sesión temporal. |
 
