@@ -1,0 +1,23 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - heading "Inicia sesión en tu cuenta" [level=2] [ref=e7]
+    - paragraph [ref=e8]:
+      - text: ¿No tienes cuenta en Mi ETB?
+      - button "Regístrate" [ref=e9] [cursor=pointer]
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12]: Correo electrónico
+        - textbox "Correo electrónico" [ref=e13]
+      - button "Enviar enlace de acceso" [ref=e14] [cursor=pointer]
+    - generic [ref=e16]: o continúa con
+    - generic [ref=e17]:
+      - button "Continúa con Google" [ref=e18] [cursor=pointer]:
+        - img [ref=e19]
+      - button "Continúa con Apple" [ref=e24] [cursor=pointer]:
+        - img [ref=e25]
+      - button "Continúa con Facebook" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+    - button "¿Necesitas recuperar tu contraseña?" [ref=e31] [cursor=pointer]
+  - paragraph [ref=e32]:
+    - text: "Acceso solicitado por:"
+    - strong [ref=e33]: etb-identity-omnicanal

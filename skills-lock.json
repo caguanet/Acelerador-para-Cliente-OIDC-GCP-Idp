@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "skills": {
+    "firebase-auth-basics": {
+      "source": "firebase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/firebase-auth-basics/SKILL.md",
+      "computedHash": "02540a6ddc7ef0ed5486d055626f03ec891154da5a98d97c4c37dc979b3afe59"
+    },
+    "gcp-cloud-run": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gcp-cloud-run/SKILL.md",
+      "computedHash": "9d099985fb9d2bfca6604847beb3712365c7a961623713b9d81b6b65892542ea"
+    },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": "skill/SKILL.md",
+      "computedHash": "b590bd8b023a71b64550d04da896c63dd99d9658f4584e87244ff47a41784768"
+    },
+    "modern-web-guidance": {
+      "source": "GoogleChrome/modern-web-guidance",
+      "sourceType": "github",
+      "skillPath": "skills/modern-web-guidance/SKILL.md",
+      "computedHash": "a1ed8448959e8c988ebe7e2ba060b25b748fcb16c232435354a1afcf09f1bf7b"
+    },
+    "oauth2-oidc-implementer": {
+      "source": "patricio0312rev/skills",
+      "sourceType": "github",
+      "skillPath": "security/oauth2-oidc-implementer/SKILL.md",
+      "computedHash": "c3faa753a02f67eb845f5ce3c53adcd0f4750ff88aea11a5db397ba73f95d7af"
+    },
+    "playwright-testing": {
+      "source": "laurigates/claude-plugins",
+      "sourceType": "github",
+      "skillPath": "testing-plugin/skills/playwright-testing/SKILL.md",
+      "computedHash": "99fb7b00a15642332cd1bf8fda820f2cbd3934788975e752736480fe37813f94"
+    },
+    "react-dev": {
+      "source": "softaworks/agent-toolkit",
+      "sourceType": "github",
+      "skillPath": "skills/react-dev/SKILL.md",
+      "computedHash": "ce738985cbff5079c560709e534b5c93bbdff9bbb638e7569654521de39db0e5"
+    },
+    "security-review": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/security-review/SKILL.md",
+      "computedHash": "8cd029a9bdd8fdf35425039d41e896e343bf75063c4540365e3773c1e3d4009d"
+    },
+    "security-threat-model": {
+      "source": "lyndonkl/claude",
+      "sourceType": "github",
+      "skillPath": "skills/security-threat-model/SKILL.md",
+      "computedHash": "164083abfd9b456fd1cd4a28a43f0132680cd98f18aadff5cbe72c647794ca6e"
+    },
+    "typescript-refactoring": {
+      "source": "caidanw/skills",
+      "sourceType": "github",
+      "skillPath": "typescript-refactoring/SKILL.md",
+      "computedHash": "4f4bb2740a3539c12678c7ade02137ae07ef75259692128a61f0f6df39f8fda6"
+    },
+    "vitest-testing-patterns": {
+      "source": "erichowens/some_claude_skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/vitest-testing-patterns/SKILL.md",
+      "computedHash": "c149ac25ce8b3a818b56401f9549ee2fb143c1a4d011eae39c1bec706a83ba14"
+    },
+    "web-testing": {
+      "source": "mrgoonie/claudekit-skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/web-testing/SKILL.md",
+      "computedHash": "a8f6e915d99307bd139d33001f8923c25b9667be3aba50c5ab96da93a61ae157"
+    }
+  }
+}

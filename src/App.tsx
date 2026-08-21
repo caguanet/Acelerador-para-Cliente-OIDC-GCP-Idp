@@ -1,204 +1,237 @@
 import { useState, useEffect } from 'react'
-import { initializeApp } from "firebase/app";
-import { User } from "firebase/auth";
+import { User, onAuthStateChanged } from "firebase/auth";
 import './index.css'
-import { LoginModal } from './components/LoginModal';
+import { auth } from './firebase'; // initializes Firebase before any component imports getAuth()
+import { PasswordlessLoginForm } from './components/PasswordlessLoginForm';
+import { RegisterForm } from './components/RegisterForm';
+import { StoreBadges } from './components/StoreBadges';
+import { themeConfig } from './config/theme';
+import { FirebaseActionForm, shouldRenderFirebaseAction } from './components/FirebaseActionForm';
+import { AccessDeniedScreen } from './components/AccessDeniedScreen';
+import {
+  getCanonicalIdpUrlForCurrentLocation,
+  hasValidOidcContext,
+  isValidOrigin,
+  requiresOidcRedirect,
+  resolveAccessGate,
+  type AccessGateResult,
+} from './utils/oidcGate';
+import { buildOidcFragment, redirectToOidcPartner, redirectToOidcPartnerError } from './utils/oidcRedirect';
 
+type AuthView = 'login' | 'register';
 
-// --- Firebase Configuration ---
-// Configuración dinámica (Runtime/Secrets) con fallback a entorno local (.env)
-const runtimeConfig = window.APP_CONFIG?.firebase;
+function isLikelyEmbeddedMobileWebView() {
+  const ua = window.navigator.userAgent;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+  if (!isMobile) return false;
 
-const firebaseConfig = {
-  apiKey: runtimeConfig?.apiKey || import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: runtimeConfig?.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: runtimeConfig?.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID
-};
+  const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua);
+  const isIosWebView = /AppleWebKit/i.test(ua) && !/Safari/i.test(ua);
+  const isStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  return isAndroidWebView || isIosWebView || isStandalone;
+}
 
-// Initialize Firebase
-initializeApp(firebaseConfig);
+function shouldShowMobileStoreBadges() {
+  if (typeof window.APP_CONFIG?.showMobileStoreBadges === 'boolean') {
+    return window.APP_CONFIG.showMobileStoreBadges;
+  }
+  return !isLikelyEmbeddedMobileWebView();
+}
 
+function LoginApp({ gate }: { gate: AccessGateResult }) {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [authView, setAuthView] = useState<AuthView>('login');
+  const showMobileStoreBadges = shouldShowMobileStoreBadges();
 
-function App() {
-  const [user, setUser] = useState<User | null>(null)
-  
-  // State for Login Modal/View
-  const [showLogin, setShowLogin] = useState(false)
+  const [{ oidcParams, oidcError }, setOidc] = useState(() => ({
+    oidcParams: gate.oidcParams,
+    oidcError: gate.oidcError,
+  }));
 
-  // OIDC State
-  const [oidcParams, setOidcParams] = useState<{
-    redirect_uri: string | null,
-    client_id: string | null,
-    state: string | null 
-  }>({ redirect_uri: null, client_id: null, state: null });
-  const [oidcError, setOidcError] = useState<string | null>(null);
+  const setOidcError = (msg: string | null) =>
+    setOidc((prev) => ({ ...prev, oidcError: msg }));
 
-  // Helper for origin validation
-  const isValidOrigin = (urlStr: string) => {
-    try {
-        const targetUrl = new URL(urlStr);
-        const validationOrigins = [
-            ...(window.APP_CONFIG?.allowedOrigins || [])
-        ];
-        // In development, allow localhost if explicitly configured or empty (fallback)
-        if (import.meta.env.DEV && validationOrigins.length === 0) {
-             return targetUrl.hostname === 'localhost';
+  // Silent refresh: prompt=none → if IdP has an active Firebase session, return a fresh id_token without showing login
+  useEffect(() => {
+    if (oidcParams.prompt !== 'none' || !oidcParams.redirect_uri || !isValidOrigin(oidcParams.redirect_uri)) return;
+
+    const redirectUri = oidcParams.redirect_uri;
+    const state = oidcParams.state || '';
+    const nonce = oidcParams.nonce || '';
+    const passthroughParams = oidcParams.passthroughParams;
+
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      unsub();
+      const targetUrl = new URL(redirectUri);
+      try {
+        if (user) {
+          const idToken = await user.getIdToken(true); // force refresh for new expiry
+          targetUrl.hash = buildOidcFragment({ id_token: idToken, state, nonce, ...passthroughParams });
+        } else {
+          targetUrl.hash = buildOidcFragment({
+            error: 'login_required',
+            error_description: 'Sesión no activa en el IdP',
+            state,
+            nonce,
+            ...passthroughParams,
+          });
         }
-        return validationOrigins.some(origin => targetUrl.origin === origin);
-    } catch (e) {
-        return false;
+      } catch (err) {
+        console.error('Silent refresh error', err);
+        targetUrl.hash = buildOidcFragment({
+          error: 'server_error',
+          error_description: 'No se pudo renovar el token',
+          state,
+          nonce,
+          ...passthroughParams,
+        });
+      }
+      window.location.href = targetUrl.toString();
+    });
+
+    return () => unsub();
+  }, [oidcParams.prompt, oidcParams.redirect_uri, oidcParams.state, oidcParams.nonce, oidcParams.passthroughParams]);
+
+  const handleLoginSuccess = async (currentUser: User) => {
+    try {
+      const idToken = await currentUser.getIdToken(true); // fresh token with full TTL
+
+      if (oidcParams.redirect_uri) {
+        if (!isValidOrigin(oidcParams.redirect_uri)) {
+          setOidcError(`Error de seguridad: El dominio no está autorizado para recibir credenciales.`);
+          return;
+        }
+        redirectToOidcPartner(
+          oidcParams.redirect_uri,
+          idToken,
+          oidcParams.state || '',
+          oidcParams.passthroughParams,
+          oidcParams.nonce,
+        );
+        return;
+      }
+
+      // Standalone: mark as logged in
+      setLoggedIn(true);
+    } catch (err) {
+      console.error("Error fetching token", err);
+      if (oidcParams.redirect_uri && isValidOrigin(oidcParams.redirect_uri)) {
+        redirectToOidcPartnerError(
+          oidcParams.redirect_uri,
+          'server_error',
+          'No se pudo emitir el token',
+          oidcParams.state || '',
+          oidcParams.passthroughParams,
+          oidcParams.nonce,
+        );
+      }
     }
   };
 
-  // On Mount: Check query params for OIDC flow OR Hash for Callback
-  useEffect(() => {
-    // 1. Check for OIDC Login Request
-    const params = new URLSearchParams(window.location.search);
-    const redirect_uri = params.get('redirect_uri');
-    const client_id = params.get('client_id');
-    const state = params.get('state');
-
-    if (redirect_uri && client_id) {
-        if (!isValidOrigin(redirect_uri)) {
-            setOidcError(`Error de Seguridad: El dominio de redirección no está autorizado.`);
-            return;
-        }
-        setOidcParams({ redirect_uri, client_id, state });
-        setShowLogin(true); // Force login view immediately
-        return;
-    }
-
-
-  }, []);
-
-  const handleLoginSuccess = async (currentUser: User) => {
-      setUser(currentUser)
-      
-      try {
-        const idToken = await currentUser.getIdToken()
-        
-        // OIDC REDIRECT FLOW
-        if (oidcParams.redirect_uri) {
-            if (!isValidOrigin(oidcParams.redirect_uri)) {
-                console.error("Redirect URI not allowed", oidcParams.redirect_uri);
-                setOidcError(`Error de seguridad: El dominio no está autorizado para recibir credenciales.`);
-                return;
-            }
-
-            const targetUrl = new URL(oidcParams.redirect_uri);
-            // If valid, append token
-            targetUrl.hash = `id_token=${idToken}&state=${oidcParams.state || ''}`;
-            
-            // Redirecting...
-            window.location.href = targetUrl.toString();
-            return;
-        }
-
-        // STANDALONE FLOW (No dashboard, just stay logged in)
-        setShowLogin(false) // Close modal/form on success
-
-      } catch (err) {
-        console.error("Error fetching token", err)
-      }
-  }
-
-
-
-
-
-
-
-  // 1. IDP Provider View (OIDC Login Page or Error)
-  // This is what the user sees when redirected from the third party
-  if (oidcParams.redirect_uri || oidcError) {
-    return (
-        <div className="app-container" style={{
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            minHeight: '100vh', 
-            background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
-        }}>
-            <div style={{
-                background: 'white',
-                padding: '2rem',
-                borderRadius: '16px',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
-                width: '100%',
-                maxWidth: '450px'
-            }}>
-                {oidcError ? (
-                    <div style={{textAlign: 'center', padding: '1rem'}}>
-                        <div style={{fontSize: '3rem', marginBottom: '1rem'}}>🚫</div>
-                        <h2 style={{color: '#d63031', marginBottom: '1rem'}}>Acceso No Autorizado</h2>
-                        <p style={{color: '#636e72', fontSize: '0.9rem', lineHeight: '1.5'}}>
-                            {oidcError}
-                        </p>
-                        <div style={{marginTop: '2rem'}}>
-                            <button 
-                                onClick={() => window.location.href = '/'}
-                                style={{
-                                    background: '#0984e3',
-                                    color: 'white',
-                                    border: 'none',
-                                    padding: '10px 20px',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Volver al Inicio
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                        <LoginModal 
-                            isOpen={true} 
-                            onClose={() => {}} 
-                            onSignInSuccess={handleLoginSuccess}
-                            isLoading={false}
-                            allowClose={false}
-                        />
-                        <div style={{textAlign: 'center', marginTop: '1rem', color: '#666', fontSize: '0.8rem'}}>
-                            <p>Solicitud de acceso para:</p>
-                            <strong style={{fontSize: '1.1rem', color: '#333'}}>{oidcParams.client_id}</strong>
-                        </div>
-                    </>
-                )}
-            </div>
-        </div>
-    )
-  }
-
-  // 3. Service Status View (No Dashboard)
   return (
-    <div className="app-container" style={{
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh', 
-        background: '#f8f9fa',
-        flexDirection: 'column',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
-    }}>
-      <div style={{textAlign: 'center', padding: '2rem'}}>
-        <h1 style={{color: '#2d3436', marginBottom: '0.5rem'}}>Identity Provider Service</h1>
-        <p style={{color: '#636e72'}}>Secure Authentication Gateway</p>
-        <div style={{marginTop: '2rem', padding: '1rem', background: '#e17055', color: 'white', borderRadius: '4px', fontSize: '0.9rem'}}>
-            ⚠️ Direct access restricted. Please use a valid Client App.
-        </div>
-        <p style={{marginTop: '2rem', fontSize: '0.8rem', color: '#b2bec3'}}>v1.0.0 • OIDC Compliant</p>
+    <div className="login-desktop">
+
+      {/* Mobile only: ETB logo centered at top */}
+      <div className="login-mobile-header">
+        <img src={themeConfig.logoUrl} alt={themeConfig.brandName} className="login-mobile-logo" />
       </div>
 
-      <LoginModal 
-        isOpen={showLogin && !user}
-        onClose={() => setShowLogin(false)}
-        onSignInSuccess={handleLoginSuccess}
-        isLoading={false} 
-      />
+      {/* Desktop only: left hero panel. Store badges are interactive HTML over the branded image. */}
+      <div className="login-hero">
+        <div className="login-hero-inner">
+          <h1 className="login-hero-title">Bienvenido<br/>a Mi ETB</h1>
+          <p className="login-hero-accent">Autogestiona todos tus productos</p>
+          <p className="login-hero-desc">fácilmente desde un solo lugar.</p>
+          <p className="login-hero-app-label">Descarga y conoce la app Mi ETB</p>
+          <StoreBadges />
+        </div>
+      </div>
+
+      {/* Card panel — mobile: centered over bg | desktop: right side floating */}
+      <div className="login-card-panel">
+        <div className="login-page-card">
+          {oidcParams.prompt === 'none' && oidcParams.redirect_uri && !oidcError ? (
+            <div className="login-error-state" role="status" aria-live="polite">
+              <div className="login-error-icon" style={{ fontSize: '1.5rem' }}>⟳</div>
+              <h2>Comprobando sesión</h2>
+              <p style={{ color: 'var(--brand-text-secondary)' }}>Redirigiendo...</p>
+            </div>
+          ) : oidcError ? (
+            <div className="login-error-state" role="alert">
+              <div className="login-error-icon">✕</div>
+              <h2>Acceso No Autorizado</h2>
+              <p>{oidcError}</p>
+              <p className="login-error-guidance">
+                Cierra esta ventana e ingresa nuevamente desde la aplicación autorizada.
+              </p>
+            </div>
+          ) : loggedIn ? (
+            <div className="login-error-state">
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✓</div>
+              <h2 style={{ color: 'var(--brand-primary)' }}>Autenticado</h2>
+              <p style={{ color: 'var(--brand-text-secondary)' }}>Sesión iniciada correctamente.</p>
+            </div>
+          ) : (
+            <>
+              {authView === 'register' ? (
+                <RegisterForm
+                  onRegisterSuccess={handleLoginSuccess}
+                  onGoToLogin={() => setAuthView('login')}
+                />
+              ) : (
+                <PasswordlessLoginForm
+                  onSignInSuccess={handleLoginSuccess}
+                  onGoToRegister={() => setAuthView('register')}
+                  oidcContextRequired={requiresOidcRedirect()}
+                  hasValidOidcContext={hasValidOidcContext(oidcParams)}
+                />
+              )}
+
+              {oidcParams.client_id && (
+                <p className="login-client-id">
+                  Acceso solicitado por: <strong>{oidcParams.client_id}</strong>
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Móvil / tablet: mismas tiendas que en el hero desktop (paridad con PNG ≥1024px) */}
+      {showMobileStoreBadges && (
+        <div className="login-mobile-app-stores">
+          <p className="login-mobile-app-stores__title">Descarga y conoce la app Mi ETB</p>
+          <StoreBadges />
+        </div>
+      )}
+
+      {/* Mobile only: brand tagline */}
+      <div className="login-tagline">
+        <p><strong>Serás</strong> lo que <strong>creas</strong></p>
+      </div>
+
     </div>
-  )
+  );
+}
+
+function App() {
+  const canonicalTarget = getCanonicalIdpUrlForCurrentLocation();
+  if (canonicalTarget) {
+    window.location.replace(canonicalTarget);
+    return null;
+  }
+
+  const gate = resolveAccessGate();
+
+  if (gate.oidcError) {
+    return <AccessDeniedScreen message={gate.oidcError} />;
+  }
+
+  if (shouldRenderFirebaseAction()) {
+    return <FirebaseActionForm />;
+  }
+
+  return <LoginApp gate={gate} />;
 }
 
 export default App
-

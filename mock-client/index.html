@@ -1,90 +1,1086 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mock Client - OIDC Test</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f2f5; }
-        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        .btn { background-color: #4285F4; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 20px; }
-        .btn:hover { background-color: #357ae8; }
-        .token-box { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; border-radius: 4px; overflow-wrap: break-word; font-family: monospace; font-size: 12px; text-align: left; margin-top: 20px; max-height: 200px; overflow-y: auto; }
-        h1 { color: #333; }
-        p { color: #666; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Simulación local de aplicación partner OIDC — no es el sitio institucional de ETB.">
+  <title>Mock Client · Simulación OIDC (identidad ETB)</title>
+  <!-- Lexend: alternativa corporativa recomendada en brandbook cuando Kobenhavn no está en bundle (extracto §7) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /*
+      Referencias: .agents/skills/etb-brand-brandbook/reference/brandbook-extract.md
+      - Paleta §9, claim §5 (sin punto final), ondas §6 (1–2 curvas, uso moderado en UI).
+      - Logos: docs/guides/BRAND_ASSETS.md
+    */
+    :root {
+      --etb-primary: #004c8f;
+      --etb-deep: #214780;
+      --etb-accent: #00c8e8;
+      --etb-neon: #00ffff;
+      --etb-bg: #eef3f9;
+      --etb-surface: #ffffff;
+      --etb-text: #0c2a36;
+      --etb-muted: #4a5f72;
+      --etb-cta: #006ed0;
+      --etb-highlight: #d86055;
+      --radius-lg: 22px;
+      --radius-md: 12px;
+      --shadow-soft: 0 4px 28px rgba(0, 76, 143, 0.07), 0 16px 48px rgba(12, 42, 54, 0.06);
+      --header-h: 76px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Lexend", system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--etb-bg);
+      color: var(--etb-text);
+      line-height: 1.55;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    .top-bar {
+      min-height: var(--header-h);
+      background: linear-gradient(105deg, var(--etb-deep) 0%, var(--etb-primary) 42%, #0a5ea8 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 1.35rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+      border-bottom: 3px solid rgba(0, 200, 232, 0.55);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    /* Área libre alrededor del logotipo (manual §4) — sin caja que compita visualmente con el wordmark */
+    .brand-logo-wrap {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0.35rem 0.85rem 0.35rem 0.15rem;
+    }
+
+    .brand-logo-img {
+      display: block;
+      height: 42px;
+      width: auto;
+      max-width: 148px;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.25;
+      border-left: 1px solid rgba(255,255,255,0.25);
+      padding-left: 1rem;
+    }
+
+    .brand-text strong {
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-text span {
+      font-size: 0.72rem;
+      opacity: 0.9;
+      font-weight: 400;
+      max-width: 22rem;
+    }
+
+    .pill-env {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.4);
+      padding: 0.4rem 0.75rem;
+      border-radius: 999px;
+    }
+
+    .shell {
+      position: relative;
+      min-height: calc(100vh - var(--header-h));
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse 100% 70% at 0% -10%, rgba(0, 200, 232, 0.14) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 100% 0%, rgba(0, 76, 143, 0.1) 0%, transparent 50%),
+        linear-gradient(180deg, #f7fafd 0%, var(--etb-bg) 38%, #e8eef6 100%);
+    }
+
+    /* Onda dinámica única (manual §6 — abstracción suave, no satura UI) */
+    .shell-waves {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: min(42vh, 320px);
+      pointer-events: none;
+      opacity: 0.45;
+      z-index: 0;
+    }
+
+    .shell-waves svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .layout {
+      position: relative;
+      z-index: 1;
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 2.25rem 1.35rem 3.5rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2.25rem;
+      align-items: start;
+    }
+
+    @media (min-width: 920px) {
+      .layout {
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 3rem;
+        padding: 3rem 1.5rem 4.5rem;
+        align-items: center;
+      }
+    }
+
+    .hero h1 {
+      font-size: clamp(1.85rem, 4.2vw, 2.5rem);
+      font-weight: 700;
+      color: var(--etb-deep);
+      margin: 0 0 0.85rem;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+
+    .hero .kicker {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--etb-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .hero .lead {
+      font-size: 1.06rem;
+      font-weight: 400;
+      color: var(--etb-muted);
+      margin: 0 0 1.65rem;
+      max-width: 40ch;
+    }
+
+    .hero .lead code {
+      font-size: 0.88em;
+      font-family: ui-monospace, monospace;
+      background: rgba(0, 76, 143, 0.07);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+      color: var(--etb-deep);
+    }
+
+    /* Claim: negritas azules ↔ «creer»; bloque blanco sobre azul ↔ «crear» (adaptación a fondo claro, extracto §5) */
+    .claim-block {
+      margin: 0 0 1.75rem;
+      padding: 1.1rem 1.2rem;
+      background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(248,251,255,0.98));
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      box-shadow: 0 2px 12px rgba(0, 76, 143, 0.06);
+    }
+
+    .claim-label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--etb-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .claim-line {
+      font-size: clamp(1.15rem, 2.8vw, 1.45rem);
+      font-weight: 500;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+    }
+
+    .claim-creer {
+      color: var(--etb-primary);
+      font-weight: 700;
+    }
+
+    .claim-crear {
+      display: inline-block;
+      margin-left: 0.15em;
+      padding: 0.08em 0.38em 0.12em;
+      background: var(--etb-deep);
+      color: #fff;
+      font-weight: 700;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(33, 71, 128, 0.25);
+    }
+
+    .hero-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--etb-deep);
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      background: var(--etb-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(0, 76, 143, 0.09);
+      overflow: hidden;
+    }
+
+    .card-head {
+      position: relative;
+      background: linear-gradient(128deg, var(--etb-primary) 0%, var(--etb-deep) 72%, #1a3d6b 100%);
+      color: #fff;
+      padding: 1.35rem 1.6rem 1.45rem;
+    }
+
+    .card-head::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--etb-accent), transparent);
+      opacity: 0.85;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .card-head p {
+      margin: 0.45rem 0 0;
+      font-size: 0.82rem;
+      opacity: 0.92;
+      line-height: 1.45;
+      max-width: 42ch;
+    }
+
+    .card-head code {
+      font-size: 0.78em;
+      background: rgba(255,255,255,0.12);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    .card-body {
+      padding: 1.65rem 1.6rem 1.85rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: 0.55rem;
+      padding: 0.95rem 1.3rem;
+      font-family: inherit;
+      font-size: 0.96rem;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--etb-cta) 0%, #0056b3 100%);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(0, 110, 208, 0.38);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 110, 208, 0.42);
+    }
+
+    .btn-primary:focus-visible {
+      outline: 3px solid var(--etb-accent);
+      outline-offset: 2px;
+    }
+
+    .btn-logout {
+      margin-top: 1rem;
+      background: #fff;
+      color: var(--etb-highlight);
+      border: 2px solid rgba(216, 96, 85, 0.4);
+    }
+
+    .btn-logout:hover {
+      background: rgba(216, 96, 85, 0.07);
+    }
+
+    .hint {
+      margin-top: 1.1rem;
+      font-size: 0.74rem;
+      color: var(--etb-muted);
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .request-summary {
+      display: grid;
+      grid-template-columns: minmax(6.7rem, 0.38fr) 1fr;
+      gap: 0.45rem 0.75rem;
+      margin: 0 0 1rem;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0, 76, 143, 0.04);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      border-radius: var(--radius-md);
+    }
+
+    .request-summary dt {
+      margin: 0;
+      color: var(--etb-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .request-summary dd {
+      margin: 0;
+      color: var(--etb-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    #token-section { display: none; }
+
+    .callback-panel {
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    .callback-title {
+      margin: 0 0 0.65rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--etb-deep);
+      font-weight: 700;
+    }
+
+    .callback-grid {
+      display: grid;
+      grid-template-columns: minmax(6rem, 0.28fr) 1fr;
+      gap: 0.45rem 0.75rem;
+      margin: 0;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0, 200, 232, 0.06);
+      border: 1px solid rgba(0, 76, 143, 0.12);
+      border-radius: var(--radius-md);
+    }
+
+    .callback-grid dt {
+      color: var(--etb-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .callback-grid dd {
+      margin: 0;
+      color: var(--etb-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .success-icon {
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 0.85rem;
+      background: linear-gradient(145deg, rgba(0,200,232,0.2), rgba(0,76,143,0.08));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.45rem;
+      color: var(--etb-primary);
+    }
+
+    .token-box {
+      background: linear-gradient(180deg, #fafcfe 0%, #eef3f9 100%);
+      border: 1px solid rgba(0, 76, 143, 0.11);
+      border-radius: var(--radius-md);
+      padding: 0.9rem 1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.68rem;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+      max-height: 220px;
+      overflow-y: auto;
+      text-align: left;
+      color: var(--etb-text);
+      margin-top: 0.75rem;
+    }
+
+    .claims-panel {
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    .claims-title {
+      margin: 0 0 0.65rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--etb-deep);
+      font-weight: 700;
+    }
+
+    .claims-grid {
+      display: grid;
+      grid-template-columns: minmax(7rem, 0.42fr) 1fr;
+      gap: 0.45rem 0.75rem;
+      margin: 0;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0, 76, 143, 0.04);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      border-radius: var(--radius-md);
+    }
+
+    .claims-grid dt {
+      color: var(--etb-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .claims-grid dd {
+      margin: 0;
+      color: var(--etb-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .claims-raw {
+      margin-top: 0.75rem;
+      border: 1px solid rgba(0, 76, 143, 0.11);
+      border-radius: var(--radius-md);
+      background: #fafcfe;
+      overflow: hidden;
+    }
+
+    .claims-raw summary {
+      cursor: pointer;
+      padding: 0.7rem 0.9rem;
+      color: var(--etb-deep);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .claims-raw pre {
+      margin: 0;
+      padding: 0 0.9rem 0.9rem;
+      max-height: 210px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.68rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--etb-text);
+    }
+
+    /* Pie — aviso corto de contexto (no documentación de repo) */
+    .site-footer {
+      position: relative;
+      z-index: 1;
+      padding: 0.5rem 1.25rem 2.5rem;
+    }
+
+    .site-footer::before {
+      content: "";
+      display: block;
+      height: 1px;
+      max-width: 720px;
+      margin: 0 auto 1.25rem;
+      background: linear-gradient(90deg, transparent, rgba(0, 76, 143, 0.18), transparent);
+    }
+
+    .notice-banner {
+      max-width: 640px;
+      margin: 0 auto;
+      background: var(--etb-surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(0, 76, 143, 0.1);
+      box-shadow: 0 6px 24px rgba(33, 71, 128, 0.06);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 4px 1fr;
+    }
+
+    .notice-banner__accent {
+      background: var(--etb-primary);
+    }
+
+    .notice-banner__inner {
+      padding: 1rem 1.15rem 1.15rem;
+    }
+
+    .notice-title {
+      margin: 0 0 0.5rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--etb-primary);
+    }
+
+    .footer-note {
+      margin: 0;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: var(--etb-text);
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Mock Client App</h1>
-        <p>Simulation of a Partner App (Port 3000)</p>
-        
-        <div id="login-section">
-            <button id="login-btn" class="btn">Login with Identity Provider</button>
-        </div>
+  <header class="top-bar" role="banner">
+    <div class="brand">
+      <div class="brand-logo-wrap">
+        <img
+          class="brand-logo-img"
+          src="branding/etb-logo-white.svg"
+          alt="ETB — Empresa de Telecomunicaciones de Bogotá"
+          width="140"
+          height="42"
+          decoding="async"
+          fetchpriority="high"
+          onerror="this.onerror=null; this.src='public/branding/etb-logo-white.svg';"
+        />
+      </div>
+      <div class="brand-text">
+        <strong>Simulación · aplicación partner</strong>
+        <span id="mock-delegation-line">Delegación de acceso vía OpenID Connect al proveedor configurado para este entorno.</span>
+      </div>
+    </div>
+    <span class="pill-env" title="No es producción">Entorno local</span>
+  </header>
 
-        <div id="token-section" style="display: none;">
-            <h3>✅ Authenticated</h3>
-            <p>ID Token received via OIDC:</p>
-            <div id="token-display" class="token-box"></div>
-            <button id="logout-btn" class="btn" style="background-color: #dc3545;">Logout (Local)</button>
-        </div>
+  <div class="shell">
+    <div class="shell-waves" aria-hidden="true">
+      <svg viewBox="0 0 1440 320" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#004c8f" stop-opacity="0.25"/>
+            <stop offset="50%" stop-color="#00c8e8" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#214780" stop-opacity="0.2"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#g1)" d="M0,224L60,213.3C120,203,240,181,360,181.3C480,181,600,203,720,197.3C840,192,960,160,1080,154.7C1200,149,1320,171,1380,181.3L1440,192L1440,320L1380,320C1320,320,1200,320,1080,320C960,320,840,320,720,320C600,320,480,320,360,320C240,320,120,320,60,320L0,320Z"/>
+        <path fill="#004c8f" fill-opacity="0.08" d="M0,288L48,277.3C96,267,192,245,288,234.7C384,224,480,224,576,213.3C672,203,768,181,864,181.3C960,181,1056,203,1152,208C1248,213,1344,203,1392,197.3L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"/>
+      </svg>
     </div>
 
-    <script src="/config.js"></script>
-    <script>
-        // Dynamic Config with Local Fallback
-        const CONFIG = window.APP_CONFIG || {};
-        
-        const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
-        const CLIENT_ID = 'mock-client-app';
-        // If deployed, REDIRECT_URI should be the current page
-        const REDIRECT_URI = CONFIG.MOCK_CLIENT_URL || window.location.origin; 
+    <div class="layout">
+      <section class="hero" aria-labelledby="hero-title">
+        <span class="kicker">Techco · confianza digital</span>
+        <h1 id="hero-title">Acceso federado de prueba</h1>
+        <p class="lead">
+          Esta vista simula una aplicación de socio que delega el inicio de sesión al IdP. Úsala en desarrollo para validar redirecciones, <code>id_token</code> y renovación silenciosa — sin ofrecer servicios comerciales reales.
+        </p>
+        <div class="claim-block">
+          <span class="claim-label">Claim de marca (manual de imagen · sin punto final)</span>
+          <p class="claim-line">
+            <span class="claim-creer">Serás</span>
+            <span class="claim-creer">lo que</span>
+            <span class="claim-crear">creas</span>
+          </p>
+        </div>
+        <div class="hero-badges" aria-label="Características simuladas">
+          <span class="badge">OIDC implicit</span>
+          <span class="badge" id="badge-mock-origin">Origen local</span>
+          <span class="badge">Mock seguro</span>
+        </div>
+      </section>
 
-        const loginBtn = document.getElementById('login-btn');
-        const logoutBtn = document.getElementById('logout-btn');
-        const tokenSection = document.getElementById('token-section');
-        const loginSection = document.getElementById('login-section');
-        const tokenDisplay = document.getElementById('token-display');
+      <div class="card" aria-labelledby="card-title">
+        <div class="card-head">
+          <h2 id="card-title">Ingreso al ecosistema</h2>
+          <p>Al continuar, el navegador abrirá el IdP. Tras autenticarse, regresará aquí con el <code>id_token</code> en el fragmento de la URL.</p>
+        </div>
+        <div class="card-body">
+          <div id="login-section">
+            <dl id="request-summary" class="request-summary" aria-label="Parámetros de solicitud OIDC"></dl>
+            <button type="button" id="login-btn" class="btn btn-primary">
+              <span>Iniciar sesión con el proveedor de identidad</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6"/>
+              </svg>
+            </button>
+            <p id="auth-error" class="hint" role="alert" style="display:none; color:#a6192e;"></p>
+            <p class="hint">Solo laboratorio local. No sustituye términos legales ni disponibilidad de servicios ETB.</p>
+          </div>
 
-        // Check for Token in Hash (OIDC Callback)
-        function checkHash() {
-            const hash = window.location.hash;
-            if (hash && hash.includes('id_token=')) {
-                const token = hash.split('id_token=')[1].split('&')[0];
-                showToken(token);
-                // Clean URL
-                window.history.replaceState(null, '', window.location.pathname);
-            }
+          <div id="token-section">
+            <div class="success-icon" aria-hidden="true">✓</div>
+            <p style="margin:0; text-align:center; font-weight:600; color:var(--etb-deep);">Sesión simulada activa</p>
+            <p style="margin:0.35rem 0 0; text-align:center; font-size:0.85rem; color:var(--etb-muted);">Token recibido (JWT):</p>
+            <div id="token-display" class="token-box" role="region" aria-label="Contenido del token"></div>
+            <div class="callback-panel" aria-labelledby="callback-title">
+              <p id="callback-title" class="callback-title">Parámetros recibidos en el callback</p>
+              <dl id="callback-display" class="callback-grid"></dl>
+            </div>
+            <div class="claims-panel" aria-labelledby="claims-title">
+              <p id="claims-title" class="claims-title">Claims recibidos del IdP</p>
+              <dl id="claims-display" class="claims-grid"></dl>
+              <details class="claims-raw">
+                <summary>Ver payload completo</summary>
+                <pre id="claims-raw-display"></pre>
+              </details>
+            </div>
+            <button type="button" id="logout-btn" class="btn btn-logout">Cerrar sesión (solo este mock)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer" role="contentinfo" aria-labelledby="footer-sim-title">
+    <div class="notice-banner">
+      <div class="notice-banner__accent" aria-hidden="true"></div>
+      <div class="notice-banner__inner">
+        <h2 id="footer-sim-title" class="notice-title">Aviso de simulación</h2>
+        <p class="footer-note">
+          Esta interfaz solo ilustra el flujo de inicio de sesión federado para fines de demostración o capacitación. No es el canal oficial de atención, facturación ni autogestión ETB; no debe usarse con datos sensibles de clientes reales ni interpretarse como disponibilidad de servicios en producción.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/config.js"></script>
+  <script>
+    const CONFIG = window.APP_CONFIG || {};
+    const OIDC_CONFIG = CONFIG.oidc || {};
+    const IDP_URL = CONFIG.IDP_URL || 'http://localhost:5173';
+    const CLIENT_ID = OIDC_CONFIG.clientId || CONFIG.CLIENT_ID || 'etb-identity-omnicanal';
+    const REDIRECT_URI =
+      OIDC_CONFIG.redirectUri ||
+      CONFIG.REDIRECT_URI ||
+      CONFIG.MOCK_CLIENT_URL ||
+      window.location.origin;
+    const RESPONSE_TYPE = OIDC_CONFIG.responseType || CONFIG.RESPONSE_TYPE || 'token';
+    const SCOPE = OIDC_CONFIG.scope || CONFIG.SCOPE || 'openid profile email';
+    const OIDC_STATE_KEY = 'mock_oidc_state';
+    const OIDC_NONCE_KEY = 'mock_oidc_nonce';
+    const OIDC_REFRESH_STATE_KEY = 'mock_oidc_refresh_state';
+    const OIDC_REFRESH_NONCE_KEY = 'mock_oidc_refresh_nonce';
+    const CALLBACK_STATE_KEY = 'mock_callback_state';
+    const CALLBACK_NONCE_KEY = 'mock_callback_nonce';
+    const CLAIM_ORDER = [
+      'iss',
+      'aud',
+      'sub',
+      'email',
+      'email_verified',
+      'name',
+      'phone_number',
+      'auth_time',
+      'iat',
+      'exp',
+      'firebase'
+    ];
+
+    // Texto visible alineado con hosts reales (puertos u orígenes pueden cambiar según despliegue).
+    (function applyRuntimeLabels() {
+      const localHostnames = new Set(['localhost', '127.0.0.1', '::1']);
+      const isLocal = localHostnames.has(window.location.hostname);
+      const envLabel =
+        CONFIG.ENV_LABEL ||
+        CONFIG.APP_ENV_LABEL ||
+        (isLocal ? 'Entorno local' : 'Ambiente previo');
+      const envPill = document.querySelector('.pill-env');
+      if (envPill) {
+        envPill.textContent = envLabel;
+        envPill.title = isLocal ? 'Ejecución local' : 'Ambiente previo, no producción';
+      }
+
+      const line = document.getElementById('mock-delegation-line');
+      if (line) {
+        try {
+          const idpHost = new URL(IDP_URL).host;
+          line.textContent =
+            'Delegación de acceso vía OpenID Connect hacia el IdP en ' +
+            idpHost +
+            '. Esta vista se sirve desde ' +
+            window.location.host +
+            '.';
+        } catch {
+          line.textContent =
+            'Delegación de acceso vía OpenID Connect al proveedor configurado para este entorno.';
         }
+      }
+      const badge = document.getElementById('badge-mock-origin');
+      if (badge) badge.textContent = 'Origen · ' + window.location.host;
+    })();
 
-        function showToken(token) {
-            tokenDisplay.textContent = token;
-            loginSection.style.display = 'none';
-            tokenSection.style.display = 'block';
-            sessionStorage.setItem('mock_token', token);
-        }
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const tokenSection = document.getElementById('token-section');
+    const loginSection = document.getElementById('login-section');
+    const tokenDisplay = document.getElementById('token-display');
+    const callbackDisplay = document.getElementById('callback-display');
+    const claimsDisplay = document.getElementById('claims-display');
+    const claimsRawDisplay = document.getElementById('claims-raw-display');
+    const authError = document.getElementById('auth-error');
+    const requestSummary = document.getElementById('request-summary');
 
-        function logout() {
-            sessionStorage.removeItem('mock_token');
-            location.reload();
-        }
+    function setAuthError(message) {
+      if (!authError) return;
+      authError.textContent = message || '';
+      authError.style.display = message ? 'block' : 'none';
+    }
 
-        // Check Session
-        const storedToken = sessionStorage.getItem('mock_token');
-        if (storedToken) {
-            showToken(storedToken);
-        } else {
-            checkHash();
-        }
+    function createOidcState(prefix) {
+      const randomBytes = new Uint8Array(16);
+      crypto.getRandomValues(randomBytes);
+      const random = Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      return `${prefix}-${Date.now().toString(36)}-${random}`;
+    }
 
-        loginBtn.addEventListener('click', () => {
-            // Initiate OIDC Implicit Flow
-            const authUrl = `${IDP_URL}/?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&state=random_state_string`;
-            window.location.href = authUrl;
+    function createOidcNonce() {
+      const randomBytes = new Uint8Array(12);
+      crypto.getRandomValues(randomBytes);
+      const random = Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      return `nonce-${Date.now().toString(36)}-${random}`;
+    }
+
+    function getAuthParams({ state, prompt, nonce }) {
+      const params = new URLSearchParams({
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        response_type: RESPONSE_TYPE,
+        scope: SCOPE,
+        state
+      });
+      if (nonce) params.set('nonce', nonce);
+      if (prompt) params.set('prompt', prompt);
+      return params;
+    }
+
+    function buildAuthUrl({ state, prompt, nonce }) {
+      const params = getAuthParams({ state, prompt, nonce });
+      return `${IDP_URL}/?${params.toString()}`;
+    }
+
+    function renderRequestSummary() {
+      if (!requestSummary) return;
+      const entries = [
+        ['client_id', CLIENT_ID],
+        ['redirect_uri', REDIRECT_URI],
+        ['response_type', RESPONSE_TYPE],
+        ['scope', SCOPE],
+        ['state', '(aleatorio por intento; se valida al volver)'],
+        ['nonce', '(aleatorio por intento; se valida al volver)'],
+      ];
+
+      requestSummary.textContent = '';
+      for (const [name, value] of entries) {
+        const term = document.createElement('dt');
+        term.textContent = name;
+
+        const description = document.createElement('dd');
+        description.textContent = value;
+
+        requestSummary.append(term, description);
+      }
+    }
+
+    function validateStoredValue(returnedValue, storageKey) {
+      const expectedState = sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey);
+      if (!expectedState) return false;
+      if (returnedValue === expectedState) {
+        sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
+        return true;
+      }
+      return false;
+    }
+
+    function clearPendingOidcValidation() {
+      sessionStorage.removeItem(OIDC_STATE_KEY);
+      sessionStorage.removeItem(OIDC_NONCE_KEY);
+      sessionStorage.removeItem(OIDC_REFRESH_STATE_KEY);
+      sessionStorage.removeItem(OIDC_REFRESH_NONCE_KEY);
+      localStorage.removeItem(OIDC_STATE_KEY);
+      localStorage.removeItem(OIDC_NONCE_KEY);
+      localStorage.removeItem(OIDC_REFRESH_STATE_KEY);
+      localStorage.removeItem(OIDC_REFRESH_NONCE_KEY);
+    }
+
+    function clearCallbackParams() {
+      sessionStorage.removeItem(CALLBACK_STATE_KEY);
+      sessionStorage.removeItem(CALLBACK_NONCE_KEY);
+    }
+
+    function storeCallbackParams({ state, nonce }) {
+      sessionStorage.setItem(CALLBACK_STATE_KEY, state || '');
+      sessionStorage.setItem(CALLBACK_NONCE_KEY, nonce || '');
+    }
+
+    function renderCallbackParams(params = {}) {
+      if (!callbackDisplay) return;
+      const state = params.state ?? sessionStorage.getItem(CALLBACK_STATE_KEY) ?? '(sin valor)';
+      const nonce = params.nonce ?? sessionStorage.getItem(CALLBACK_NONCE_KEY) ?? '(sin valor)';
+      const entries = [
+        ['state', state],
+        ['nonce', nonce],
+      ];
+
+      callbackDisplay.textContent = '';
+      for (const [name, value] of entries) {
+        const term = document.createElement('dt');
+        term.textContent = name;
+
+        const description = document.createElement('dd');
+        description.textContent = value || '(sin valor)';
+
+        callbackDisplay.append(term, description);
+      }
+    }
+
+    function decodeBase64Url(value) {
+      const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=');
+      const binary = atob(padded);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+
+    function decodeJwtPayload(token) {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      return JSON.parse(decodeBase64Url(parts[1]));
+    }
+
+    function formatClaimValue(key, value) {
+      if ((key === 'iat' || key === 'exp' || key === 'auth_time') && typeof value === 'number') {
+        return new Date(value * 1000).toLocaleString('es-CO', {
+          dateStyle: 'medium',
+          timeStyle: 'medium'
         });
+      }
 
-        logoutBtn.addEventListener('click', logout);
-    </script>
+      if (Array.isArray(value)) return value.join(', ');
+      if (value && typeof value === 'object') return JSON.stringify(value, null, 2);
+      if (typeof value === 'boolean') return value ? 'true' : 'false';
+      if (value === null || value === undefined || value === '') return '(sin valor)';
+      return String(value);
+    }
+
+    function renderClaims(token) {
+      if (!claimsDisplay || !claimsRawDisplay) return;
+
+      try {
+        const claims = decodeJwtPayload(token);
+        if (!claims) throw new Error('El token no tiene formato JWT');
+
+        const keys = [
+          ...CLAIM_ORDER.filter((key) => Object.prototype.hasOwnProperty.call(claims, key)),
+          ...Object.keys(claims).filter((key) => !CLAIM_ORDER.includes(key)).sort()
+        ];
+
+        claimsDisplay.textContent = '';
+        for (const key of keys) {
+          const term = document.createElement('dt');
+          term.textContent = key;
+
+          const description = document.createElement('dd');
+          description.textContent = formatClaimValue(key, claims[key]);
+
+          claimsDisplay.append(term, description);
+        }
+
+        claimsRawDisplay.textContent = JSON.stringify(claims, null, 2);
+      } catch (error) {
+        claimsDisplay.textContent = '';
+
+        const term = document.createElement('dt');
+        term.textContent = 'error';
+
+        const description = document.createElement('dd');
+        description.textContent = 'No fue posible decodificar los claims del token recibido.';
+
+        claimsDisplay.append(term, description);
+        claimsRawDisplay.textContent = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    function getTokenExpiration(token) {
+      try {
+        const payload = decodeJwtPayload(token);
+        return payload.exp ? payload.exp * 1000 : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function checkHash() {
+      const hash = window.location.hash;
+      if (!hash) return;
+
+      const fragment = new URLSearchParams(hash.slice(1));
+      const token = fragment.get('id_token');
+      const error = fragment.get('error');
+      const returnedState = fragment.get('state') || '';
+      const returnedNonce = fragment.get('nonce') || '';
+      const isRefreshReturn = Boolean(sessionStorage.getItem(OIDC_REFRESH_STATE_KEY));
+      const stateKey = isRefreshReturn ? OIDC_REFRESH_STATE_KEY : OIDC_STATE_KEY;
+      const nonceKey = isRefreshReturn ? OIDC_REFRESH_NONCE_KEY : OIDC_NONCE_KEY;
+
+      const stateMatches = validateStoredValue(returnedState, stateKey);
+      const nonceMatches = validateStoredValue(returnedNonce, nonceKey);
+
+      if (!stateMatches || !nonceMatches) {
+        sessionStorage.removeItem('mock_token');
+        clearCallbackParams();
+        clearPendingOidcValidation();
+        setAuthError('No pudimos validar la respuesta del IdP. Inicia sesión nuevamente.');
+        window.history.replaceState(null, '', window.location.pathname);
+        return;
+      }
+
+      if (token) {
+        const callbackParams = { state: returnedState, nonce: returnedNonce };
+        storeCallbackParams(callbackParams);
+        showToken(token, callbackParams);
+        scheduleSilentRefresh(token);
+        window.history.replaceState(null, '', window.location.pathname);
+      } else if (error === 'login_required') {
+        window.history.replaceState(null, '', window.location.pathname);
+        showInteractiveLogin('Tu sesión en el IdP expiró. Inicia sesión nuevamente para continuar.');
+      } else if (error) {
+        setAuthError(fragment.get('error_description') || 'El IdP no pudo completar el acceso.');
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+
+    let refreshTimeoutId = null;
+    function scheduleSilentRefresh(token) {
+      clearTimeout(refreshTimeoutId);
+      const expMs = getTokenExpiration(token);
+      if (!expMs) return;
+      const refreshBeforeMs = 10 * 60 * 1000;
+      const delay = Math.max(0, expMs - Date.now() - refreshBeforeMs);
+      refreshTimeoutId = setTimeout(() => {
+        const state = createOidcState('refresh');
+        const nonce = createOidcNonce();
+        sessionStorage.setItem(OIDC_REFRESH_STATE_KEY, state);
+        sessionStorage.setItem(OIDC_REFRESH_NONCE_KEY, nonce);
+        localStorage.setItem(OIDC_REFRESH_STATE_KEY, state);
+        localStorage.setItem(OIDC_REFRESH_NONCE_KEY, nonce);
+        window.location.href = buildAuthUrl({ state, prompt: 'none', nonce });
+      }, delay);
+      window._refreshTimeout = refreshTimeoutId;
+    }
+
+    function showToken(token, callbackParams = {}) {
+      setAuthError('');
+      tokenDisplay.textContent = token;
+      renderCallbackParams(callbackParams);
+      renderClaims(token);
+      loginSection.style.display = 'none';
+      tokenSection.style.display = 'block';
+      sessionStorage.setItem('mock_token', token);
+    }
+
+    function showInteractiveLogin(message) {
+      sessionStorage.removeItem('mock_token');
+      clearCallbackParams();
+      clearPendingOidcValidation();
+      clearTimeout(refreshTimeoutId);
+      clearTimeout(window._refreshTimeout);
+      tokenSection.style.display = 'none';
+      loginSection.style.display = 'block';
+      setAuthError(message);
+    }
+
+    function logout() {
+      sessionStorage.removeItem('mock_token');
+      clearCallbackParams();
+      clearPendingOidcValidation();
+      location.reload();
+    }
+
+    const storedToken = sessionStorage.getItem('mock_token');
+    if (storedToken) {
+      showToken(storedToken);
+      scheduleSilentRefresh(storedToken);
+    } else {
+      checkHash();
+    }
+    renderRequestSummary();
+
+    loginBtn.addEventListener('click', () => {
+      const state = createOidcState('login');
+      const nonce = createOidcNonce();
+      sessionStorage.setItem(OIDC_STATE_KEY, state);
+      sessionStorage.setItem(OIDC_NONCE_KEY, nonce);
+      localStorage.setItem(OIDC_STATE_KEY, state);
+      localStorage.setItem(OIDC_NONCE_KEY, nonce);
+      window.location.href = buildAuthUrl({ state, nonce });
+    });
+
+    logoutBtn.addEventListener('click', logout);
+  </script>
 </body>
 </html>

@@ -1,0 +1,55 @@
+# Playwright necesita proyecto Firebase válido (.env desde .env.example). Ejecutar a demanda tras configurar GitHub Secrets.
+name: E2E (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_audit:
+        description: "Ejecutar pnpm audit --audit-level=critical antes de E2E"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  e2e-chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Opcional pnpm audit critical
+        if: ${{ inputs.run_audit }}
+        run: pnpm audit --audit-level=critical
+
+      # Defina estos secretos en el repositorio (mismos nombres que .env.example VITE_* y credenciales de prueba opcionales).
+      - name: Crear .env para Vite desde secretos (si están definidos)
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        run: |
+          if [ -z "$VITE_FIREBASE_API_KEY" ] || [ -z "$VITE_FIREBASE_AUTH_DOMAIN" ]; then
+            echo "Defina secrets VITE_FIREBASE_* antes de lanzar este workflow."
+            exit 1
+          fi
+          printf 'VITE_FIREBASE_API_KEY=%s\nVITE_FIREBASE_AUTH_DOMAIN=%s\nVITE_FIREBASE_PROJECT_ID=%s\nTEST_USER_EMAIL=%s\nTEST_USER_PASSWORD=%s\n' \
+            "$VITE_FIREBASE_API_KEY" "$VITE_FIREBASE_AUTH_DOMAIN" "${VITE_FIREBASE_PROJECT_ID:-}" "${TEST_USER_EMAIL:-}" "${TEST_USER_PASSWORD:-}" > .env
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm run test:e2e:ci
+        env:
+          CI: "true"

@@ -1,15 +1,22 @@
 :root {
-  /* Brand Identity Tokens (White Label) */
-  --brand-primary: #204780;       /* Default Fallback */
-  --brand-secondary: #006DCC;
-  --brand-accent: #00E4FF;
-  --brand-action: #FF5A00;
+  /* Brand — defaults ETB IdP; runtime: `applyThemeCssVars` en `src/main.tsx` */
+  --brand-primary: #214780;
+  --brand-secondary: #0092bc;
+  --brand-accent: #00E5FF;
+  --brand-action: #d86055;
   --brand-bg: #F8F9FB;
   --brand-text: #080707;
-  --brand-text-secondary: #555555;
-  --glass-border: rgba(32, 71, 128, 0.1);
+  --brand-text-secondary: #515151;
+  --brand-card-bg: #fafafa;
+  --brand-primary-rgb: 33, 71, 128;
+  --brand-secondary-rgb: 0, 146, 188;
+  --brand-error: #b71c1c;
+  --brand-error-surface: rgba(183, 28, 28, 0.08);
+  --brand-hero-gradient-start: #004b90;
+  --brand-hero-gradient-end: #0092bc;
+  --glass-border: rgba(var(--brand-primary-rgb), 0.1);
 
-  font-family: 'DINPro', 'Inter', system-ui, Arial, sans-serif;
+  font-family: 'Lexend Deca', 'Lexend', 'DINPro', 'Inter', system-ui, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -23,11 +30,20 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  min-width: 320px;
+  min-height: 100%;
+  scroll-padding-bottom: max(6rem, env(safe-area-inset-bottom, 0px));
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   display: block;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   /* Premium Light Gradient inspired by their clean site */
   background: linear-gradient(180deg, #ffffff 0%, #E6F4FF 100%);
   overflow-x: hidden;
@@ -76,11 +92,10 @@ body {
 .nav-links a {
     text-decoration: none;
     color: var(--brand-primary);
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
     transition: color 0.3s;
     text-transform: uppercase;
-    font-size: 0.85rem;
     letter-spacing: 0.5px;
 }
 
@@ -97,7 +112,7 @@ body {
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.3s, transform 0.3s, box-shadow 0.3s;
     box-shadow: 0 4px 10px rgba(32, 71, 128, 0.2);
 }
 
@@ -130,10 +145,9 @@ body {
     padding: 6rem 5%;
     max-width: 1400px;
     margin: 0 auto;
-    text-align: left;
     display: flex;
     flex-direction: column;
-    align-items: center; /* Center align for impact */
+    align-items: center;
     text-align: center;
 }
 
@@ -169,7 +183,7 @@ body {
     padding: 3rem 2rem;
     border-radius: 12px;
     text-align: left;
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s;
     box-shadow: 0 10px 40px rgba(32, 71, 128, 0.08); /* Premium soft shadow */
     border-top: 4px solid transparent;
 }
@@ -274,7 +288,7 @@ input {
     border-radius: 8px;
     color: var(--brand-text);
     font-size: 1rem;
-    transition: all 0.2s;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
 
 input:focus {
@@ -304,8 +318,8 @@ input:focus {
 
 .secure-data-panel {
     margin-top: 3rem;
-    background: #E8F5E9;
-    border: 1px solid #4CAF50;
+    background: rgba(var(--brand-secondary-rgb), 0.06);
+    border: 1px solid rgba(var(--brand-secondary-rgb), 0.35);
     border-radius: 12px;
     padding: 2rem;
     width: 100%;
@@ -313,7 +327,7 @@ input:focus {
 }
 
 .secure-data-panel pre {
-    color: #2E7D32;
+    color: var(--brand-primary);
     background: rgba(255,255,255,0.5);
     padding: 1rem;
     border-radius: 8px;
@@ -375,7 +389,7 @@ ul.firebaseui-idp-list {
     border: 1px solid #ddd;
     border-radius: 6px;
     font-size: 1rem;
-    transition: border 0.3s;
+    transition: border-color 0.2s, box-shadow 0.2s;
     background: #f9f9f9;
 }
 
@@ -383,6 +397,7 @@ ul.firebaseui-idp-list {
     border-color: var(--brand-secondary);
     background: white;
     outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--brand-secondary-rgb), 0.25);
 }
 
 .auth-switch {
@@ -415,25 +430,6 @@ ul.firebaseui-idp-list {
     object-fit: contain;
 }
 
-.auth-alert {
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 1.5rem;
-    font-size: 0.9rem;
-    text-align: left;
-}
-
-.auth-alert.error {
-    background-color: #ffebee;
-    color: #c62828;
-    border: 1px solid #ffcdd2;
-}
-
-.auth-alert.success {
-    background-color: #e8f5e9;
-    color: #2e7d32;
-    border: 1px solid #c8e6c9;
-}
 
 .forgot-pass-link {
     text-align: right;
@@ -496,9 +492,9 @@ ul.firebaseui-idp-list {
     border: 1px solid #ddd;
     border-radius: 8px;
     font-size: 1rem;
-    color: #333;
+    color: var(--brand-text);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .google-btn:hover {
@@ -519,4 +515,1865 @@ ul.firebaseui-idp-list {
     text-align: center;
     margin-top: 2rem;
     opacity: 0.6;
+}
+
+/* ================================================
+   LOGIN — Mobile-first (ETB Figma Design)
+   Design tokens: #214780 deep-blue, #0092bc etb-blue,
+                  #515151 gray, #FAFAFA card-bg
+   ================================================ */
+
+/* ---- Error / Success alerts — on-brand ETB ---- */
+.auth-alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    font-size: 0.875rem;
+    text-align: left;
+    line-height: 1.5;
+}
+/* Éxito: tinte azul ETB, texto azul profundo */
+.auth-alert.success {
+    background: rgba(var(--brand-secondary-rgb), 0.08);
+    color: var(--brand-primary);
+    border: 1px solid rgba(var(--brand-secondary-rgb), 0.40);
+}
+/* Error: rojo semántico suavizado, borde tenue */
+.auth-alert.error {
+    background: rgba(198, 40, 40, 0.06);
+    color: var(--brand-error);
+    border: 1px solid rgba(198, 40, 40, 0.25);
+}
+
+/* ---- Error state inside card ---- */
+.login-error-state { text-align: center; padding: 0.5rem 0; }
+.login-error-icon {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--brand-error-surface); color: var(--brand-error);
+    font-size: 1.4rem; line-height: 48px; margin: 0 auto 1rem;
+}
+.login-error-state h2 { color: var(--brand-error); font-size: 1.2rem; margin-bottom: 0.75rem; }
+.login-error-state p  { color: var(--brand-text-secondary); font-size: 0.875rem; line-height: 1.5; margin-bottom: 1.5rem; }
+.login-error-state .login-error-guidance { margin-bottom: 0; }
+
+/* ---- Client ID note ---- */
+.login-client-id {
+    text-align: center; font-size: 0.75rem;
+    color: #6B7A8D; margin-top: 1rem; margin-bottom: 0; /* ratio ~4.6:1 AA */
+}
+
+/* ---- Visually hidden (screen-reader only) ---- */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ================================================
+   LOGIN FORM
+   ================================================ */
+.login-form { width: 100%; }
+
+.login-form-title {
+    color: var(--brand-primary);
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-family: 'Lexend', 'Lexend Deca', sans-serif;
+    text-align: left;
+    margin: 0 0 0.35rem;
+}
+
+.login-form-subtitle {
+    text-align: left;
+    color: var(--brand-text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.5;
+}
+
+.login-form-subtitle button {
+    background: none; border: none; padding: 0.25rem;
+    color: var(--brand-primary); font-weight: 700;
+    cursor: pointer; font-size: inherit;
+    min-height: 44px;
+    display: inline-flex; align-items: center;
+}
+
+.login-field { margin-bottom: 0.85rem; }
+
+.login-field input {
+    width: 100%;
+    padding: 0 20px;
+    background: var(--brand-card-bg);
+    border: 1.5px solid var(--brand-text-secondary);
+    border-radius: 20px;
+    color: var(--brand-text-secondary);
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    height: 52px;
+    transition: border-color 0.2s, background 0.2s;
+    font-family: inherit;
+}
+
+.login-field input::placeholder { color: var(--brand-text-secondary); }
+
+.login-field input:focus {
+    outline: none;
+    border-color: var(--brand-secondary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(var(--brand-secondary-rgb), 0.35);
+}
+
+.login-btn-primary {
+    width: 100%;
+    height: 52px;
+    background: var(--brand-secondary);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 0.75rem;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+}
+.login-btn-primary:hover:not(:disabled) { background: var(--brand-primary); }
+.login-btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.login-btn-outline {
+    width: 100%;
+    height: 52px;
+    background: white;
+    color: var(--brand-secondary);
+    border: 1.5px solid var(--brand-secondary);
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background 0.2s;
+    margin-bottom: 0.75rem;
+    font-family: inherit;
+}
+.login-btn-outline:hover:not(:disabled) { background: #f0f7ff; }
+.login-btn-outline:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* Social buttons row */
+.login-social-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.login-btn-social {
+    height: 52px;
+    background: white;
+    color: var(--brand-secondary);
+    border: 2px solid var(--brand-secondary);
+    border-radius: 24px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+    font-family: inherit;
+}
+.login-btn-social:hover:not(:disabled) { background: #f0f7ff; }
+.login-btn-social:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.login-forgot { text-align: center; margin-top: 0.25rem; }
+.login-forgot button {
+    background: none; border: none;
+    color: var(--brand-text-secondary); font-size: 0.875rem;
+    cursor: pointer; padding: 0.5rem 0.25rem; /* touch target mínimo */
+    font-family: inherit;
+    text-decoration: underline;
+    transition: color 0.2s;
+    min-height: 44px;
+    display: inline-flex; align-items: center;
+}
+.login-forgot button:hover { color: var(--brand-secondary); }
+
+/* ================================================
+   LOGIN LAYOUT — Mobile first
+   Figma tokens: #214780 deep-blue | #0092bc etb-blue
+                 #515151 gray | #FAFAFA card-bg
+   Mobile  → node 4146-231 (gradient bg, centered card, logo+tagline)
+   Desktop → node 5226-5013 (hero image, card floating right)
+   ================================================ */
+
+/* ══════════════════════════════════════════════
+   BASE — Mobile (default)
+   ══════════════════════════════════════════════ */
+
+.login-desktop {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    overflow-x: hidden;
+    /* Mobile: solid gradient — no photo */
+    background: linear-gradient(180deg, var(--brand-hero-gradient-start) 0%, var(--brand-hero-gradient-end) 100%);
+}
+
+/* Decorative arc — top-left (mobile Figma) */
+.login-desktop::before {
+    content: '';
+    position: absolute;
+    top: -55px;
+    left: -55px;
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.50);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Decorative arc — bottom-right (mobile Figma) */
+.login-desktop::after {
+    content: '';
+    position: absolute;
+    bottom: -55px;
+    right: -55px;
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.50);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ---- Mobile logo header ---- */
+.login-mobile-header {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: max(2.5rem, env(safe-area-inset-top, 0px)) 1.5rem 1rem;
+    flex: none;
+}
+
+.login-mobile-logo {
+    height: 68px;
+    width: 86px;
+    display: block;
+}
+
+/* ---- Hero panel — hidden on mobile, shown on desktop ---- */
+.login-hero {
+    display: none;
+}
+
+.login-hero::before,
+.login-hero::after { display: none; }
+
+.login-hero-inner { width: 100%; }
+
+.login-hero-title {
+    font-size: 2.4rem;
+    font-weight: 900;
+    font-family: 'Lexend', sans-serif;
+    color: white;
+    line-height: 1.05;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.5px;
+}
+
+.login-hero-accent {
+    color: #00E5FF;
+    font-weight: 700;
+    font-size: 1rem;
+    margin: 0 0 0.2rem;
+}
+
+.login-hero-desc {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.95rem;
+    margin: 0 0 1.5rem;
+}
+
+.login-hero-app-label {
+    color: white;
+    font-weight: 700;
+    font-size: 0.82rem;
+    margin-bottom: 0.55rem;
+}
+
+.login-hero-badges {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    align-items: stretch;
+    container-type: inline-size;
+}
+
+/* Enlaces a tiendas: aspecto botón, elevación y brillo (marca ETB: acento cian sutil) */
+.app-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(165deg, #171717 0%, #0a0a0a 52%, #151515 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 0.42rem 0.72rem;
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    font-size: 0.63rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    transition:
+        transform 0.28s cubic-bezier(0.34, 1.15, 0.64, 1),
+        box-shadow 0.28s ease,
+        border-color 0.28s ease,
+        background 0.28s ease;
+    z-index: 0;
+}
+
+.app-badge::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        105deg,
+        transparent 34%,
+        rgba(255, 255, 255, 0.16) 50%,
+        transparent 66%
+    );
+    transform: translateX(-130%);
+    transition: transform 0.7s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.app-badge:hover::before {
+    transform: translateX(130%);
+}
+
+.app-badge > svg,
+.app-badge > span {
+    position: relative;
+    z-index: 2;
+}
+
+.app-badge__icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: 0 0 auto;
+}
+
+.app-badge__icon--apple {
+    fill: #f7f8fb;
+}
+
+.app-badge__copy {
+    min-width: 0;
+}
+
+.app-badge:hover {
+    transform: translateY(-4px) scale(1.03);
+    border-color: rgba(0, 229, 255, 0.42);
+    box-shadow:
+        0 14px 32px rgba(0, 0, 0, 0.48),
+        0 0 0 1px rgba(0, 229, 255, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.app-badge:active {
+    transform: translateY(-1px) scale(1.01);
+    transition-duration: 0.08s;
+}
+
+.app-badge:focus-visible {
+    outline: none;
+    border-color: rgba(0, 229, 255, 0.85);
+    box-shadow:
+        0 0 0 3px rgba(var(--brand-secondary-rgb), 0.45),
+        0 10px 26px rgba(0, 0, 0, 0.42);
+}
+
+.app-badge b {
+    font-size: 0.76rem;
+    display: block;
+    letter-spacing: 0.02em;
+}
+
+@container (max-width: 420px) {
+    .app-badge {
+        min-width: 9.5rem;
+        justify-content: center;
+    }
+}
+
+.app-badge--apple:hover {
+    background: linear-gradient(165deg, #1f1f1f 0%, #0c0c0c 100%);
+}
+
+.app-badge--google:hover {
+    border-color: rgba(66, 133, 244, 0.55);
+}
+
+.app-badge--huawei {
+    background: linear-gradient(165deg, #e01010 0%, #9d0000 52%, #c20808 100%);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.app-badge--huawei:hover {
+    background: linear-gradient(165deg, #f01818 0%, #b00808 100%);
+    border-color: rgba(255, 220, 220, 0.55);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .login-hero-badges .app-badge {
+        animation: appBadgeReveal 0.52s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    }
+
+    .login-hero-badges .app-badge:nth-child(1) { animation-delay: 0.07s; }
+    .login-hero-badges .app-badge:nth-child(2) { animation-delay: 0.14s; }
+    .login-hero-badges .app-badge:nth-child(3) { animation-delay: 0.21s; }
+}
+
+@keyframes appBadgeReveal {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-badge,
+    .app-badge::before {
+        transition: none !important;
+        animation: none !important;
+    }
+
+    .app-badge:hover,
+    .app-badge:active {
+        transform: none;
+    }
+
+    .app-badge:hover::before {
+        transform: translateX(-130%);
+    }
+}
+
+/* ---- Card panel — mobile: centered over gradient ---- */
+.login-card-panel {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background: transparent;
+    padding: 0 1.25rem max(1.5rem, env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.login-page-card {
+    background: var(--brand-card-bg);
+    border-radius: 10px;
+    padding: 3.125rem 1.3125rem 3.125rem;
+    width: 100%;
+    max-width: 356px;
+    box-sizing: border-box;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.10);
+}
+
+/* ---- Tagline — mobile only ---- */
+.login-tagline {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    padding: 1.25rem 1.5rem 2rem;
+    flex: none;
+}
+
+.login-tagline p {
+    color: white;
+    font-size: 1.25rem;
+    font-family: 'Lexend Deca', sans-serif;
+    font-weight: 500;
+    text-align: center;
+    margin: 0;
+    letter-spacing: 0.1px;
+}
+
+.login-tagline strong {
+    font-weight: 800;
+}
+
+/* Tiendas app: visible solo <1024px (paridad con hero en PNG en desktop) */
+.login-mobile-app-stores {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem 1rem 0.5rem;
+}
+
+.login-mobile-app-stores .login-hero-badges {
+    justify-content: center;
+}
+
+.login-mobile-app-stores__title {
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.78rem;
+    margin: 0 0 0.5rem;
+    text-align: center;
+    letter-spacing: 0.02em;
+}
+
+/* ══════════════════════════════════════════════
+   FORM — Mobile overrides (centered, smaller)
+   ══════════════════════════════════════════════ */
+.login-form-title {
+    text-align: center;
+    font-size: 1.5rem;
+}
+
+.login-form-subtitle {
+    text-align: center;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+}
+
+.login-field input {
+    height: 48px;
+    border-radius: 16px;
+    font-size: 1rem;
+}
+
+.login-btn-primary {
+    min-height: 48px;
+    border-radius: 38px;
+    font-size: 1rem;
+}
+
+/* Social buttons — mobile: full width pill with icon + label */
+.login-social-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.login-btn-social {
+    min-height: 48px;
+    border-radius: 38px;
+    width: 100%;
+    justify-content: center;
+    gap: 6px;
+}
+
+.login-social-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--brand-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.login-btn-outline {
+    border-radius: 38px;
+    font-size: 0.875rem;
+}
+
+/* ══════════════════════════════════════════════
+   DESKTOP — Full-width hero + floating card  ≥1024px
+   Figma node 5226-5013
+   ══════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+
+    /* Full layout: row, hero bg image full-width */
+    .login-desktop {
+        flex-direction: row;
+        align-items: stretch;
+        background: url('/branding/login-hero.png') center top / cover no-repeat, #004b90;
+    }
+
+    /* No overlay on desktop — image already has its own tones + arc */
+    .login-desktop::before { display: none; }
+    .login-desktop::after  { display: none; }
+
+    /* Hide mobile-only elements */
+    .login-mobile-header { display: none; }
+    .login-mobile-app-stores { display: none; }
+    .login-tagline        { display: none; }
+
+    /* ---- Left hero panel ----
+       The campaign image already contains the visible copy and store badges.
+       Desktop anchors stay as invisible click targets over the baked badges. */
+    .login-hero {
+        display: flex;
+        flex: 1;
+        min-height: 100vh;
+        min-height: 100dvh;
+        position: relative;
+        visibility: visible;
+        pointer-events: none;
+    }
+
+    .login-hero-inner {
+        position: absolute;
+        left: clamp(8.5rem, 13.2vw, 16rem);
+        top: clamp(26.25rem, 29.2vw, 35rem);
+        width: min(32rem, calc(100vw - 680px));
+        pointer-events: auto;
+    }
+
+    .login-hero-inner::before {
+        display: none;
+    }
+
+    .login-hero-title,
+    .login-hero-accent,
+    .login-hero-desc,
+    .login-hero-app-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .login-hero .login-hero-badges {
+        position: relative;
+        gap: clamp(1.5rem, 2vw, 2.4rem);
+        flex-wrap: nowrap;
+        max-width: 100%;
+        z-index: 1;
+    }
+
+    .login-hero .app-badge {
+        min-width: clamp(7.6rem, 8.7vw, 10.2rem);
+        min-height: clamp(2.45rem, 2.35vw, 2.95rem);
+        padding: 0;
+        opacity: 0;
+        border-radius: 0.5rem;
+        box-shadow: none;
+        transform: none;
+        animation: none;
+    }
+
+    .login-hero .app-badge:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .login-hero .app-badge:focus-visible {
+        opacity: 0.08;
+        outline: 3px solid var(--brand-accent);
+        outline-offset: 4px;
+    }
+
+    .login-hero .app-badge:nth-child(2) {
+        min-width: clamp(8.5rem, 9.7vw, 11.6rem);
+    }
+
+    .login-hero .app-badge:nth-child(3) {
+        min-width: clamp(8.3rem, 9.45vw, 11.3rem);
+    }
+
+    /* ---- Right card panel — floats over hero image ---- */
+    .login-card-panel {
+        width: 580px;
+        min-width: 480px;
+        flex: none;
+        min-height: 100vh;
+        min-height: 100dvh;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 3.25rem 2rem 1.5rem;
+    }
+
+    .login-page-card {
+        max-width: 549px;
+        border-radius: 18px;
+        padding: 3.125rem 3.75rem 2.875rem;
+    }
+
+    /* Form overrides for desktop */
+    .login-form-title    { text-align: left; font-size: 1.75rem; }
+    .login-form-subtitle { text-align: left; font-size: 0.95rem; }
+    .login-field input   { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+    .login-btn-primary   { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+
+    /* Social buttons — desktop: 2-column grid, icon only */
+    .login-social-row {
+        flex-direction: row;
+        gap: 1rem;
+    }
+
+    .login-btn-social {
+        height: 58px;
+        border-radius: 24px;
+        flex: 1;
+        gap: 0;
+    }
+
+    .login-social-label { display: none; }
+
+    .login-btn-outline { border-radius: 20px; font-size: 0.9rem; }
+}
+
+/* ================================================
+   PASSWORD — Toggle + Strength indicator
+   ================================================ */
+
+/* Wrapper relativo para posicionar el botón ojo */
+.login-field-password {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.login-field-password input {
+    width: 100%;
+    padding-right: 48px; /* espacio para el botón ojo */
+}
+
+/* Botón ojo — posicionado dentro del input */
+.login-password-toggle {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--brand-text-secondary);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: color 0.2s;
+    min-height: unset; /* no necesita 44px porque el campo ya lo cubre */
+}
+.login-password-toggle:hover { color: var(--brand-secondary); }
+.login-password-toggle:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* Barra de fortaleza */
+.login-pwd-strength {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.login-pwd-bar {
+    flex: 1;
+    height: 4px;
+    background: #e0e0e0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.login-pwd-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s, background-color 0.3s;
+    width: 0%;
+}
+.login-pwd-fill--1 { width: 33%;  background: #e53935; } /* Débil  — rojo  */
+.login-pwd-fill--2 { width: 66%;  background: #fb8c00; } /* Media  — naranja */
+.login-pwd-fill--3 { width: 100%; background: #43a047; } /* Fuerte — verde  */
+
+.login-pwd-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: 'Lexend Deca', sans-serif;
+    min-width: 42px;
+    text-align: right;
+}
+.login-pwd-label--1 { color: #e53935; }
+.login-pwd-label--2 { color: #fb8c00; }
+.login-pwd-label--3 { color: #43a047; }
+
+/* ================================================
+   FIREBASE EMAIL ACTIONS — Password reset
+   ================================================ */
+.action-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: 1fr;
+    background: linear-gradient(180deg, var(--brand-hero-gradient-start) 0%, var(--brand-hero-gradient-end) 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.action-page::before,
+.action-page::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    pointer-events: none;
+}
+
+.action-page::before {
+    width: 220px;
+    height: 220px;
+    top: -72px;
+    left: -72px;
+}
+
+.action-page::after {
+    width: 280px;
+    height: 280px;
+    right: -104px;
+    bottom: -116px;
+}
+
+.action-brand-panel {
+    display: none;
+}
+
+.action-card-panel {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(1.5rem, env(safe-area-inset-top, 0px)) 1.25rem max(1.5rem, env(safe-area-inset-bottom, 0px));
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+}
+
+.action-card {
+    width: 100%;
+    max-width: 390px;
+    background: var(--brand-card-bg);
+    border-radius: 18px;
+    padding: 2.25rem 1.35rem 2rem;
+    box-shadow: 0 18px 46px rgba(8, 7, 7, 0.18);
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.action-logo {
+    display: block;
+    width: 58px;
+    height: 46px;
+    object-fit: contain;
+}
+
+.action-logo-shell {
+    width: 88px;
+    height: 70px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 1.5rem;
+    background: linear-gradient(145deg, var(--brand-primary) 0%, var(--brand-secondary) 100%);
+    box-shadow: 0 10px 26px rgba(var(--brand-primary-rgb), 0.22);
+}
+
+.action-kicker {
+    color: var(--brand-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.5rem;
+}
+
+.action-form .login-form-title,
+.action-form .login-form-subtitle {
+    text-align: left;
+}
+
+.action-form .login-form-subtitle strong {
+    color: var(--brand-primary);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.action-label {
+    display: block;
+    color: var(--brand-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin: 0 0 0.45rem;
+}
+
+.action-form .login-field input {
+    color: var(--brand-text);
+    background: #fff;
+    border-color: rgba(var(--brand-primary-rgb), 0.28);
+}
+
+.action-form .login-field input:user-invalid {
+    border-color: var(--brand-error);
+    background: var(--brand-error-surface);
+}
+
+.action-password-rules {
+    margin: 0.55rem 0 1.25rem;
+}
+
+.action-state {
+    text-align: center;
+}
+
+.action-state h2 {
+    color: var(--brand-primary);
+    font-size: 1.45rem;
+    margin: 0 0 0.6rem;
+}
+
+.action-state p {
+    color: var(--brand-text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    margin: 0 0 1.35rem;
+}
+
+.action-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid rgba(var(--brand-secondary-rgb), 0.18);
+    border-top-color: var(--brand-secondary);
+    border-radius: 50%;
+    margin: 0 auto 1.1rem;
+    animation: actionSpin 0.8s linear infinite;
+}
+
+@keyframes actionSpin {
+    to { transform: rotate(360deg); }
+}
+
+.action-success-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 1rem;
+    background: rgba(var(--brand-secondary-rgb), 0.12);
+    color: var(--brand-primary);
+    font-size: 1.65rem;
+    font-weight: 800;
+}
+
+.action-link-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .action-spinner {
+        animation: none;
+    }
+}
+
+@media (min-width: 1024px) {
+    .action-page {
+        grid-template-columns: minmax(0, 1fr) 520px;
+        background:
+            linear-gradient(90deg, rgba(0, 75, 144, 0.18) 0%, rgba(0, 146, 188, 0.12) 58%, rgba(248, 249, 251, 0) 100%),
+            url('/branding/login-hero.png') center / cover no-repeat,
+            #004b90;
+    }
+
+    .action-page::before,
+    .action-page::after {
+        display: none;
+    }
+
+    .action-brand-panel {
+        display: flex;
+        align-items: flex-end;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 4rem 6vw;
+        box-sizing: border-box;
+    }
+
+    .action-brand-copy {
+        display: none;
+        max-width: 460px;
+        color: white;
+        text-align: left;
+    }
+
+    .action-brand-copy h1 {
+        font-size: 3rem;
+        line-height: 1.06;
+        margin: 0 0 0.85rem;
+        font-weight: 900;
+    }
+
+    .action-brand-copy p {
+        max-width: 34rem;
+        font-size: 1rem;
+        line-height: 1.65;
+        margin: 0;
+        color: rgba(255, 255, 255, 0.92);
+    }
+
+    .action-card-panel {
+        justify-content: flex-start;
+        padding: 2rem 4rem 2rem 0;
+    }
+
+    .action-card {
+        max-width: 430px;
+        padding: 2.75rem 2.6rem 2.45rem;
+        border-radius: 18px;
+        box-shadow: 0 22px 54px rgba(8, 7, 7, 0.18);
+    }
+
+    .action-logo-shell {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+/* ================================================
+   OTP VERIFICATION FORM
+   ================================================ */
+
+/* ── Shared form wrapper (reuses login-form structure) ── */
+.otp-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* Inner <form> also needs column gap between its children */
+.otp-form form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* ── Floating label input ── */
+.otp-floating-field {
+    position: relative;
+}
+
+.otp-floating-input {
+    width: 100%;
+    box-sizing: border-box;
+    /* Misma altura base que login por contraseña en móvil (ver .login-field input) */
+    height: 48px;
+    padding: 0.95rem 0.875rem 0.2rem;
+    border: 1.5px solid var(--glass-border);
+    border-radius: 16px;
+    background: #fff;
+    font-size: 1rem;
+    font-family: 'Lexend Deca', sans-serif;
+    color: var(--brand-text);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.otp-floating-input:focus {
+    border-color: var(--brand-secondary);
+    box-shadow: 0 0 0 3px rgba(var(--brand-secondary-rgb), 0.18);
+}
+
+.otp-floating-label {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9375rem;
+    color: var(--brand-text-secondary);
+    pointer-events: none;
+    transition: top 0.18s ease, font-size 0.18s ease, color 0.18s ease;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-floating-input:focus ~ .otp-floating-label,
+.otp-floating-input--filled ~ .otp-floating-label {
+    top: 0.32rem;
+    font-size: 0.68rem;
+    color: var(--brand-secondary);
+    transform: none;
+}
+
+/* ── Alert blocks ── */
+.otp-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-alert strong {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.125rem;
+    font-size: 0.8125rem;
+}
+
+.otp-alert p {
+    margin: 0;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.otp-alert--error {
+    background: rgba(229, 57, 53, 0.07);
+    border: 1px solid rgba(229, 57, 53, 0.25);
+    color: #c62828;
+}
+
+.otp-alert--info {
+    background: rgba(var(--brand-secondary-rgb), 0.07);
+    border: 1px solid rgba(var(--brand-secondary-rgb), 0.3);
+    color: var(--brand-primary);
+}
+
+.otp-alert-icon {
+    font-size: 0.875rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+/* ── Divider ── */
+/* ── Login method tabs (Enlace seguro / Código OTP) ── */
+.auth-tabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    margin-bottom: 1rem;
+    border-radius: 0.75rem;
+    background: var(--glass-border);
+}
+
+.auth-tab {
+    flex: 1;
+    min-height: 48px;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-tab:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+.auth-tab.is-active {
+    background: var(--brand-surface, #fff);
+    color: var(--brand-primary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.otp-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-divider::before,
+.otp-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--glass-border);
+}
+
+/* ── Register link ── */
+.otp-register-link {
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--brand-text-secondary);
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-register-link button {
+    background: none;
+    border: none;
+    color: var(--brand-secondary);
+    font-weight: 700;
+    cursor: pointer;
+    font-size: inherit;
+    font-family: inherit;
+    padding: 0;
+    text-decoration: none;
+}
+
+.otp-register-link button:hover { text-decoration: underline; }
+
+/* ── OTP digit boxes ── */
+.otp-boxes {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin: 0.25rem 0;
+    width: 100%;
+}
+
+.otp-box {
+    flex: 1;
+    min-width: 0;
+    max-width: 52px;
+    aspect-ratio: 5 / 6;
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: 'Courier New', 'Lexend', monospace;
+    border: 1.5px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--brand-text);
+    outline: none;
+    transition: border-color 0.18s, box-shadow 0.18s;
+    caret-color: transparent;
+    padding: 0;
+}
+
+.otp-box:focus {
+    border-color: var(--brand-secondary);
+    box-shadow: 0 0 0 3px rgba(var(--brand-secondary-rgb), 0.18);
+}
+
+.otp-box--filled {
+    border-color: var(--brand-primary);
+    background: rgba(33, 71, 128, 0.04);
+}
+
+/* ── Code description ── */
+.otp-code-desc {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--brand-text-secondary);
+    line-height: 1.6;
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.otp-masked-email {
+    color: var(--brand-secondary);
+    font-weight: 600;
+}
+
+/* ── Secondary outlined button ── */
+.otp-btn-secondary {
+    width: 100%;
+    min-height: 48px;
+    border: 1.5px solid var(--brand-secondary);
+    border-radius: 38px;
+    background: transparent;
+    color: var(--brand-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.otp-btn-secondary:hover:not(:disabled) {
+    background: rgba(var(--brand-secondary-rgb), 0.06);
+}
+
+.otp-btn-secondary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ── Back link ── */
+.otp-back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    background: none;
+    border: none;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0.25rem 0.75rem;
+    text-align: center;
+}
+
+.otp-back-link:hover { color: var(--brand-primary); }
+
+.otp-back-link:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+    border-radius: 999px;
+}
+
+/* ── SUCCESS state ── */
+.otp-success {
+    align-items: center;
+    text-align: center;
+    padding: 1rem 0;
+    gap: 0.75rem;
+}
+
+.otp-success-circle {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 0.5rem;
+}
+
+.otp-success-svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Ring draws in */
+.otp-success-ring {
+    stroke-dasharray: 151;
+    stroke-dashoffset: 151;
+    animation: otp-ring-in 0.5s ease forwards;
+}
+
+@keyframes otp-ring-in {
+    to { stroke-dashoffset: 0; }
+}
+
+/* Checkmark draws in after ring */
+.otp-success-check {
+    stroke-dasharray: 36;
+    stroke-dashoffset: 36;
+    animation: otp-check-in 0.35s ease 0.45s forwards;
+}
+
+@keyframes otp-check-in {
+    to { stroke-dashoffset: 0; }
+}
+
+.otp-success-title {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    margin: 0;
+    font-family: 'Lexend', sans-serif;
+    animation: otp-fade-up 0.4s ease 0.7s both;
+}
+
+.otp-success-desc {
+    font-size: 0.875rem;
+    color: var(--brand-text-secondary);
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.5;
+    animation: otp-fade-up 0.4s ease 0.8s both;
+}
+
+.otp-success-email {
+    font-size: 0.875rem;
+    color: var(--brand-secondary);
+    font-weight: 600;
+    margin: 0;
+    font-family: 'Lexend Deca', sans-serif;
+    animation: otp-fade-up 0.4s ease 0.85s both;
+}
+
+.otp-success-btn {
+    margin-top: 0.5rem;
+    width: 100%;
+    animation: otp-fade-up 0.4s ease 0.95s both;
+}
+
+@keyframes otp-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Desktop adjustments */
+@media (min-width: 1024px) {
+    .otp-floating-input {
+        height: 58px;
+        font-size: 0.9375rem;
+        padding: 1.25rem 1rem 0.375rem;
+        border-radius: 10px;
+    }
+
+    .otp-floating-input:focus ~ .otp-floating-label,
+    .otp-floating-input--filled ~ .otp-floating-label {
+        top: 0.45rem;
+        font-size: 0.72rem;
+    }
+
+    .otp-btn-secondary { min-height: 58px; border-radius: 20px; font-size: 0.9rem; }
+    .otp-box { font-size: 1.5rem; }
+}
+
+/* ================================================
+   REGISTER FORM — Floating label inputs + flows
+   ================================================ */
+
+/* ── Customer type tabs (Hogares / MiPymes) ── */
+.reg-customer-tabs {
+    display: flex;
+    background: rgba(33, 71, 128, 0.06);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 1.25rem;
+    gap: 4px;
+}
+
+.reg-customer-tab {
+    flex: 1;
+    min-height: 44px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--brand-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: 'Lexend Deca', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.reg-customer-tab--active {
+    background: #fff;
+    color: var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(33, 71, 128, 0.15);
+}
+
+.reg-customer-tab:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* ── Row layout: Tipo + Número ── */
+.reg-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 0.85rem;
+}
+
+.reg-field-tipo {
+    flex: 0 0 90px;
+    margin-bottom: 0 !important;
+}
+
+.reg-field-num {
+    flex: 1;
+    margin-bottom: 0 !important;
+}
+
+/* ── Floating label field wrapper ── */
+.reg-floating-field {
+    position: relative;
+    margin-bottom: 0.85rem;
+}
+
+/* ── Floating input ── */
+.reg-floating-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 48px;
+    padding: 0 20px;
+    border: 1.5px solid var(--brand-text-secondary);
+    border-radius: 16px;
+    background: var(--brand-card-bg);
+    font-size: 1rem;
+    font-family: inherit;
+    color: var(--brand-text-secondary);
+    outline: none;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.reg-floating-input::placeholder { color: var(--brand-text-secondary); }
+
+.reg-floating-input:focus {
+    border-color: var(--brand-secondary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(var(--brand-secondary-rgb), 0.35);
+}
+
+.reg-floating-input--with-icon {
+    padding-right: 2.75rem;
+}
+
+.reg-floating-input--with-toggle {
+    padding-right: 2.75rem;
+}
+
+.reg-floating-input--disabled,
+.reg-floating-input:disabled {
+    background: #f0f4f8;
+    color: var(--brand-text-secondary);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* ── Floating select ── */
+.reg-floating-select {
+    width: 100%;
+    box-sizing: border-box;
+    height: 48px;
+    padding: 1rem 0.75rem 0.25rem;
+    border: 1.5px solid var(--brand-text-secondary);
+    border-radius: 16px;
+    background: var(--brand-card-bg);
+    font-size: 1rem;
+    font-family: inherit;
+    color: var(--brand-text-secondary);
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.reg-floating-select:focus {
+    border-color: var(--brand-secondary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(var(--brand-secondary-rgb), 0.35);
+}
+
+.reg-floating-select--disabled,
+.reg-floating-select:disabled {
+    background: #f0f4f8;
+    color: var(--brand-text-secondary);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* ── Floating label ── */
+.reg-floating-label {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.875rem;
+    color: var(--brand-text-secondary);
+    pointer-events: none;
+    transition: top 0.18s ease, font-size 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 2.5rem);
+}
+
+/* Label fija arriba para selects (siempre visible) */
+.reg-floating-label--select {
+    top: 6px;
+    font-size: 0.65rem;
+    color: var(--brand-secondary);
+    transform: none;
+}
+
+/* Label sube cuando el input tiene foco o está lleno */
+.reg-floating-input:focus ~ .reg-floating-label,
+.reg-floating-input--filled ~ .reg-floating-label {
+    top: 6px;
+    font-size: 0.65rem;
+    color: var(--brand-secondary);
+    transform: none;
+}
+
+/* ── Field icon (calendario, etc.) ── */
+.reg-field-icon {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--brand-text-secondary);
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+/* Oculta el picker nativo del browser para date inputs — usamos el ícono propio */
+.reg-floating-input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    width: 2.5rem;
+    height: 100%;
+    cursor: pointer;
+}
+
+/* ── Password toggle ── */
+.reg-password-toggle {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--brand-text-secondary);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: color 0.2s;
+    min-height: unset;
+}
+
+.reg-password-toggle:hover { color: var(--brand-secondary); }
+.reg-password-toggle:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+}
+
+/* ── Checkboxes legales ── */
+.reg-checkbox-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.5;
+    margin-bottom: 0.625rem;
+    cursor: pointer;
+    min-height: 44px;
+}
+
+.reg-checkbox-row input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    margin-top: 1px;
+    cursor: pointer;
+    accent-color: var(--brand-secondary);
+    border-radius: 4px;
+    padding: 0;
+    background: unset;
+    border: unset;
+    box-shadow: none;
+}
+
+.reg-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    background: none;
+    border: none;
+    color: var(--brand-secondary);
+    font-weight: 700;
+    font-size: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 0 0.125rem;
+    text-decoration: underline;
+}
+
+.reg-link:hover { color: var(--brand-primary); }
+
+.reg-link:focus-visible {
+    outline: 2px solid var(--brand-secondary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* ── Password requirements list ── */
+.reg-pwd-requirements {
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.reg-pwd-requirements li {
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    padding-left: 1.2rem;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.reg-pwd-requirements li::before {
+    content: '○';
+    position: absolute;
+    left: 0;
+    font-size: 0.7rem;
+    color: #bbb;
+    transition: color 0.2s, content 0.2s;
+}
+
+.reg-pwd-requirements li.reg-req--ok {
+    color: #2e7d32;
+}
+
+.reg-pwd-requirements li.reg-req--ok::before {
+    content: '✓';
+    color: #43a047;
+    font-weight: 700;
+}
+
+/* ── VERIFY step ── */
+.reg-verify-desc {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--brand-text-secondary);
+    line-height: 1.7;
+    margin: 0 0 0.5rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.reg-contact-highlight {
+    color: var(--brand-secondary);
+    font-weight: 700;
+}
+
+.reg-verify-success {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: rgba(67, 160, 71, 0.07);
+    border: 1px solid rgba(67, 160, 71, 0.3);
+    color: #2e7d32;
+    font-size: 0.8125rem;
+    font-family: 'Lexend Deca', sans-serif;
+}
+
+.reg-verify-success strong {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.125rem;
+}
+
+.reg-verify-success p {
+    margin: 0;
+    font-weight: 400;
+}
+
+.reg-verify-success-icon {
+    font-size: 1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.reg-expiry-badge {
+    text-align: center;
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    padding: 0.4rem 0.75rem;
+    background: rgba(33, 71, 128, 0.05);
+    border-radius: 20px;
+    display: inline-block;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.reg-support-text {
+    text-align: center;
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ── Info box (PASSWORD step) ── */
+.reg-info-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: rgba(var(--brand-secondary-rgb), 0.06);
+    border: 1px solid rgba(var(--brand-secondary-rgb), 0.25);
+    margin-bottom: 0.85rem;
+}
+
+.reg-info-box p {
+    margin: 0;
+    font-size: 0.775rem;
+    color: var(--brand-text-secondary);
+    font-family: 'Lexend Deca', sans-serif;
+    line-height: 1.5;
+}
+
+/* ── OTP box success state ── */
+.otp-box--success {
+    border-color: #43a047;
+    background: rgba(67, 160, 71, 0.06);
+    color: #2e7d32;
+}
+
+/* Desktop adjustments for register form */
+@media (min-width: 1024px) {
+    .reg-floating-input  { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+    .reg-floating-select { height: 58px; border-radius: 20px; font-size: 0.95rem; }
+    .reg-customer-tab    { min-height: 44px; font-size: 0.875rem; }
+    .reg-floating-input:focus ~ .reg-floating-label,
+    .reg-floating-input--filled ~ .reg-floating-label { top: 8px; }
+    .reg-floating-label--select { top: 8px; }
+}
+
+/* ================================================
+   MOTION — Respeta preferencia del sistema
+   ================================================ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

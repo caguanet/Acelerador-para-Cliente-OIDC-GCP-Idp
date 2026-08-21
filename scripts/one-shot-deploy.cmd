@@ -22,7 +22,7 @@ cd /d %~dp0\..
 :: --- 1. CONFIGURACIÓN GLOBAL (¡EDITAR ANTES DE EJECUTAR!) ---
 
 :: Identificadores
-set PROJECT_ID=CAMBIAR_POR_TU_PROJECT_ID
+set PROJECT_ID=etb-identity-omnicanal
 set ARTIFACT_REPO_NAME=idp-repo
 
 :: Región de Despliegue
@@ -38,11 +38,19 @@ set REGION=us-east1
 :: Si necesita dominios adicionales, edite el paso de "Update" al final.
 :: set VITE_ALLOWED_ORIGINS= (Calculado automáticamente)
 
-:: Secretos de Firebase (Valores Reales)
-:: Déjelos en blanco si ya existen en Secret Manager.
+:: Configuración pública de Firebase.
+:: No versionar valores reales aquí; cárguelos desde Secret Manager o variables locales.
 set VAL_FIREBASE_API_KEY=
-set VAL_FIREBASE_AUTH_DOMAIN=
-set VAL_FIREBASE_PROJECT_ID=
+set VAL_FIREBASE_AUTH_DOMAIN=etb-identity-omnicanal.firebaseapp.com
+set VAL_FIREBASE_PROJECT_ID=etb-identity-omnicanal
+
+:: reCAPTCHA Enterprise
+:: VAL_RECAPTCHA_SITE_KEY es publica, pero no debe quedar hardcodeada en el repositorio.
+:: VAL_RECAPTCHA_API_KEY es privada y debe ser una API key separada, restringida
+:: solo a recaptchaenterprise.googleapis.com.
+set VAL_RECAPTCHA_PROJECT_ID=etb-identity-omnicanal
+set VAL_RECAPTCHA_SITE_KEY=
+set VAL_RECAPTCHA_API_KEY=
 
 :: ==============================================================================================
 :: NO MODIFICAR DEBAJO DE ESTA LÍNEA A MENOS QUE SEPA LO QUE HACE
@@ -57,7 +65,7 @@ echo               "Resolución de Problemas > Políticas de Organización" en D
 echo.
 
 :: Validar configuración mínima
-if "%PROJECT_ID%"=="CAMBIAR_POR_TU_PROJECT_ID" (
+if "%PROJECT_ID%"=="etb-identity-omnicanal"
     echo [ERROR] Por favor edite este script y configure la variable PROJECT_ID.
     pause
     exit /b 1
@@ -70,7 +78,7 @@ echo [FASE 1] Aprovisionando Infraestructura...
 :: 1. Habilitar APIs
 echo [INFO] Habilitando APIs de GCP...
 :: Se agregan compute.googleapis.com (para SA default) e iam.googleapis.com
-call gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com secretmanager.googleapis.com compute.googleapis.com iam.googleapis.com --project=%PROJECT_ID%
+call gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com secretmanager.googleapis.com compute.googleapis.com iam.googleapis.com recaptchaenterprise.googleapis.com --project=%PROJECT_ID%
 if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo al habilitar APIs. & exit /b 1 )
 
 echo [INFO] Esperando 15 segundos para la propagacion de Service Accounts...
@@ -173,6 +181,45 @@ if not "%VAL_FIREBASE_PROJECT_ID%"=="" (
     )
 )
 
+if not "%VAL_RECAPTCHA_PROJECT_ID%"=="" (
+    call gcloud secrets describe RECAPTCHA_PROJECT_ID >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [INFO] Actualizando RECAPTCHA_PROJECT_ID...
+        echo %VAL_RECAPTCHA_PROJECT_ID%| gcloud secrets versions add RECAPTCHA_PROJECT_ID --data-file=- --quiet
+    ) else (
+        echo [INFO] Creando RECAPTCHA_PROJECT_ID...
+        echo %VAL_RECAPTCHA_PROJECT_ID%| gcloud secrets create RECAPTCHA_PROJECT_ID --data-file=-
+    )
+)
+
+if not "%VAL_RECAPTCHA_SITE_KEY%"=="" (
+    call gcloud secrets describe RECAPTCHA_SITE_KEY >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [INFO] Actualizando RECAPTCHA_SITE_KEY...
+        echo %VAL_RECAPTCHA_SITE_KEY%| gcloud secrets versions add RECAPTCHA_SITE_KEY --data-file=- --quiet
+    ) else (
+        echo [INFO] Creando RECAPTCHA_SITE_KEY...
+        echo %VAL_RECAPTCHA_SITE_KEY%| gcloud secrets create RECAPTCHA_SITE_KEY --data-file=-
+    )
+)
+
+if not "%VAL_RECAPTCHA_API_KEY%"=="" (
+    call gcloud secrets describe RECAPTCHA_API_KEY >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [INFO] Actualizando RECAPTCHA_API_KEY...
+        echo %VAL_RECAPTCHA_API_KEY%| gcloud secrets versions add RECAPTCHA_API_KEY --data-file=- --quiet
+    ) else (
+        echo [INFO] Creando RECAPTCHA_API_KEY...
+        echo %VAL_RECAPTCHA_API_KEY%| gcloud secrets create RECAPTCHA_API_KEY --data-file=-
+    )
+)
+
+:: 5. Permiso para que la SA de Cloud Run lea los secretos (requerido por --set-secrets)
+echo [INFO] Otorgando Secret Manager Secret Accessor a 'idp-service-sa'...
+call gcloud projects add-iam-policy-binding %PROJECT_ID% --member="serviceAccount:idp-service-sa@%PROJECT_ID%.iam.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" --project=%PROJECT_ID%
+if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo al otorgar acceso a secretos. & exit /b 1 )
+echo [INFO] Esperando 15 segundos para propagacion de IAM en Secret Manager...
+timeout /t 15 /nobreak >nul
 
 :: --- FASE 2: DESPLIEGUE DEL SERVICIO OIDC ---
 echo.
@@ -206,17 +253,25 @@ del cloudbuild.yaml
 
 :: 2. Desplegar Cloud Run (Inicial sin VITE_ALLOWED_ORIGINS correcta)
 echo [Step] Cloud Run Deploy (Inicial)...
+REM IdP sessions/OTP locks are in-memory (server.js); pin to one instance until Firestore-backed.
 call gcloud run deploy idp-service ^
   --image %REGION%-docker.pkg.dev/%PROJECT_ID%/%ARTIFACT_REPO_NAME%/idp-service ^
   --platform managed ^
   --region %REGION% ^
   --service-account idp-service-sa@%PROJECT_ID%.iam.gserviceaccount.com ^
   --allow-unauthenticated ^
+  --min-instances 1 ^
+  --max-instances 1 ^
   --set-env-vars APP_MODE=IDP ^
   --set-env-vars "VITE_ALLOWED_ORIGINS=pending_configuration" ^
+  --set-env-vars CSP_ENFORCE=true ^
+  --set-env-vars CSP_REPORT_ONLY=true ^
   --set-secrets VITE_FIREBASE_API_KEY=FIREBASE_API_KEY:latest ^
   --set-secrets VITE_FIREBASE_AUTH_DOMAIN=FIREBASE_AUTH_DOMAIN:latest ^
-  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest
+  --set-secrets VITE_FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest ^
+  --set-secrets RECAPTCHA_PROJECT_ID=RECAPTCHA_PROJECT_ID:latest ^
+  --set-secrets RECAPTCHA_SITE_KEY=RECAPTCHA_SITE_KEY:latest ^
+  --set-secrets RECAPTCHA_API_KEY=RECAPTCHA_API_KEY:latest
 
 if !ERRORLEVEL! NEQ 0 ( echo [ERROR] Fallo en el Despliegue Inicial. & exit /b 1 )
 

@@ -1,0 +1,6 @@
+- generic [ref=e6]:
+  - generic [ref=e7]: ✕
+  - heading "Acceso No Autorizado" [level=2] [ref=e8]
+  - paragraph [ref=e9]: "Acceso restringido: ingresa desde una aplicación autorizada para iniciar sesión."
+  - link "Volver al Inicio" [ref=e10] [cursor=pointer]:
+    - /url: /
